@@ -1426,9 +1426,7 @@
     {
       "name": "IED 三相监控",
       "selector": {
-        "profiles": [
-          "IED"
-        ],
+        "profiles": ["IED"],
         "prefixes": []
       },
       "items": [
@@ -1464,9 +1462,7 @@
       "template": "aggregate.crossEntity",
       "name": "全站总有功功率",
       "selector": {
-        "profiles": [
-          "IED"
-        ],
+        "profiles": ["IED"],
         "prefixes": []
       },
       "key": "P",
@@ -1493,13 +1489,8 @@
     {
       "template": "window.cascade",
       "device": "PDR1_LP1_IED1",
-      "keys": [
-        "P"
-      ],
-      "aggs": [
-        "avg",
-        "max"
-      ]
+      "keys": ["P"],
+      "aggs": ["avg", "max"]
     },
     {
       "template": "expr.custom",
@@ -1517,9 +1508,7 @@
           "value": 0
         }
       ],
-      "ops": [
-        "+"
-      ]
+      "ops": ["+"]
     },
     {
       "template": "expr.add",

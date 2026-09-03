@@ -166,37 +166,22 @@
     {
       "template": "window.aggregate",
       "device": "BS_1_MO1",
-      "keys": [
-        "AMBIENT_T",
-        "BAT_T"
-      ],
-      "aggs": [
-        "avg"
-      ],
+      "keys": ["AMBIENT_T", "BAT_T"],
+      "aggs": ["avg"],
       "window": "5m"
     },
     {
       "template": "window.aggregate",
       "device": "BS_1_MO1",
-      "keys": [
-        "BAT_T"
-      ],
-      "aggs": [
-        "max"
-      ],
+      "keys": ["BAT_T"],
+      "aggs": ["max"],
       "window": "5m"
     },
     {
       "template": "window.aggregate",
       "device": "PDR1_LP1_IED1",
-      "keys": [
-        "Ua",
-        "Ub",
-        "Uc"
-      ],
-      "aggs": [
-        "avg"
-      ],
+      "keys": ["Ua", "Ub", "Uc"],
+      "aggs": ["avg"],
       "window": "5m"
     },
     {

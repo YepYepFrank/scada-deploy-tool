@@ -6,7 +6,16 @@ import prettier from 'eslint-config-prettier'
 import globals from 'globals'
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/dist-site/**', '**/node_modules/**', '**/*.schema.json', 'apps/deploy-tool/src/provisioner/Provisioner.vue', 'apps/deploy-tool/src/provisioner/publisher.js'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/dist-site/**',
+      '**/node_modules/**',
+      '**/*.schema.json',
+      'apps/deploy-tool/src/provisioner/Provisioner.vue',
+      'apps/deploy-tool/src/provisioner/publisher.js',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...vue.configs['flat/essential'],
@@ -28,9 +37,44 @@ export default tseslint.config(
   },
   {
     files: ['apps/deploy-tool/src/**/*.{js,vue}'],
-    languageOptions: { globals: { window: 'readonly', document: 'readonly', console: 'readonly', fetch: 'readonly', WebSocket: 'readonly', localStorage: 'readonly', sessionStorage: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly', URLSearchParams: 'readonly', location: 'readonly', navigator: 'readonly', requestAnimationFrame: 'readonly', ResizeObserver: 'readonly', Blob: 'readonly', URL: 'readonly', FileReader: 'readonly', confirm: 'readonly', alert: 'readonly', prompt: 'readonly', crypto: 'readonly', AbortController: 'readonly', Intl: 'readonly' } },
+    languageOptions: {
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        console: 'readonly',
+        fetch: 'readonly',
+        WebSocket: 'readonly',
+        localStorage: 'readonly',
+        sessionStorage: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        URLSearchParams: 'readonly',
+        location: 'readonly',
+        navigator: 'readonly',
+        requestAnimationFrame: 'readonly',
+        ResizeObserver: 'readonly',
+        Blob: 'readonly',
+        URL: 'readonly',
+        FileReader: 'readonly',
+        confirm: 'readonly',
+        alert: 'readonly',
+        prompt: 'readonly',
+        crypto: 'readonly',
+        AbortController: 'readonly',
+        Intl: 'readonly',
+      },
+    },
     // 迁入的现有向导代码:只告警不阻断;新写的 TS 模块不在此列
-    rules: { 'no-unused-vars': 'warn', 'vue/no-unused-vars': 'warn', 'no-undef': 'warn', 'no-empty': 'warn', 'no-useless-escape': 'off', 'no-irregular-whitespace': 'warn' },
+    rules: {
+      'no-unused-vars': 'warn',
+      'vue/no-unused-vars': 'warn',
+      'no-undef': 'warn',
+      'no-empty': 'warn',
+      'no-useless-escape': 'off',
+      'no-irregular-whitespace': 'warn',
+    },
   },
-  prettier,
+  prettier
 )

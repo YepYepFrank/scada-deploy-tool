@@ -3,5 +3,15 @@ dist-site
 node_modules
 pnpm-lock.yaml
 *.schema.json
-apps/deploy-tool/src/provisioner/Provisioner.vue
-apps/deploy-tool/src/provisioner/publisher.js
+# 文档表格手工排版,不交给 prettier
+*.md
+# 迁入的现有向导 / 大屏代码(JS,冻结风格);新模块目录 editor/ meta/ migrate/ publish/ standalone/ 受检
+apps/deploy-tool/*.html
+apps/deploy-tool/vite*.js
+apps/deploy-tool/src/provisioner/
+apps/deploy-tool/src/siteview/
+apps/deploy-tool/src/components/
+apps/deploy-tool/src/composables/
+apps/deploy-tool/src/api/
+apps/deploy-tool/src/shared/
+apps/deploy-tool/src/style.css

@@ -24,19 +24,36 @@ export interface PropsSchema {
 }
 
 export type PropSchema =
-  | { type: 'string'; title?: string; description?: string; default?: string; enum?: string[]; enumNames?: string[]; format?: 'color' | 'url' | 'multiline'; maxLength?: number }
-  | { type: 'number' | 'integer'; title?: string; description?: string; default?: number; minimum?: number; maximum?: number; multipleOf?: number }
+  | {
+      type: 'string'
+      title?: string
+      description?: string
+      default?: string
+      enum?: string[]
+      enumNames?: string[]
+      format?: 'color' | 'url' | 'multiline'
+      maxLength?: number
+    }
+  | {
+      type: 'number' | 'integer'
+      title?: string
+      description?: string
+      default?: number
+      minimum?: number
+      maximum?: number
+      multipleOf?: number
+    }
   | { type: 'boolean'; title?: string; description?: string; default?: boolean }
   | { type: 'array'; title?: string; description?: string; items: PropsSchema; minItems?: number; maxItems?: number }
 
 /** 绑定槽位的值类型;渲染器据此把 Binding 的结果整形后交给组件。 */
 export type SlotValueType =
-  | 'number'      // 单个数值(数字卡、仪表、指示灯)
-  | 'string'      // 单个文本
+  | 'number' // 单个数值(数字卡、仪表、指示灯)
+  | 'string' // 单个文本
   | 'boolean'
-  | 'series'      // 时间序列 {ts,value}[](曲线、表格)
-  | 'alarms'      // AlarmInfo[]
-  | 'any'         // const 任意值(图片地址、文本模板)
+  | 'series' // 时间序列 {ts,value}[](曲线、表格)
+  | 'alarms' // AlarmInfo[]
+  | 'any' // const 任意值(图片地址、文本模板)
 
 export interface BindingSlotSpec {
   /** 槽位名,对应 WidgetConfig.bindings 的 key */

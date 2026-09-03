@@ -24,7 +24,9 @@ function getValidator() {
   return compiled
 }
 
-export function validatePageConfig(input: unknown): { ok: true; value: PageConfig } | { ok: false; issues: ValidationIssue[] } {
+export function validatePageConfig(
+  input: unknown
+): { ok: true; value: PageConfig } | { ok: false; issues: ValidationIssue[] } {
   const validate = getValidator()
   if (validate(input)) return { ok: true, value: input as PageConfig }
   const issues: ValidationIssue[] = (validate.errors ?? []).map(e => ({

@@ -24,7 +24,7 @@
     "gen:schema": "node scripts/gen-schema.mjs",
     "test": "vitest run",
     "test:schema": "vitest run test/schema.test.ts",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsup"
   },
   "peerDependencies": {
     "@grid/tb-client": "workspace:*",
@@ -39,5 +39,19 @@
     "typescript": "^5.6.3",
     "vitest": "^2.1.8",
     "vue": "^3.5.13"
-  }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./schema": {
+        "types": "./dist/schema/index.d.ts",
+        "import": "./dist/schema/index.js"
+      },
+      "./schema/page-config.schema.json": "./dist/schema/page-config.schema.json"
+    }
+  },
+  "sideEffects": false
 }

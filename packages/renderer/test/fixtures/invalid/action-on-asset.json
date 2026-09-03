@@ -3,9 +3,17 @@
   "template": "overview-a",
   "widgets": [
     {
-      "id": "w-1", "slot": "s1", "type": "switch",
+      "id": "w-1",
+      "slot": "s1",
+      "type": "switch",
       "bindings": { "state": { "mode": "const", "value": true } },
-      "actions": { "toggle": { "kind": "rpc", "entity": { "type": "ASSET", "id": "5ab0e2d0-7c36-11f1-8007-51b9f7714bbe" }, "method": "setGridOn" } }
+      "actions": {
+        "toggle": {
+          "kind": "rpc",
+          "entity": { "type": "ASSET", "id": "5ab0e2d0-7c36-11f1-8007-51b9f7714bbe" },
+          "method": "setGridOn"
+        }
+      }
     }
   ]
 }

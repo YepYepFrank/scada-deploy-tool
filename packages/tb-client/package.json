@@ -17,9 +17,18 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo \"[@grid/tb-client] test: nothing yet\" && exit 0",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsup"
   },
   "devDependencies": {
     "typescript": "^5.6.3"
-  }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "sideEffects": false
 }

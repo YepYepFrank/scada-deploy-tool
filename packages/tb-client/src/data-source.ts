@@ -74,7 +74,12 @@ export interface DataSource {
   subscribeTs(entity: EntityRef, keys: string[], cb: (updates: TsUpdate[]) => void): Unsubscribe
 
   /** 订阅属性。 */
-  subscribeAttr(entity: EntityRef, scope: AttributeScope, keys: string[], cb: (updates: AttrUpdate[]) => void): Unsubscribe
+  subscribeAttr(
+    entity: EntityRef,
+    scope: AttributeScope,
+    keys: string[],
+    cb: (updates: AttrUpdate[]) => void
+  ): Unsubscribe
 
   /** 订阅告警;`types` 为空 / undefined 表示全部类型。回调给出当前活动告警全集。 */
   subscribeAlarms(entity: EntityRef, types: string[] | undefined, cb: (alarms: AlarmInfo[]) => void): Unsubscribe
@@ -83,7 +88,12 @@ export interface DataSource {
    * 查历史。`agg` 缺省时由数据层按窗口长度自适应(≤2h 原始点;2h–24h AVG/5min;24h–7d AVG/1h;>7d AVG/1d),
    * 调用方显式传 `agg` 时仍由数据层决定桶宽。渲染器不关心粒度(架构 §7「长窗口」)。
    */
-  getHistory(entity: EntityRef, keys: string[], window: WindowLiteral | string, agg?: Aggregation): Promise<Record<string, TsPoint[]>>
+  getHistory(
+    entity: EntityRef,
+    keys: string[],
+    window: WindowLiteral | string,
+    agg?: Aggregation
+  ): Promise<Record<string, TsPoint[]>>
 
   /** 最新值;不存在的 key 返回 null(TB 对不存在的 key 返回 `[{ts, value: null}]`,数据层需归一)。 */
   getLatest(entity: EntityRef, keys: string[]): Promise<Record<string, TsPoint | null>>

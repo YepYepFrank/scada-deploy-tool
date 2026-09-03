@@ -27,4 +27,6 @@ schema.description = '0 代码部署工具 · 页面配置契约 v1(由 page-con
 const json = JSON.stringify(schema, null, 2) + '\n'
 const changed = !existsSync(out) || readFileSync(out, 'utf8') !== json
 writeFileSync(out, json)
-console.log(`${changed ? 'updated' : 'unchanged'} ${out} (${json.length} bytes, ${Object.keys(schema.definitions ?? {}).length} definitions)`)
+console.log(
+  `${changed ? 'updated' : 'unchanged'} ${out} (${json.length} bytes, ${Object.keys(schema.definitions ?? {}).length} definitions)`
+)

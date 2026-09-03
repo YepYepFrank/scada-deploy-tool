@@ -133,8 +133,11 @@ export type Action = RpcAction | AttrWriteAction
 
 /** 运行时类型守卫:只检查形状,不校验 schema(schema 校验用 validatePageConfig)。 */
 export function isPageConfig(x: unknown): x is PageConfig {
-  return !!x && typeof x === 'object'
-    && (x as PageConfig).schemaVersion === SCHEMA_VERSION
-    && typeof (x as PageConfig).template === 'string'
-    && Array.isArray((x as PageConfig).widgets)
+  return (
+    !!x &&
+    typeof x === 'object' &&
+    (x as PageConfig).schemaVersion === SCHEMA_VERSION &&
+    typeof (x as PageConfig).template === 'string' &&
+    Array.isArray((x as PageConfig).widgets)
+  )
 }

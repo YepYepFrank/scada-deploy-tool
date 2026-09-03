@@ -57,7 +57,7 @@ git config core.hooksPath .githooks
 
 ## 5. 任务收尾清单
 
-1. 本地验证通过(见 §1)。
+1. 本地验证通过(见 §1):代码改动至少跑 `pnpm typecheck && pnpm build && pnpm test && pnpm lint && pnpm format:check`;改了契约再跑 `pnpm gen:schema` 确认无 diff。CI(`.github/workflows/ci.yml`)在干净环境重复同一组检查并校验 dist 可被 Node 直接 import,失败即视为主干损坏,优先修复。
 2. `git add -A && git commit`(钩子通过)。
 3. `git push origin main`。
 4. 在 `docs/开发计划-v2.md` 勾选任务并写日期;若与计划有偏差,缩进一行写「实际:…」。这条改动随本次或下一次提交进入。

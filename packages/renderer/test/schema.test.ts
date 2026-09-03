@@ -28,10 +28,10 @@ describe('PageConfig JSON Schema', () => {
 
   const invalidDir = resolve(fixtures, 'invalid')
   const expectedPaths: Record<string, RegExp> = {
-    'missing-slot.json': /^\/widgets\/0$/,                 // required: slot
+    'missing-slot.json': /^\/widgets\/0$/, // required: slot
     'unknown-mode.json': /^\/widgets\/0\/bindings\/value/, // mode 不在 5 种之内
     'action-on-asset.json': /^\/widgets\/0\/actions\/toggle/, // entity.type 必须为 DEVICE
-    'bad-window.json': /^\/widgets\/0\/bindings\/series/,  // window pattern
+    'bad-window.json': /^\/widgets\/0\/bindings\/series/, // window pattern
     'wrong-version.json': /^\/schemaVersion$/,
   }
   for (const f of readdirSync(invalidDir)) {
@@ -42,7 +42,10 @@ describe('PageConfig JSON Schema', () => {
       expect(r.issues.length).toBeGreaterThan(0)
       const re = expectedPaths[f]
       expect(re, `fixture ${f} 缺少期望路径登记`).toBeDefined()
-      expect(r.issues.some(i => re!.test(i.path)), `期望错误定位到 ${re},实际:${r.issues.map(i => i.path).join(', ')}`).toBe(true)
+      expect(
+        r.issues.some(i => re!.test(i.path)),
+        `期望错误定位到 ${re},实际:${r.issues.map(i => i.path).join(', ')}`
+      ).toBe(true)
     })
   }
 

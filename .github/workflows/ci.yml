@@ -1,0 +1,64 @@
+name: ci
+
+# 主干守卫:每次 push / PR 在干净环境复现「本地验证」——install → typecheck → build → test → lint → 格式 → schema 同步。
+# 本地钩子只挡凭据与提交信息;功能性检查靠这里兜底,保证 main 始终可构建(Trunk-Based Development)。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Built dist is importable by Node (ESM)
+        run: |
+          node -e "import('./packages/tb-client/dist/index.js').then(m => { if (m.parseWindow('24h') !== 86400000) process.exit(1) })"
+          node -e "import('./packages/renderer/dist/schema/index.js').then(m => { if (!m.validatePageConfig({schemaVersion:1,template:'x',widgets:[]}).ok) process.exit(1) })"
+          node -e "import('./packages/compiler/dist/index.js').then(m => { if (!m.version) process.exit(1) })"
+
+      - name: Test
+        run: pnpm test
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: JSON Schema in sync with page-config.ts
+        run: |
+          pnpm gen:schema
+          git diff --exit-code -- packages/renderer/src/schema/page-config.schema.json
+
+      - name: Build deploy-tool (multi-page)
+        run: pnpm -F deploy-tool build
