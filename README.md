@@ -11,6 +11,9 @@
 | [`docs/开发计划-v2.md`](docs/开发计划-v2.md) | **权威计划**:目标、范围、四周排期、每个任务的目标 / 交付物 / 完成标准、里程碑验收清单、风险 |
 | [`docs/决策记录/`](docs/决策记录/) | 第 1 周前两天必须议定的四项模型决定(ADR-001 ~ 004),含推荐方案;冻结后状态改为「已采纳」 |
 | `../resource/scada-deploy-tool-architecture-v2.html` | 架构说明(为什么这样设计)。计划文档不重复解释理由,只引用章节号 |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | **提交规范**:Trunk-Based Development、Conventional Commits、凭据不入库;克隆后先 `git config core.hooksPath .githooks` |
+
+GitHub:私有库 [YepYepFrank/scada-deploy-tool](https://github.com/YepYepFrank/scada-deploy-tool),团队成员由所有者邀请。
 
 ## 目录布局(pnpm workspaces monorepo,第 1 周 T0.3 初始化)
 

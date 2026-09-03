@@ -1,0 +1,11 @@
+
+
+# <type>(<scope>): <subject>          ← ≤72 字符,不以句号结尾
+#
+# type : feat fix refactor docs test chore build ci perf style
+# scope: renderer tb-client compiler deploy-tool docs adr repo hooks ci
+#
+# body : 改了什么、为什么、怎么验证的(每行 ≤ 100 字符)
+#
+# Refs: T1.2                          ← feat/fix/refactor/test/perf 必填
+# BREAKING CHANGE: ...                ← 契约变更时写,并同步 ADR

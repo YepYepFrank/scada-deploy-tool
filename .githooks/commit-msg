@@ -1,0 +1,43 @@
+#!/bin/sh
+# commit-msg: Conventional Commits 校验。规则见 CONTRIBUTING.md §2。
+msgfile="$1"
+first=$(grep -vE '^\s*#' "$msgfile" | grep -m1 -vE '^\s*$' || true)
+
+# merge / revert / fixup 放行
+case "$first" in
+  Merge\ *|Revert\ *|fixup!\ *|squash!\ *) exit 0 ;;
+esac
+
+types='feat|fix|refactor|docs|test|chore|build|ci|perf|style'
+scopes='renderer|tb-client|compiler|deploy-tool|docs|adr|repo|hooks|ci'
+
+if ! printf '%s\n' "$first" | grep -qE "^($types)(\(($scopes)(,($scopes))*\))?!?: [^ ].*"; then
+  echo "✗ 首行不符合 Conventional Commits:"
+  echo "    $first"
+  echo "  期望:<type>(<scope>): <subject>"
+  echo "  type  ∈ $types"
+  echo "  scope ∈ $scopes(可省略)"
+  exit 1
+fi
+
+# 首行长度
+len=$(printf '%s' "$first" | wc -m)
+if [ "$len" -gt 100 ]; then
+  echo "✗ 首行过长($len 字符,上限 100)"
+  exit 1
+fi
+if printf '%s' "$first" | grep -qE '[.。]$'; then
+  echo "✗ 首行不要以句号结尾"
+  exit 1
+fi
+
+# Refs: 要求(docs/chore/ci/style/build 可省)
+type=$(printf '%s' "$first" | sed -E 's/^([a-z]+).*/\1/')
+case "$type" in
+  feat|fix|refactor|test|perf)
+    if ! grep -qE '^Refs: *T[0-9]+\.[0-9]+' "$msgfile"; then
+      echo "✗ $type 类型的提交需要 footer 'Refs: T<阶段>.<序号>' 关联 docs/开发计划-v2.md 的任务"
+      exit 1
+    fi ;;
+esac
+exit 0

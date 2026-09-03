@@ -1,0 +1,65 @@
+#!/bin/sh
+# pre-commit: 凭据扫描(暂存区)。命中即拒绝提交。规则见 CONTRIBUTING.md §3。
+# 不依赖 node / python;只用 git + grep。若本机装了 gitleaks,额外跑一遍 protect --staged。
+
+set -e
+fail=0
+
+# 1) 被禁止入库的文件名(即使 .gitignore 漏了)
+if git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)\.env(\..*)?$' | grep -vE '\.env\.example$' >/dev/null; then
+  echo "✗ 禁止提交 .env* 文件(仅允许 .env.example):"
+  git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)\.env(\..*)?$' | grep -vE '\.env\.example$' | sed 's/^/    /'
+  fail=1
+fi
+if git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(pem|key|p12|pfx|jks)$|id_rsa|id_ed25519|\.scadaproj\.local$' >/dev/null; then
+  echo "✗ 禁止提交密钥/本地项目文件:"
+  git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(pem|key|p12|pfx|jks)$|id_rsa|id_ed25519|\.scadaproj\.local$' | sed 's/^/    /'
+  fail=1
+fi
+
+# 2) 新增行内容扫描(只看 + 行,排除二进制)
+# 排除:二进制、lockfile,以及规则本身所在的文件(.githooks/、.gitleaks.toml 含模式字面量)
+added=$(git diff --cached --diff-filter=ACMR -U0 --no-color -- . \
+    ':(exclude)*.png' ':(exclude)*.ttf' ':(exclude)*.jpg' ':(exclude)pnpm-lock.yaml' \
+    ':(exclude).githooks/*' ':(exclude).gitleaks.toml' \
+  | grep -E '^\+' | grep -vE '^\+\+\+ ' || true)
+
+check() { # $1=描述 $2=ERE
+  hits=$(printf '%s\n' "$added" | grep -nE "$2" || true)
+  if [ -n "$hits" ]; then
+    echo "✗ $1"
+    printf '%s\n' "$hits" | head -5 | cut -c1-160 | sed 's/^/    /'
+    fail=1
+  fi
+}
+
+# 已知环境密码字面量(生产镜像 tenant 密码、报表账号密码、演示密码赋值)
+check "已知环境密码字面量"                    'tenant&2028|GridopsReport#|report@gridops\.local'
+# JWT
+check "JWT token(eyJ 开头)"                  'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}'
+# 明文密码赋值:password/passwd/pwd/secret/token = "非占位值"
+check "疑似明文密码/密钥赋值"                 '(password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token)["'"'"']?\s*[:=]\s*["'"'"'][^"'"'"'<>$%{}\s]{6,}["'"'"']'
+# URL 内嵌凭据
+check "URL 内嵌凭据(scheme://user:pass@)"    '[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]{3,}@[^\s]+'
+# 私钥
+check "私钥块"                                'BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY'
+# 常见云/平台 token 形态
+check "GitHub token"                          'gh[pousr]_[A-Za-z0-9]{30,}'
+check "AWS access key"                        'AKIA[0-9A-Z]{16}'
+check "Slack token"                           'xox[baprs]-[A-Za-z0-9-]{10,}'
+
+# 3) 可选:gitleaks
+if command -v gitleaks >/dev/null 2>&1; then
+  if ! gitleaks protect --staged --redact --no-banner -c .gitleaks.toml >/dev/null 2>&1; then
+    echo "✗ gitleaks 报告暂存区存在泄漏(运行 gitleaks protect --staged --redact 查看)"
+    fail=1
+  fi
+fi
+
+if [ "$fail" -ne 0 ]; then
+  echo ""
+  echo "提交被拒绝:凭据不入库(CONTRIBUTING.md §3)。请改用 .env.local / 运行时输入 / <password> 占位符。"
+  echo "误报请在 .gitleaks.toml allowlist 登记模式并说明理由;禁止 --no-verify。"
+  exit 1
+fi
+exit 0

@@ -1,0 +1,35 @@
+# gitleaks 配置:在默认规则之上追加本项目已知的凭据形态。CI(.github/workflows/secret-scan.yml)与本地钩子共用。
+title = "scada-deploy-tool"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "project-known-passwords"
+description = "本项目环境的已知密码 / 账号字面量"
+regex = '''tenant&2028|GridopsReport#|report@gridops\.local'''
+keywords = ["tenant&2028", "GridopsReport", "gridops.local"]
+
+[[rules]]
+id = "tb-jwt"
+description = "ThingsBoard JWT"
+regex = '''eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
+
+[[rules]]
+id = "url-embedded-credentials"
+description = "URL 内嵌用户名密码"
+regex = '''[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]{3,}@[^\s'"]+'''
+
+[allowlist]
+description = "占位符与示例"
+regexes = [
+  '''<password>''',
+  '''<token>''',
+  '''changeme''',
+  '''\$\{?[A-Z_]+\}?''',
+]
+paths = [
+  '''\.gitleaks\.toml$''',
+  '''\.githooks/pre-commit$''',
+  '''CONTRIBUTING\.md$''',
+]
