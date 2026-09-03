@@ -37,6 +37,18 @@ dev/
 同事的生产前端应用**不在**本目录:开发期以 `file:` 链接本目录下的包,正式版按 tag 取(架构 §3)。
 若双方同意,也可作为 `apps/host-app` 加入 workspace。
 
+## 常用命令
+
+```bash
+pnpm install                 # 安装全部 workspace 依赖(需 pnpm 9,node ≥ 20)
+pnpm typecheck               # 各包 tsc --noEmit
+pnpm test                    # 各包 vitest
+pnpm gen:schema              # 由 page-config.ts 重新生成 JSON Schema(改契约后必跑)
+pnpm -F @grid/scada-renderer test:schema   # 仅契约校验测试
+```
+
+契约人读版:[`docs/契约-v1.md`](docs/契约-v1.md)(状态见其顶部;权威定义在 `packages/renderer/src/schema/` 与 `packages/tb-client/src/data-source.ts`)。
+
 ## 工程约定(摘要,详见计划 §2)
 
 - 包名前缀 `@grid/`;新包一律 TypeScript;`apps/deploy-tool` 里现有 2700 行向导保留 JS,新模块 TS。

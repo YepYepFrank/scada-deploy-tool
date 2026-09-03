@@ -1,0 +1,42 @@
+{
+  "name": "@grid/scada-renderer",
+  "version": "0.0.1",
+  "description": "组态渲染器 + 页面配置契约(schema 子路径导出)",
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./schema": {
+      "types": "./src/schema/index.ts",
+      "import": "./src/schema/index.ts"
+    },
+    "./schema/page-config.schema.json": "./src/schema/page-config.schema.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "gen:schema": "node scripts/gen-schema.mjs",
+    "test": "vitest run",
+    "test:schema": "vitest run test/schema.test.ts"
+  },
+  "peerDependencies": {
+    "@grid/tb-client": "workspace:*",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@grid/tb-client": "workspace:*",
+    "@types/node": "^22",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "ts-json-schema-generator": "^2.3.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8",
+    "vue": "^3.5.13"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "template": "overview-a",
+  "widgets": [
+    { "id": "w-1", "slot": "s1", "type": "number-card", "bindings": { "value": { "mode": "rest", "url": "http://kz/report" } } }
+  ]
+}

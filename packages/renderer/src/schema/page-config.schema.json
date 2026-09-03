@@ -1,0 +1,384 @@
+{
+  "$id": "https://grid.local/schemas/page-config/v1.json",
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "$ref": "#/definitions/PageConfig",
+  "definitions": {
+    "PageConfig": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "template": {
+          "type": "string",
+          "description": "页面模板 id,在渲染器模板注册表中查(如 'overview-a' / 'monitor-3col' / 'grid-3x3')。",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "theme": {
+          "type": "string",
+          "description": "主题名;缺省用渲染器默认主题。"
+        },
+        "title": {
+          "type": "string",
+          "description": "页面标题,供宿主 / 独立薄壳在标头显示;渲染器本身不画。"
+        },
+        "widgets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WidgetConfig"
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "template",
+        "widgets"
+      ],
+      "additionalProperties": false,
+      "description": "一整页的配置。页面标头 / 导航菜单 / 时钟不在此内,归宿主应用(架构 §6「三条补充约定」)。"
+    },
+    "WidgetConfig": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "页面内唯一。工具生成规则为 `w-<slot>`(同槽位多个组件时追加序号),渲染器只要求唯一。",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "slot": {
+          "type": "string",
+          "description": "模板槽位名(如 'r1c2' / 'main' / 'side-top'),须存在于所选模板的 slots 中。",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "type": {
+          "type": "string",
+          "description": "组件类型,在组件注册表中查(如 'number-card' / 'gauge' / 'line' / 'alarm-list')。",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "组件自定义属性,形状由该组件的 propsSchema 决定;渲染器按 propsSchema 校验。"
+        },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Binding"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Binding"
+                }
+              }
+            ]
+          },
+          "description": "绑定:组件「绑定槽位名」→ 数据来源。 对声明 `multiple: true` 的绑定槽位(如曲线的 series)允许数组,一项一序列;单项可不写数组。"
+        },
+        "actions": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/Action"
+          },
+          "description": "写操作:契约保留,一期不实现。渲染器一期只做 schema 校验并把对应组件渲染为禁用态(架构 §0 ⑤、§8)。"
+        }
+      },
+      "required": [
+        "id",
+        "slot",
+        "type",
+        "bindings"
+      ],
+      "additionalProperties": false
+    },
+    "Binding": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TsBinding"
+        },
+        {
+          "$ref": "#/definitions/TsHistoryBinding"
+        },
+        {
+          "$ref": "#/definitions/AttrBinding"
+        },
+        {
+          "$ref": "#/definitions/AlarmBinding"
+        },
+        {
+          "$ref": "#/definitions/ConstBinding"
+        }
+      ]
+    },
+    "TsBinding": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "ts"
+        },
+        "entity": {
+          "$ref": "#/definitions/EntityRef"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "mode",
+        "entity",
+        "key"
+      ],
+      "additionalProperties": false,
+      "description": "实时遥测:订阅一个 key 的最新值与后续推送。"
+    },
+    "EntityRef": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "DEVICE",
+            "ASSET"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "ThingsBoard 实体 UUID"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "additionalProperties": false,
+      "description": "实体引用:渲染器与数据层只认 id(项目文件里按名称存、发布时解析为 id 的规则见 ADR-002)。"
+    },
+    "TsHistoryBinding": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "ts-history"
+        },
+        "entity": {
+          "$ref": "#/definitions/EntityRef"
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "window": {
+          "type": "string",
+          "description": "时间窗口:整数 + 单位(m / h / d),如 '15m' / '24h' / '7d'。",
+          "pattern": "^\\d+(m|h|d)$"
+        },
+        "agg": {
+          "$ref": "#/definitions/Aggregation",
+          "description": "缺省由数据层按窗口长度自适应。"
+        }
+      },
+      "required": [
+        "mode",
+        "entity",
+        "keys",
+        "window"
+      ],
+      "additionalProperties": false,
+      "description": "历史 + 实时追加:先按窗口拉历史,再订阅同 key 追加。"
+    },
+    "Aggregation": {
+      "type": "string",
+      "enum": [
+        "AVG",
+        "MIN",
+        "MAX",
+        "SUM",
+        "COUNT",
+        "NONE"
+      ],
+      "description": "历史聚合方式;`NONE` 为原始点。数据层按窗口长度自适应默认粒度(见 契约-v1.md §4.2)。"
+    },
+    "AttrBinding": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "attr"
+        },
+        "entity": {
+          "$ref": "#/definitions/EntityRef"
+        },
+        "scope": {
+          "$ref": "#/definitions/AttributeScope"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "mode",
+        "entity",
+        "scope",
+        "key"
+      ],
+      "additionalProperties": false,
+      "description": "属性:订阅 server / shared / client scope 的某个属性。"
+    },
+    "AttributeScope": {
+      "type": "string",
+      "enum": [
+        "SERVER_SCOPE",
+        "SHARED_SCOPE",
+        "CLIENT_SCOPE"
+      ]
+    },
+    "AlarmBinding": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "alarm"
+        },
+        "entity": {
+          "$ref": "#/definitions/EntityRef"
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "mode",
+        "entity"
+      ],
+      "additionalProperties": false,
+      "description": "告警:该实体当前活动告警;`types` 不填为全部,填了只看指定告警类型(状态卡 / 横幅按告警名过滤)。"
+    },
+    "ConstBinding": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "const"
+        },
+        "value": {}
+      },
+      "required": [
+        "mode",
+        "value"
+      ],
+      "additionalProperties": false,
+      "description": "常量:编辑器缩略图与 /dev 展示页用假数据渲染;也用于 image.src 这类静态值。"
+    },
+    "Action": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RpcAction"
+        },
+        {
+          "$ref": "#/definitions/AttrWriteAction"
+        }
+      ]
+    },
+    "RpcAction": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "rpc"
+        },
+        "entity": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "DEVICE"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "confirm": {
+          "type": "boolean",
+          "description": "true 时执行前弹二次确认。"
+        }
+      },
+      "required": [
+        "kind",
+        "entity",
+        "method"
+      ],
+      "additionalProperties": false,
+      "description": "RPC 写操作(二期)。只允许绑 DEVICE,由 JSON Schema 的 entity.type 常量约束。"
+    },
+    "AttrWriteAction": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "attr"
+        },
+        "entity": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "DEVICE"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "SHARED_SCOPE",
+            "SERVER_SCOPE"
+          ]
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "entity",
+        "scope",
+        "key"
+      ],
+      "additionalProperties": false,
+      "description": "写属性(二期)。只允许绑 DEVICE 的 SHARED_SCOPE / SERVER_SCOPE。"
+    }
+  },
+  "title": "PageConfig v1",
+  "description": "0 代码部署工具 · 页面配置契约 v1(由 page-config.ts 生成,请勿手改)"
+}

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "template": "overview-a",
+  "widgets": [
+    { "id": "w-1", "slot": "g1", "type": "line",
+      "bindings": { "series": { "mode": "ts-history", "entity": { "type": "ASSET", "id": "x" }, "keys": ["P"], "window": "yesterday" } } }
+  ]
+}

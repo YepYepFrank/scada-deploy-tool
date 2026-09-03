@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "template": "overview-a",
+  "widgets": [
+    { "id": "w-1", "type": "number-card", "props": {}, "bindings": { "value": { "mode": "const", "value": 1 } } }
+  ]
+}
