@@ -18,7 +18,7 @@ regex = '''eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
 [[rules]]
 id = "url-embedded-credentials"
 description = "URL 内嵌用户名密码"
-regex = '''[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]{3,}@[^\s'"]+'''
+regex = '''[a-z][a-z0-9+.-]*://[^/\s:@'"<>]+:[^/\s@'"<>]{3,}@[A-Za-z0-9.-]+'''
 
 [allowlist]
 description = "占位符与示例"

@@ -40,7 +40,7 @@ check "JWT token(eyJ 开头)"                  'eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-
 # 明文密码赋值:password/passwd/pwd/secret/token = "非占位值"
 check "疑似明文密码/密钥赋值"                 '(password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token)["'"'"']?\s*[:=]\s*["'"'"'][^"'"'"'<>$%{}\s]{6,}["'"'"']'
 # URL 内嵌凭据
-check "URL 内嵌凭据(scheme://user:pass@)"    '[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]{3,}@[^\s]+'
+check "URL 内嵌凭据(scheme://user:pass@)"    '[a-z][a-z0-9+.-]*://[^/\s:@"'"'"'<>]+:[^/\s@"'"'"'<>]{3,}@[A-Za-z0-9.-]+'
 # 私钥
 check "私钥块"                                'BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY'
 # 常见云/平台 token 形态

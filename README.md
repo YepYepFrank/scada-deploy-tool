@@ -41,11 +41,16 @@ dev/
 
 ```bash
 pnpm install                 # 安装全部 workspace 依赖(需 pnpm 9,node ≥ 20)
+pnpm dev                     # 部署工具 dev 服务器(5173);或 launch.json 的 deploy-tool 配置
 pnpm typecheck               # 各包 tsc --noEmit
+pnpm build                   # 三个 packages 构建到各自 dist/
 pnpm test                    # 各包 vitest
+pnpm lint                    # ESLint 9(迁入的向导代码只告警)
 pnpm gen:schema              # 由 page-config.ts 重新生成 JSON Schema(改契约后必跑)
 pnpm -F @grid/scada-renderer test:schema   # 仅契约校验测试
 ```
+
+`../tb-frontend/` 已冻结,只作参照(见其 `README-FROZEN.md` / 计划 §2.3);`tbsite_compile.py` 在 T1.3 同构测试通过后冻结。
 
 契约人读版:[`docs/契约-v1.md`](docs/契约-v1.md)(状态见其顶部;权威定义在 `packages/renderer/src/schema/` 与 `packages/tb-client/src/data-source.ts`)。
 

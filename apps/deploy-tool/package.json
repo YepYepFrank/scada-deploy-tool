@@ -1,0 +1,27 @@
+{
+  "name": "deploy-tool",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:site": "vite build --config vite.site-single.config.js",
+    "typecheck": "echo \"[deploy-tool] typecheck: nothing yet\" && exit 0",
+    "test": "echo \"[deploy-tool] test: nothing yet\" && exit 0"
+  },
+  "dependencies": {
+    "@grid/scada-renderer": "workspace:*",
+    "@grid/tb-client": "workspace:*",
+    "echarts": "^5.5.1",
+    "leaflet": "^1.9.4",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^5.4.11",
+    "vite-plugin-singlefile": "^2.3.3"
+  },
+  "description": "部署工具(编辑壳):由 tb-frontend 迁入;现有向导 + 新编辑模块,引用 @grid/scada-renderer 与 @grid/tb-client"
+}

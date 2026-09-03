@@ -1,0 +1,22 @@
+{
+  "name": "@grid/tbsite-compiler",
+  "version": "0.0.1",
+  "description": "规则编译核心(从 publisher.js 抽 TS)+ CLI;tbsite_compile.py 冻结后的唯一编译器",
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": { "types": "./src/index.ts", "import": "./src/index.ts" }
+  },
+  "bin": { "tbsite": "./bin/tbsite.mjs" },
+  "files": ["dist", "src", "bin"],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,711 @@
+/* ── 微电网监控平台同款主题(仅部署工具入口挂载,覆盖 style.css 令牌) ──
+   取自生产前端 src/styles/{index,element-theme,button-common}.css 的
+   深蓝配色 / 渐变按钮 / 辉光边框 / YouShe·Barlow 双品牌字体。 */
+
+@font-face {
+  font-family: 'Barlow SemiBold';
+  src: url('../assets/fonts/Barlow-SemiBold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'YouShe BiaoTiHei';
+  src: url('../assets/fonts/YouSheBiaoTiHei.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* surfaces — 深海蓝分层 */
+  --bg-0: #041634;
+  --bg-1: #061c40;
+  --bg-2: #0b2a58;
+  --line-0: rgba(83, 196, 255, 0.16);
+  --line-1: rgba(83, 196, 255, 0.32);
+
+  /* ink */
+  --ink-0: #ecf9ff;
+  --ink-1: #cdeeff;
+  --ink-2: #8fbce8;
+
+  /* status(生产端 element-theme 同款) */
+  --ok: #2ff0bb;
+  --warn: #ffd166;
+  --bad: #ff5f7a;
+
+  --accent: #19b7ff;
+
+  --font-title: 'YouShe BiaoTiHei', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --font-num: 'Barlow SemiBold', 'Microsoft YaHei', sans-serif;
+  --font-display: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --font-body: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+
+  --r: 6px;
+}
+
+/* 页面渐变画在固定特效层上(body 用 fixed attachment 会在
+   半透明遮罩下触发合成黑块,见 4.29),body 只留纯色兜底 */
+body {
+  background: #020817;
+  color: var(--ink-0);
+}
+.fx-aurora {
+  background:
+    radial-gradient(circle at top left, rgba(39, 110, 214, 0.32), transparent 32%),
+    radial-gradient(circle at right, rgba(32, 173, 255, 0.18), transparent 24%),
+    linear-gradient(135deg, #020817 0%, #07224a 50%, #031124 100%);
+}
+
+/* VFX:琥珀色特效全部转蓝 */
+.fx-aurora::before { background: radial-gradient(circle, #19b7ff 0%, transparent 62%); }
+.fx-aurora::after { background: radial-gradient(circle, #276ed6 0%, transparent 62%); }
+.fx-sweep {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(25, 183, 255, 0.03) 45%,
+    rgba(25, 183, 255, 0.055) 50%,
+    rgba(25, 183, 255, 0.03) 55%,
+    transparent
+  );
+}
+::selection { background: rgba(25, 183, 255, 0.32); }
+::-webkit-scrollbar-thumb { background: rgba(83, 196, 255, 0.35); }
+
+/* ── 品牌:GWDR 字标 ─────────────────────────────────── */
+.brand { align-items: center; gap: 10px; }
+.brand-mark {
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 26px;
+  letter-spacing: 0.08em;
+  background: linear-gradient(180deg, #aee8ff 0%, #4fd0ff 55%, #1287dd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 12px rgba(25, 183, 255, 0.35));
+}
+.brand-mark::after { content: none; } /* 去掉终端光标动画 */
+.brand-logo {
+  height: 30px;
+  width: auto;
+  display: block;
+  filter: drop-shadow(0 0 10px rgba(72, 214, 255, 0.28));
+}
+.brand-sub { color: var(--ink-2); }
+.topbar { border-bottom-color: var(--line-1); }
+
+/* ── 面板:渐变卡 + 辉光边框(生产端 .panel 同款) ───── */
+.panel {
+  border: 1px solid rgba(136, 203, 255, 0.18);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(8, 28, 62, 0.88), rgba(4, 18, 42, 0.92));
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+}
+.panel h2 {
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 20px;
+  letter-spacing: 0.05em;
+  color: #eef8ff;
+  text-shadow:
+    0 0 1px rgba(255, 255, 255, 0.95),
+    0 0 12px rgba(90, 198, 255, 0.2);
+}
+
+/* 第 1 步:登录页同款插画背景 */
+.connect-hero {
+  position: relative;
+  overflow: hidden;
+}
+.connect-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../assets/img/login-bg.png') center / cover no-repeat;
+  opacity: 0.34;
+  pointer-events: none;
+}
+.connect-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(4, 18, 45, 0.25), rgba(3, 14, 36, 0.88) 78%);
+  pointer-events: none;
+}
+.connect-hero > * { position: relative; z-index: 1; }
+
+/* ── 输入控件(element-theme 输入框同款:深底 + 内发光) ─ */
+input[type='text'], input[type='password'], select, textarea {
+  border: 1px solid rgba(83, 196, 255, 0.28);
+  background: rgba(4, 22, 58, 0.76);
+  box-shadow: inset 0 0 16px rgba(25, 183, 255, 0.08);
+  border-radius: var(--r);
+  color: var(--ink-0);
+}
+input:focus, select:focus, textarea:focus {
+  border-color: rgba(83, 215, 255, 0.72);
+  box-shadow:
+    inset 0 0 18px rgba(25, 183, 255, 0.12),
+    0 0 14px rgba(25, 183, 255, 0.16);
+}
+
+/* ── 按钮(element-theme 按钮同款) ───────────────────── */
+/* 主按钮:三段蓝渐变 */
+.btn {
+  border: 1px solid rgba(98, 224, 255, 0.86);
+  background: linear-gradient(180deg, #19b7ff, #0874d6 72%, #0852b6);
+  color: #ffffff;
+  border-radius: var(--r);
+  font-weight: 600;
+}
+.btn:hover {
+  background: linear-gradient(180deg, #55d8ff, #118ce4 72%, #0b62c8);
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(25, 183, 255, 0.32);
+}
+/* 次级按钮:深蓝渐变 + 亮边 */
+.btn.ghost {
+  border-color: rgba(79, 211, 255, 0.42);
+  background: linear-gradient(180deg, rgba(13, 72, 142, 0.86), rgba(5, 36, 91, 0.9));
+  color: #dff8ff;
+  box-shadow: inset 0 0 0 1px rgba(135, 226, 255, 0.08);
+}
+.btn.ghost:hover {
+  border-color: rgba(93, 220, 255, 0.88);
+  background: linear-gradient(180deg, rgba(24, 144, 230, 0.88), rgba(8, 74, 164, 0.92));
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(25, 183, 255, 0.32);
+}
+/* 危险按钮:红渐变 */
+.btn.danger {
+  border-color: rgba(255, 95, 122, 0.86);
+  background: linear-gradient(180deg, #ff6b7f, #e53955 72%, #b8203a);
+  color: #ffffff;
+}
+.btn.danger:hover {
+  border-color: rgba(255, 132, 150, 0.96);
+  background: linear-gradient(180deg, #ff8496, #f04761 72%, #c92a44);
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(255, 95, 122, 0.34);
+}
+
+/* ── 步骤条 ──────────────────────────────────────────── */
+.step-btn { border-radius: var(--r); }
+.step-btn.on {
+  color: #ffffff;
+  border-color: rgba(98, 224, 255, 0.86);
+  background: linear-gradient(180deg, #19b7ff, #0874d6 72%, #0852b6);
+  box-shadow: 0 0 14px rgba(25, 183, 255, 0.32);
+}
+.step-btn.on .n { color: rgba(255, 255, 255, 0.75); }
+
+/* ── 弹窗 / 下拉面板(element-theme 弹层同款) ────────── */
+.modal, .kp-panel {
+  border: 1px solid rgba(83, 196, 255, 0.34);
+  background: linear-gradient(180deg, rgba(8, 39, 92, 0.96), rgba(3, 17, 45, 0.98));
+  box-shadow:
+    0 0 0 1px rgba(112, 224, 255, 0.08),
+    0 18px 48px rgba(0, 10, 32, 0.48),
+    0 0 28px rgba(25, 183, 255, 0.14);
+}
+.modal h3 {
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 19px;
+  letter-spacing: 0.04em;
+  color: #ecfbff;
+  text-shadow: 0 0 12px rgba(83, 215, 255, 0.24);
+}
+.modal-mask { background: rgba(1, 8, 23, 0.72); }
+
+/* 深色文字压在 accent 底上的地方,保证对比度 */
+.wf-step b, .way-badge { color: #03152f; }
+.mock-nav .mn-item.on { color: var(--accent); }
+
+/* 标题类小节头:发光 */
+.way-title, .mh-title {
+  font-family: var(--font-title);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 10px rgba(90, 198, 255, 0.2);
+}
+.way-title { font-size: 16px; }
+
+/* 数字/时钟走 Barlow */
+.mh-right, .ms-big { font-family: var(--font-num); }
+
+/* 模板卡 / 计算行等浅面加一点蓝 */
+.tpl-card, .comp-row, .dev-head {
+  background: rgba(10, 39, 78, 0.55);
+}
+.tpl-card:hover { box-shadow: 0 0 14px rgba(25, 183, 255, 0.18); }
+
+/* ══ v2 统一化 & VFX ═══════════════════════════════════ */
+
+/* ── 排版统一:中文界面文案一律雅黑,等宽只留给真代码/键名/数值 ── */
+.field label, .key-grid .hd, .disp-grid .hd, .mh-sub,
+.step-btn, .btn, .page-tab, .mn-item,
+.ok-msg, .err-msg, .pub-row, .pub-row .pl, .pub-row .pd,
+.remember-check, .checks label, .empty-head, .kg-tip,
+.sum-chip, .profile-chip, .gw-cnt, .dt-sel, .dt-match, .dt-add-label,
+.perm-panel summary, .fail-row .fail-step, .hist-sum, .tpl-scope,
+.way-fold-sum, .dt-add-cat, .abs-check, .disc-cnt, .gw-claimed {
+  font-family: var(--font-body);
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+.field label { font-size: 12px; }
+/* 真正保留等宽/数字体的地方 */
+.json-box, .expr-preview, .key-grid .kname, .dev-head .name,
+.empty-row .name, .comp-row .desc { font-family: var(--font-mono); }
+.hist-ts, .src-preview .spv, .ms-big, .mh-right, .dev-head .cnt { font-family: var(--font-num); }
+
+/* ── 标题:生产端 dashboard-title 同款渐变条 ── */
+.panel h2 {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-width: 300px;
+  max-width: 100%;
+  padding: 7px 34px 7px 14px;
+  margin-bottom: 8px;
+  background: url('../assets/img/3.png') left center / 100% 100% no-repeat;
+  font-size: 19px;
+}
+.way-title {
+  padding: 3px 24px 3px 10px;
+  background: url('../assets/img/3.png') left center / 100% 100% no-repeat;
+}
+
+/* ── 面板:顶部辉光发丝线 + 入场动画 ── */
+.panel {
+  background:
+    linear-gradient(90deg, transparent 4%, rgba(83, 215, 255, 0.55), transparent 96%) top / 100% 1px no-repeat,
+    radial-gradient(120% 60% at 50% 0%, rgba(25, 183, 255, 0.08), transparent 60%),
+    linear-gradient(180deg, rgba(8, 28, 62, 0.88), rgba(4, 18, 42, 0.92));
+  animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── 步骤条:活动步呼吸辉光 ── */
+.steps { gap: 8px; }
+.step-btn { transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s; }
+.step-btn:hover { transform: translateY(-1px); }
+.step-btn.on { animation: step-breathe 2.6s ease-in-out infinite; }
+@keyframes step-breathe {
+  0%, 100% { box-shadow: 0 0 10px rgba(25, 183, 255, 0.25); }
+  50% { box-shadow: 0 0 20px rgba(25, 183, 255, 0.55); }
+}
+
+/* ── 按钮:悬停高光扫过 ── */
+.btn { position: relative; overflow: hidden; }
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 55%;
+  height: 100%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.5s ease;
+  pointer-events: none;
+}
+.btn:hover::before { left: 130%; }
+
+/* ── 摘要 chip 归一到主题色系 ── */
+.sum-chip { background: rgba(10, 39, 78, 0.5); }
+.sum-chip.cf { border-color: rgba(25, 183, 255, 0.55); color: #6fd6ff; }
+.sum-chip.rollup { border-color: rgba(47, 240, 187, 0.5); color: #63f2c9; }
+.sum-chip.alarm { border-color: rgba(255, 209, 102, 0.55); color: #ffd97e; }
+.sum-chip.site { border-color: rgba(122, 167, 217, 0.6); color: #a9c8ec; }
+.btn.danger { border-color: rgba(255, 95, 122, 0.86); }
+.btn { white-space: nowrap; }
+
+/* ── 顶栏:玻璃化 + 连接胶囊 ── */
+.live-pill {
+  background: rgba(6, 24, 56, 0.6);
+  border-color: rgba(83, 196, 255, 0.35);
+  backdrop-filter: blur(8px);
+  font-family: var(--font-body);
+}
+
+/* ── 弹窗:遮罩模糊 ── */
+.modal-mask { backdrop-filter: blur(6px); }
+.modal { animation: rise 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* ── VFX:星光层(纯 CSS,两层视差微闪) ── */
+.fx-stars {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.2px 1.2px at 12% 18%, rgba(210, 240, 255, 0.9), transparent 55%),
+    radial-gradient(1px 1px at 34% 62%, rgba(160, 220, 255, 0.7), transparent 55%),
+    radial-gradient(1.4px 1.4px at 56% 30%, rgba(230, 248, 255, 0.85), transparent 55%),
+    radial-gradient(1px 1px at 72% 74%, rgba(150, 214, 255, 0.6), transparent 55%),
+    radial-gradient(1.1px 1.1px at 88% 12%, rgba(210, 240, 255, 0.8), transparent 55%),
+    radial-gradient(0.9px 0.9px at 8% 82%, rgba(170, 226, 255, 0.6), transparent 55%),
+    radial-gradient(1.3px 1.3px at 44% 88%, rgba(220, 244, 255, 0.75), transparent 55%),
+    radial-gradient(1px 1px at 64% 8%, rgba(190, 232, 255, 0.7), transparent 55%),
+    radial-gradient(1.1px 1.1px at 94% 46%, rgba(205, 238, 255, 0.75), transparent 55%),
+    radial-gradient(0.8px 0.8px at 22% 40%, rgba(160, 220, 255, 0.55), transparent 55%);
+  background-size: 900px 700px;
+  animation: twinkle 7s ease-in-out infinite alternate;
+}
+@keyframes twinkle {
+  from { opacity: 0.45; }
+  to { opacity: 0.95; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fx-stars, .step-btn.on { animation: none; }
+}
+
+/* ══ v3 布局打磨 · 交互 · 开屏 · VFX ═══════════════════ */
+
+html { scroll-behavior: smooth; }
+
+/* ── 开屏加载页 ── */
+.boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background:
+    radial-gradient(circle at top left, rgba(39, 110, 214, 0.32), transparent 32%),
+    radial-gradient(circle at right, rgba(32, 173, 255, 0.18), transparent 24%),
+    linear-gradient(135deg, #020817 0%, #07224a 50%, #031124 100%);
+}
+.boot-mark {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+}
+.boot-logo {
+  width: 64px;
+  height: 64px;
+  filter: drop-shadow(0 0 18px rgba(255, 165, 45, 0.45));
+  animation: boot-pulse 1.8s ease-in-out infinite;
+}
+.boot-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px dashed rgba(83, 215, 255, 0.55);
+  animation: boot-spin 7s linear infinite;
+}
+.boot-ring.r2 {
+  inset: 16px;
+  border: 1px solid transparent;
+  border-top-color: rgba(25, 183, 255, 0.9);
+  border-right-color: rgba(25, 183, 255, 0.25);
+  animation: boot-spin 1.4s linear infinite reverse;
+}
+.boot-title {
+  font-family: var(--font-title);
+  font-size: 38px;
+  letter-spacing: 0.12em;
+  background: linear-gradient(180deg, #aee8ff 0%, #4fd0ff 55%, #1287dd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 14px rgba(25, 183, 255, 0.35));
+}
+.boot-sub {
+  font-size: 12px;
+  letter-spacing: 0.28em;
+  color: var(--ink-2);
+}
+.boot-bar {
+  width: 280px;
+  height: 3px;
+  margin-top: 14px;
+  border-radius: 2px;
+  background: rgba(83, 196, 255, 0.14);
+  overflow: hidden;
+}
+.boot-bar i {
+  display: block;
+  height: 100%;
+  width: 45%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #4fd0ff, #19b7ff, transparent);
+  animation: boot-slide 1.1s ease-in-out infinite;
+}
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+@keyframes boot-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 12px rgba(255, 165, 45, 0.35)); }
+  50% { transform: scale(1.07); filter: drop-shadow(0 0 24px rgba(255, 165, 45, 0.6)); }
+}
+@keyframes boot-slide {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(340%); }
+}
+.boot-fade-leave-active { transition: opacity 0.5s ease, filter 0.5s ease; }
+.boot-fade-leave-to { opacity: 0; filter: blur(6px); }
+
+/* ── 步骤条 → 进度导航(圆号码 + 连接线 + 完成态) ── */
+.steps { gap: 26px; margin: 24px 0 26px; }
+.step-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 18px 7px 9px;
+  border-radius: 999px;
+  background: rgba(6, 24, 56, 0.55);
+  font-size: 12.5px;
+}
+.step-btn .n {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  margin-right: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--line-1);
+  font-family: var(--font-num);
+  font-size: 12px;
+  color: var(--ink-2);
+  transition: all 0.2s;
+}
+.step-btn:not(:first-child)::after {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  width: 26px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(83, 196, 255, 0.08), rgba(83, 196, 255, 0.45), rgba(83, 196, 255, 0.08));
+  pointer-events: none;
+}
+.step-btn.on .n {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.65);
+  color: #ffffff;
+}
+.step-btn.done {
+  color: var(--ink-1);
+  border-color: rgba(47, 240, 187, 0.38);
+}
+.step-btn.done .n {
+  color: #2ff0bb;
+  border-color: rgba(47, 240, 187, 0.6);
+  box-shadow: 0 0 8px rgba(47, 240, 187, 0.25);
+}
+
+/* ── 第 1 步:收窄居中,更像登录页 ── */
+.connect-hero {
+  max-width: 920px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 30px 34px 26px;
+}
+
+/* 聚焦时标签点亮 */
+.field:focus-within label { color: var(--accent); }
+
+/* ── 第 2 步:工具条吸顶(长设备列表滚动时不丢搜索/认领) ── */
+.disc-toolbar {
+  position: sticky;
+  top: 10px;
+  z-index: 20;
+  padding: 10px 12px;
+  border: 1px solid var(--line-0);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(8, 32, 72, 0.94), rgba(6, 24, 56, 0.92));
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.dev-block { transition: border-color 0.2s, box-shadow 0.2s; }
+.dev-block:hover {
+  border-color: rgba(83, 196, 255, 0.45);
+  box-shadow: 0 0 14px rgba(25, 183, 255, 0.1);
+}
+.dev-head { transition: background 0.2s; }
+.dev-head:hover { background: rgba(25, 183, 255, 0.12); }
+
+/* ── 第 3 步:计算行悬停点亮 ── */
+.comp-row { transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; }
+.comp-row:hover {
+  border-color: rgba(83, 196, 255, 0.5);
+  transform: translateX(3px);
+  box-shadow: -3px 0 0 rgba(25, 183, 255, 0.55), 0 0 14px rgba(25, 183, 255, 0.1);
+}
+
+/* ── 第 4 步:组态画布 HUD 边框 + 槽位交互 ── */
+.mock {
+  border: 1px solid rgba(83, 196, 255, 0.26);
+  border-radius: 10px;
+  background:
+    linear-gradient(var(--accent), var(--accent)) left 0 top 0 / 16px 2px,
+    linear-gradient(var(--accent), var(--accent)) left 0 top 0 / 2px 16px,
+    linear-gradient(var(--accent), var(--accent)) right 0 top 0 / 16px 2px,
+    linear-gradient(var(--accent), var(--accent)) right 0 top 0 / 2px 16px,
+    linear-gradient(var(--accent), var(--accent)) left 0 bottom 0 / 16px 2px,
+    linear-gradient(var(--accent), var(--accent)) left 0 bottom 0 / 2px 16px,
+    linear-gradient(var(--accent), var(--accent)) right 0 bottom 0 / 16px 2px,
+    linear-gradient(var(--accent), var(--accent)) right 0 bottom 0 / 2px 16px,
+    rgba(3, 14, 36, 0.6);
+  background-repeat: no-repeat;
+}
+.mslot { transition: border-color 0.2s, background 0.2s, transform 0.2s, box-shadow 0.2s; }
+.mslot:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3), 0 0 12px rgba(25, 183, 255, 0.16);
+}
+
+/* ── 第 5 步:发布流水线动效 ── */
+.pub-row { transition: border-color 0.3s, background 0.3s; }
+.pub-row.run {
+  background:
+    linear-gradient(90deg, transparent, rgba(25, 183, 255, 0.1), transparent) 0 0 / 200% 100%,
+    rgba(6, 24, 56, 0.4);
+  animation: pub-scan 1.6s linear infinite;
+}
+.pub-row.run .pi { animation: pulse 1s ease-in-out infinite; }
+.pub-row.ok .pi { text-shadow: 0 0 8px rgba(47, 240, 187, 0.6); }
+@keyframes pub-scan {
+  from { background-position: 200% 0, 0 0; }
+  to { background-position: -200% 0, 0 0; }
+}
+
+/* ── 全局交互手感 ── */
+.btn:active { transform: translateY(1px) scale(0.985); }
+.step-btn:active { transform: translateY(0) scale(0.97); }
+.kp-item { transition: background 0.15s, padding-left 0.15s; }
+.kp-item:hover { padding-left: 32px; }
+.kp-item.top:hover { padding-left: 14px; }
+.tpl-card { position: relative; overflow: hidden; }
+.tpl-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 55%;
+  height: 100%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.55s ease;
+  pointer-events: none;
+}
+.tpl-card:hover::after { left: 130%; }
+.step-foot .draft-msg { animation: rise 0.35s ease; }
+
+/* ── VFX:地平网格(home-bg 深蓝网格地面的 CSS 版) ── */
+.fx-grid {
+  position: fixed;
+  left: -18vw;
+  right: -18vw;
+  bottom: -8vh;
+  height: 44vh;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(83, 196, 255, 0.2) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(83, 196, 255, 0.2) 1px, transparent 1px);
+  background-size: 48px 48px;
+  transform: perspective(640px) rotateX(58deg);
+  transform-origin: 50% 0;
+  -webkit-mask-image: linear-gradient(180deg, transparent 2%, rgba(0, 0, 0, 0.55) 40%, rgba(0, 0, 0, 0.25) 78%, transparent);
+  mask-image: linear-gradient(180deg, transparent 2%, rgba(0, 0, 0, 0.55) 40%, rgba(0, 0, 0, 0.25) 78%, transparent);
+  animation: grid-flow 16s linear infinite;
+  opacity: 0.4;
+}
+@keyframes grid-flow {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 0 48px, 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-grid, .boot-logo, .boot-ring, .boot-bar i, .pub-row.run, .pub-row.run .pi { animation: none; }
+}
+
+/* ── 弹窗限高兜底:内容超出视口时弹窗内部滚动,不再把页面卡死 ── */
+.modal { max-height: 88vh; overflow-y: auto; overscroll-behavior: contain; }
+
+/* ── 统计测点多选(过滤 + 限高滚动) ── */
+.key-multi {
+  border: 1px solid rgba(83, 196, 255, 0.28);
+  border-radius: var(--r);
+  background: rgba(4, 22, 58, 0.55);
+  min-width: min(520px, 80vw);
+}
+.km-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-bottom: 1px solid rgba(83, 196, 255, 0.16);
+}
+.km-q { flex: 1; min-width: 120px; }
+.km-list { max-height: 240px; overflow-y: auto; padding: 4px 6px; }
+.km-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--ink-1);
+}
+.km-row:hover { background: rgba(25, 183, 255, 0.12); }
+.km-row input { accent-color: var(--accent); width: 14px; height: 14px; min-width: 14px; }
+.km-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.km-empty { padding: 12px; text-align: center; color: var(--ink-2); font-size: 12px; }
+
+/* ── 三栏监控屏示意画布 ── */
+.mock-triple { display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 10px; }
+.mt-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mt-col .mslot { min-height: 84px; }
+.mt-reserve {
+  min-height: 150px;
+  cursor: default;
+  border-style: dashed;
+  display: grid;
+  place-items: center;
+  opacity: 0.75;
+}
+.mt-reserve:hover { border-color: var(--line-1); }
+
+/* ── 通用确认弹窗 ── */
+.confirm-mask { z-index: 160; }
+.confirm-modal { width: min(440px, 92vw); }
+.confirm-input { width: 100%; margin-top: 10px; }
+
+/* ── 环境/项目选择行 + 命名草稿列表 ── */
+.env-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.env-row select { min-width: 220px; }
+.draft-list { display: block; }
+.draft-head { margin-bottom: 8px; }
+.draft-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line-0);
+}
+.draft-name { color: var(--ink-0); font-size: 13px; font-weight: 600; }
+.draft-meta { color: var(--ink-2); font-size: 11.5px; flex: 1; }
+.confirm-modal .confirm-text {
+  color: var(--ink-1);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-line;
+  margin: 6px 0 4px;
+}

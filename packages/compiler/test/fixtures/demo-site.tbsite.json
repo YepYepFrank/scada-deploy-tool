@@ -1,0 +1,604 @@
+{
+  "schema": "tbsite/v1",
+  "site": {
+    "name": "demo-site",
+    "label": "基站储能演示站"
+  },
+  "devices": [
+    {
+      "name": "BS_1_SENS",
+      "type": "sensor",
+      "keys": [
+        {
+          "key": "SYS_NORMAL",
+          "label": "系统状态",
+          "unit": ""
+        },
+        {
+          "key": "SMOKE_DET_ALM",
+          "label": "烟感状态",
+          "unit": ""
+        },
+        {
+          "key": "COM",
+          "label": "通讯状态",
+          "unit": ""
+        }
+      ]
+    },
+    {
+      "name": "BS_2_SENS",
+      "type": "sensor",
+      "keys": [
+        {
+          "key": "SYS_NORMAL",
+          "label": "系统状态",
+          "unit": ""
+        },
+        {
+          "key": "SMOKE_DET_ALM",
+          "label": "烟感状态",
+          "unit": ""
+        },
+        {
+          "key": "COM",
+          "label": "通讯状态",
+          "unit": ""
+        }
+      ]
+    },
+    {
+      "name": "BS_1_MO1",
+      "type": "battery",
+      "keys": [
+        {
+          "key": "AMBIENT_T",
+          "label": "环境温度",
+          "unit": "°C"
+        },
+        {
+          "key": "BAT_T",
+          "label": "电池组温度",
+          "unit": "°C"
+        },
+        {
+          "key": "SOC",
+          "label": "电量",
+          "unit": "%"
+        }
+      ]
+    },
+    {
+      "name": "BS_2_MO1",
+      "type": "battery",
+      "keys": [
+        {
+          "key": "AMBIENT_T",
+          "label": "环境温度",
+          "unit": "°C"
+        },
+        {
+          "key": "BAT_T",
+          "label": "电池组温度",
+          "unit": "°C"
+        },
+        {
+          "key": "SOC",
+          "label": "电量",
+          "unit": "%"
+        }
+      ]
+    },
+    {
+      "name": "BS_1_EMS",
+      "type": "ems",
+      "keys": [
+        {
+          "key": "P",
+          "label": "充放电功率",
+          "unit": "W"
+        },
+        {
+          "key": "totalChargeEnergy",
+          "label": "累计充电量",
+          "unit": "kWh"
+        },
+        {
+          "key": "totalDischargeEnergy",
+          "label": "累计放电量",
+          "unit": "kWh"
+        }
+      ]
+    },
+    {
+      "name": "PDR1_LP1_IED1",
+      "type": "ied",
+      "keys": [
+        {
+          "key": "Ua",
+          "label": "A相电压",
+          "unit": "V"
+        },
+        {
+          "key": "Ub",
+          "label": "B相电压",
+          "unit": "V"
+        },
+        {
+          "key": "Uc",
+          "label": "C相电压",
+          "unit": "V"
+        },
+        {
+          "key": "P",
+          "label": "有功功率",
+          "unit": "W"
+        },
+        {
+          "key": "Q",
+          "label": "无功功率",
+          "unit": "var"
+        },
+        {
+          "key": "CB",
+          "label": "断路器状态",
+          "unit": ""
+        }
+      ]
+    }
+  ],
+  "computations": [
+    {
+      "template": "expr.subtract",
+      "device": "BS_1_EMS",
+      "inputs": {
+        "a": {
+          "device": "BS_1_EMS",
+          "key": "totalChargeEnergy"
+        },
+        "b": {
+          "device": "BS_1_EMS",
+          "key": "totalDischargeEnergy"
+        }
+      },
+      "output": "netStoredEnergy"
+    },
+    {
+      "template": "window.aggregate",
+      "device": "BS_1_MO1",
+      "keys": [
+        "AMBIENT_T",
+        "BAT_T"
+      ],
+      "aggs": [
+        "avg"
+      ],
+      "window": "5m"
+    },
+    {
+      "template": "window.aggregate",
+      "device": "BS_1_MO1",
+      "keys": [
+        "BAT_T"
+      ],
+      "aggs": [
+        "max"
+      ],
+      "window": "5m"
+    },
+    {
+      "template": "window.aggregate",
+      "device": "PDR1_LP1_IED1",
+      "keys": [
+        "Ua",
+        "Ub",
+        "Uc"
+      ],
+      "aggs": [
+        "avg"
+      ],
+      "window": "5m"
+    },
+    {
+      "template": "window.delta",
+      "device": "BS_1_EMS",
+      "key": "totalChargeEnergy",
+      "window": "5m",
+      "output": "charge5m"
+    },
+    {
+      "template": "window.delta",
+      "device": "BS_1_EMS",
+      "key": "totalDischargeEnergy",
+      "window": "5m",
+      "output": "discharge5m"
+    },
+    {
+      "template": "window.integrate",
+      "device": "PDR1_LP1_IED1",
+      "key": "P",
+      "window": "5m",
+      "output": "loadEnergy5m"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "电池组温度告警",
+      "device": "BS_1_MO1",
+      "key": "BAT_T",
+      "condition": {
+        "op": "gt",
+        "value": 50
+      },
+      "severity": "CRITICAL",
+      "message": "电池组温度预警,当前温度:{value}度"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "环境温度告警",
+      "device": "BS_1_MO1",
+      "key": "AMBIENT_T",
+      "condition": {
+        "op": "gt",
+        "value": 45
+      },
+      "severity": "WARNING",
+      "message": "环境温度预警,当前温度:{value}度"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "烟感告警",
+      "device": "BS_1_SENS",
+      "key": "SMOKE_DET_ALM",
+      "condition": {
+        "op": "eq",
+        "value": 1
+      },
+      "severity": "CRITICAL",
+      "message": "烟感状态异常,可能着火"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "通讯异常告警",
+      "device": "BS_1_SENS",
+      "key": "COM",
+      "condition": {
+        "op": "eq",
+        "value": 0
+      },
+      "severity": "WARNING",
+      "message": "基站通讯异常"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "系统状态告警",
+      "device": "BS_1_SENS",
+      "key": "SYS_NORMAL",
+      "condition": {
+        "op": "eq",
+        "value": 0
+      },
+      "severity": "WARNING",
+      "message": "基站系统状态异常"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "电压越限告警",
+      "device": "PDR1_LP1_IED1",
+      "key": "Ua",
+      "condition": {
+        "op": "gt",
+        "value": 245
+      },
+      "severity": "WARNING",
+      "message": "A相电压越限:{value}V"
+    }
+  ],
+  "rollup": {
+    "chainName": "Periodic Rollups"
+  },
+  "layout": {
+    "header": {
+      "title": "基站储能综合监控",
+      "subtitle": "滨湖宝兴村 · BS-1/BS-2",
+      "showClock": true,
+      "showDate": true
+    },
+    "pages": [
+      {
+        "id": "p1",
+        "title": "储能总览",
+        "template": "console",
+        "slots": {
+          "s1": {
+            "kind": "metric",
+            "device": "BS_1_MO1",
+            "key": "BAT_T",
+            "card": "stat",
+            "title": "电池组温度"
+          },
+          "s2": {
+            "kind": "metric",
+            "device": "BS_1_EMS",
+            "key": "P",
+            "card": "stat",
+            "title": "充放电功率"
+          },
+          "s3": {
+            "kind": "metric",
+            "device": "BS_1_MO1",
+            "key": "SOC",
+            "card": "stat",
+            "title": "电池电量"
+          },
+          "s4": {
+            "kind": "alarm",
+            "device": "BS_1_SENS",
+            "key": "烟感告警",
+            "card": "alarm",
+            "title": "烟感监控"
+          },
+          "g1": {
+            "kind": "metric",
+            "device": "BS_1_MO1",
+            "key": "BAT_T",
+            "card": "line",
+            "title": "电池组温度趋势"
+          },
+          "g2": {
+            "kind": "metric",
+            "device": "BS_1_EMS",
+            "key": "P",
+            "card": "line",
+            "title": "EMS 充放电功率"
+          },
+          "g3": {
+            "kind": "metric",
+            "device": "BS_1_EMS",
+            "key": "charge5m",
+            "card": "bar",
+            "title": "每5分钟充电量"
+          },
+          "g4": {
+            "kind": "metric",
+            "device": "BS_1_EMS",
+            "key": "discharge5m",
+            "card": "bar",
+            "title": "每5分钟放电量"
+          }
+        }
+      },
+      {
+        "id": "p2",
+        "title": "配电监测",
+        "template": "focus",
+        "slots": {
+          "s1": {
+            "kind": "metric",
+            "device": "PDR1_LP1_IED1",
+            "key": "avgVoltage",
+            "card": "stat",
+            "title": "三相平均电压"
+          },
+          "s2": {
+            "kind": "metric",
+            "device": "PDR1_LP1_IED1",
+            "key": "P",
+            "card": "stat",
+            "title": "有功功率"
+          },
+          "s3": {
+            "kind": "alarm",
+            "device": "PDR1_LP1_IED1",
+            "key": "电压越限告警",
+            "card": "alarm",
+            "title": "电压越限监控"
+          },
+          "g1": {
+            "kind": "metric",
+            "device": "PDR1_LP1_IED1",
+            "key": "Ua",
+            "card": "line",
+            "title": "A相电压趋势"
+          },
+          "g2": {
+            "kind": "metric",
+            "device": "PDR1_LP1_IED1",
+            "key": "loadEnergy5m",
+            "card": "bar",
+            "title": "每5分钟用电量"
+          },
+          "g3": {
+            "kind": "metric",
+            "device": "PDR1_LP1_IED1",
+            "key": "Q",
+            "card": "line",
+            "title": "无功功率"
+          }
+        }
+      },
+      {
+        "id": "p3",
+        "title": "环境安全",
+        "template": "console",
+        "slots": {
+          "s1": {
+            "kind": "metric",
+            "device": "BS_1_MO1",
+            "key": "AMBIENT_T",
+            "card": "stat",
+            "title": "基站1环境温度"
+          },
+          "s2": {
+            "kind": "metric",
+            "device": "BS_2_MO1",
+            "key": "AMBIENT_T",
+            "card": "stat",
+            "title": "基站2环境温度"
+          },
+          "s3": {
+            "kind": "alarm",
+            "device": "BS_1_SENS",
+            "key": "通讯异常告警",
+            "card": "alarm",
+            "title": "通讯监控"
+          },
+          "s4": {
+            "kind": "alarm",
+            "device": "BS_1_SENS",
+            "key": "系统状态告警",
+            "card": "alarm",
+            "title": "系统状态"
+          },
+          "g1": {
+            "kind": "metric",
+            "device": "BS_1_MO1",
+            "key": "AMBIENT_T",
+            "card": "line",
+            "title": "基站1环境温度趋势"
+          },
+          "g2": {
+            "kind": "metric",
+            "device": "BS_2_MO1",
+            "key": "BAT_T",
+            "card": "line",
+            "title": "基站2电池温度趋势"
+          }
+        }
+      }
+    ]
+  },
+  "display": [
+    {
+      "device": "BS_1_MO1",
+      "key": "BAT_T",
+      "kind": "metric",
+      "card": "stat"
+    },
+    {
+      "device": "BS_1_EMS",
+      "key": "P",
+      "kind": "metric",
+      "card": "stat"
+    },
+    {
+      "device": "BS_1_MO1",
+      "key": "SOC",
+      "kind": "metric",
+      "card": "stat"
+    },
+    {
+      "device": "BS_1_SENS",
+      "key": "烟感告警",
+      "kind": "alarm",
+      "card": "badge"
+    },
+    {
+      "device": "BS_1_MO1",
+      "key": "BAT_T",
+      "kind": "metric",
+      "card": "line"
+    },
+    {
+      "device": "BS_1_EMS",
+      "key": "P",
+      "kind": "metric",
+      "card": "line"
+    },
+    {
+      "device": "BS_1_EMS",
+      "key": "charge5m",
+      "kind": "metric",
+      "card": "bar"
+    },
+    {
+      "device": "BS_1_EMS",
+      "key": "discharge5m",
+      "kind": "metric",
+      "card": "bar"
+    },
+    {
+      "device": "PDR1_LP1_IED1",
+      "key": "avgVoltage",
+      "kind": "metric",
+      "card": "stat"
+    },
+    {
+      "device": "PDR1_LP1_IED1",
+      "key": "P",
+      "kind": "metric",
+      "card": "stat"
+    },
+    {
+      "device": "PDR1_LP1_IED1",
+      "key": "电压越限告警",
+      "kind": "alarm",
+      "card": "badge"
+    },
+    {
+      "device": "PDR1_LP1_IED1",
+      "key": "Ua",
+      "kind": "metric",
+      "card": "line"
+    },
+    {
+      "device": "PDR1_LP1_IED1",
+      "key": "loadEnergy5m",
+      "kind": "metric",
+      "card": "bar"
+    },
+    {
+      "device": "PDR1_LP1_IED1",
+      "key": "Q",
+      "kind": "metric",
+      "card": "line"
+    },
+    {
+      "device": "BS_1_MO1",
+      "key": "AMBIENT_T",
+      "kind": "metric",
+      "card": "stat"
+    },
+    {
+      "device": "BS_2_MO1",
+      "key": "AMBIENT_T",
+      "kind": "metric",
+      "card": "stat"
+    },
+    {
+      "device": "BS_1_SENS",
+      "key": "通讯异常告警",
+      "kind": "alarm",
+      "card": "badge"
+    },
+    {
+      "device": "BS_1_SENS",
+      "key": "系统状态告警",
+      "kind": "alarm",
+      "card": "badge"
+    },
+    {
+      "device": "BS_1_MO1",
+      "key": "AMBIENT_T",
+      "kind": "metric",
+      "card": "line"
+    },
+    {
+      "device": "BS_2_MO1",
+      "key": "BAT_T",
+      "kind": "metric",
+      "card": "line"
+    },
+    {
+      "device": "BS_1_MO1",
+      "key": "电池组温度告警",
+      "kind": "alarm",
+      "card": "banner"
+    },
+    {
+      "device": "BS_1_MO1",
+      "key": "环境温度告警",
+      "kind": "alarm",
+      "card": "banner"
+    }
+  ]
+}
