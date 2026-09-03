@@ -1,0 +1,43 @@
+# dev/ — 0 代码部署工具 · 一期开发目录(v2 架构)
+
+> 本目录是 v2 架构(`resource/scada-deploy-tool-architecture-v2.html`)的落地工程根。
+> 从 2026-09-03 起,所有与「包级集成」路线相关的新代码、文档、决策记录都放在这里;
+> 目录外的 `tb-frontend/`、`tb-compiler/` 是现有工具,进入 monorepo 之前保持只读参照(见开发计划 §2.3)。
+
+## 先读什么
+
+| 文件 | 用途 |
+|---|---|
+| [`docs/开发计划-v2.md`](docs/开发计划-v2.md) | **权威计划**:目标、范围、四周排期、每个任务的目标 / 交付物 / 完成标准、里程碑验收清单、风险 |
+| [`docs/决策记录/`](docs/决策记录/) | 第 1 周前两天必须议定的四项模型决定(ADR-001 ~ 004),含推荐方案;冻结后状态改为「已采纳」 |
+| `../resource/scada-deploy-tool-architecture-v2.html` | 架构说明(为什么这样设计)。计划文档不重复解释理由,只引用章节号 |
+
+## 目录布局(pnpm workspaces monorepo,第 1 周 T0.3 初始化)
+
+```
+dev/
+├─ pnpm-workspace.yaml          # T0.3 生成
+├─ package.json                 # 根脚本:dev / build / test / lint(T0.3)
+├─ tsconfig.base.json
+├─ packages/
+│  ├─ renderer/                 # @grid/scada-renderer  组态渲染器 + 契约(schema 子路径导出)
+│  ├─ tb-client/                # @grid/tb-client       TB 数据访问(包一层同事 request.js / websocket.js)
+│  └─ compiler/                 # @grid/tbsite-compiler 规则编译核心(从 publisher.js 抽 TS)+ CLI bin
+├─ apps/
+│  └─ deploy-tool/              # 部署工具(编辑壳)——由 tb-frontend/ 迁入,引用上面三个包
+└─ docs/
+   ├─ 开发计划-v2.md
+   ├─ 决策记录/                 # ADR
+   └─ (第 1 周起)契约-v1.md、联调记录、操作说明
+```
+
+同事的生产前端应用**不在**本目录:开发期以 `file:` 链接本目录下的包,正式版按 tag 取(架构 §3)。
+若双方同意,也可作为 `apps/host-app` 加入 workspace。
+
+## 工程约定(摘要,详见计划 §2)
+
+- 包名前缀 `@grid/`;新包一律 TypeScript;`apps/deploy-tool` 里现有 2700 行向导保留 JS,新模块 TS。
+- 渲染器的 `vue` 与 `@grid/tb-client` 是 **peerDependencies**(架构 §8 / §10「两份 Vue 运行时」)。
+- 契约(PageConfig 等)只在 `packages/renderer/src/schema/` 定义一次;JSON Schema 由类型生成,不手写。
+- 目标 TB:生产镜像 `192.168.20.61:8080`(TB CE 4.3.1.3);凭据不入库,走 `.env.local`(已 gitignore)。
+- 每个任务完成的判据以计划文档「完成标准」为准,勾选任务时在计划文档同一行追加日期。

@@ -1,0 +1,23 @@
+# deps / build
+node_modules/
+dist/
+dist-site/
+*.tsbuildinfo
+.pnpm-store/
+
+# env / secrets — 凭据永不入库
+.env
+.env.*
+!.env.example
+*.scadaproj.local
+
+# editor / os
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# logs / tmp
+*.log
+.cache/
+coverage/
