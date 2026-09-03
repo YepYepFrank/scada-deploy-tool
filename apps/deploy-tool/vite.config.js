@@ -4,12 +4,11 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue()],
-  // 多页入口:演示首页 + 站点声明工具 + 站点大屏(npm run build 一起产出)
+  // 多页入口:站点声明工具 + 站点大屏(npm run build 一起产出)。早期演示首页 index.html 已于 2026-09-03 移除。
   build: {
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
       input: {
-        index: resolve(__dirname, 'index.html'),
         provisioner: resolve(__dirname, 'provisioner.html'),
         site: resolve(__dirname, 'site.html'),
       },
