@@ -45,6 +45,7 @@ Refs: T1.2
 - 凭据只存在两处:`.env.local`(已 gitignore,模板见 `.env.example`)或运行时由人输入(向导登录框、CLI `--password-env`)。
 - 文档 / 测试需要示例时用占位符 `<password>`、`<token>`,或明显无效值 `changeme`。
 - `pre-commit` 钩子扫描暂存区(已知生产密码字面量、JWT 前缀 `eyJ`、`password = "…"` 赋值、私钥头、AWS/GitHub token 形态);CI 对全部历史跑 gitleaks。钩子命中即拒绝提交,**不允许 `--no-verify` 绕过**——误报请把模式加入 `.gitleaks.toml` allowlist 并说明理由。
+- 误报实例:tbsite / PageConfig 样本里的 `"key": "revenue5mCostDaily"` 是遥测 key 名,被默认规则按熵值判为 API key;处理方式是把样本目录加入 `.gitleaks.toml` 的 `[allowlist].paths`(已加),**不是**改数据。CI 的 `secret-scan` 在 push 时只扫本次提交,想扫全历史用 Actions 页面手动触发(workflow_dispatch)。
 - 若凭据已进历史:立即轮换该凭据(改密码 / 吊销 token),再用 `git filter-repo` 清历史并强推;两步缺一不可,只清历史不轮换等于没处理。
 
 ## 4. 钩子安装
