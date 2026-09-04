@@ -41,6 +41,18 @@ const config: PageConfig = {
       },
     },
     {
+      id: 'w-ov',
+      slot: 'g3',
+      type: 'overview-card',
+      bindings: {
+        items: [
+          { mode: 'ts', entity: DEV, key: 'Ia' },
+          { mode: 'attr', entity: DEV, scope: 'SERVER_SCOPE', key: 'CB' },
+          { mode: 'const', value: 0.97 },
+        ],
+      },
+    },
+    {
       id: 'w-ext',
       slot: 'g2',
       type: 'table',
@@ -62,14 +74,18 @@ describe('resolveBindings', () => {
     const h = resolveBindings(config, ds, {
       onValue: (w, s) => seen.push(`${w}.${s}`),
       slotSpec: (w, slot) =>
-        w.type === 'number-card' && slot === 'value' ? { name: 'value', valueType: 'number' } : undefined,
+        w.type === 'number-card' && slot === 'value'
+          ? { name: 'value', valueType: 'number' }
+          : w.type === 'overview-card' && slot === 'items'
+            ? { name: 'items', valueType: 'number', multiple: true }
+            : undefined,
     })
     await flush()
     await flush()
 
     const ts = ds.calls.filter(c => c.method === 'subscribeTs').map(c => `${c.entity!.id}:${c.keys!.join(',')}`)
     expect(ts).toEqual(expect.arrayContaining(['d1:P', 'a1:calc_total_p', 'a1:calc_total_load']))
-    expect(ds.calls.filter(c => c.method === 'subscribeAttr')).toHaveLength(1)
+    expect(ds.calls.filter(c => c.method === 'subscribeAttr')).toHaveLength(2) // w-attr + 概览卡 items 里的 attr
     expect(ds.calls.find(c => c.method === 'subscribeAlarms')?.types).toEqual(['通讯中断'])
     const hist = ds.calls.filter(c => c.method === 'getHistory')
     expect(hist.map(c => [c.keys![0], c.window, c.agg])).toEqual([
@@ -92,6 +108,13 @@ describe('resolveBindings', () => {
     expect(Array.isArray(series)).toBe(true)
     expect(series.map(s => s.name)).toEqual(['calc_total_p', 'calc_total_load'])
     expect(series[0]!.points).toHaveLength(3) // 历史 2 点 + 订阅首包最新值 1 点
+    // 多项标量:每项带整形后的 value(ts 首包 1;attr 'v0' 非数值 → null;const 0.97)
+    const items = h.values['w-ov']!.items as { name: string; value: unknown }[]
+    expect(items.map(i => [i.name, i.value])).toEqual([
+      ['Ia', 1],
+      ['CB', null],
+      ['series-2', 0.97],
+    ])
     const rows = h.values['w-ext']!.rows as { name: string; points: unknown[] }[]
     expect(rows[0]!.name).toBe('revenue')
     expect(rows[0]!.points).toHaveLength(2)

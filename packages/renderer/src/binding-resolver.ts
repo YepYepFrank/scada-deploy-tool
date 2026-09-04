@@ -20,6 +20,8 @@ export interface SeriesValue {
   name: string
   entity?: EntityRef
   points: TsPoint[]
+  /** 多项标量槽位(valueType 为 number/string/boolean 且 multiple)时:该项当前值(已按 valueType 整形) */
+  value?: SlotValue
 }
 
 export type SlotValue = number | string | boolean | null | SeriesValue | SeriesValue[] | AlarmInfo[] | unknown
@@ -91,16 +93,19 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
       const list = Array.isArray(b) ? b : [b]
       const multiple = Array.isArray(b)
       if (multiple) {
-        // 多序列:每项一个 SeriesValue,槽位值为数组;任一项更新都整体重设(数组小,直接复制)
+        // 多项槽位:每项一个 SeriesValue,槽位值为数组;任一项更新都整体重设(数组小,直接复制)
+        const scalar = spec?.valueType === 'number' || spec?.valueType === 'string' || spec?.valueType === 'boolean'
         const series: SeriesValue[] = list.map((one, i) => ({
           name: seriesName(one, i),
           entity: entityOf(one),
           points: [],
+          ...(scalar ? { value: null } : {}),
         }))
         set(w.id, slot, series.slice())
         list.forEach((one, i) => {
           bindSeries(one, w, slot, spec, pts => {
             series[i]!.points = pts
+            if (scalar) series[i]!.value = shapeScalar(lastValue(pts), spec?.valueType)
             set(w.id, slot, series.slice())
           })
         })
@@ -167,7 +172,10 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
     emit: (pts: TsPoint[]) => void
   ) {
     if (one.mode === 'const') {
-      emit(Array.isArray(one.value) ? (one.value as TsPoint[]) : [])
+      if (Array.isArray(one.value)) emit(one.value as TsPoint[])
+      else if (one.value !== null && one.value !== undefined && typeof one.value !== 'object')
+        emit([{ ts: 0, value: one.value as TsPoint['value'] }])
+      else emit([])
       return
     }
     if (one.mode === 'ext') {
@@ -214,13 +222,26 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
         .catch(e => fail(w.id, slot, e))
       return
     }
-    // ts / attr / alarm 出现在多序列槽位:按单值当作长度 1 的序列(容错,不推荐)
+    // 标量 mode 出现在多项槽位(概览卡 items):按长度 1 的序列给值,value 由调用方整形
     if (one.mode === 'ts') {
       try {
         track(
           ds.subscribeTs(one.entity, [one.key], ups => {
             const u = ups.find(x => x.key === one.key)
             if (u) emit(u.points.slice())
+          })
+        )
+      } catch (e) {
+        fail(w.id, slot, e)
+      }
+      return
+    }
+    if (one.mode === 'attr') {
+      try {
+        track(
+          ds.subscribeAttr(one.entity, one.scope, [one.key], ups => {
+            const u = ups.find(x => x.key === one.key)
+            if (u) emit([{ ts: u.ts, value: u.value as TsPoint['value'] }])
           })
         )
       } catch (e) {

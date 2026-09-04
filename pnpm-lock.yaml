@@ -80,6 +80,10 @@ importers:
         version: 2.1.9(@types/node@22.20.1)(happy-dom@15.11.7)
 
   packages/renderer:
+    dependencies:
+      echarts:
+        specifier: ^5.5.1
+        version: 5.6.0
     devDependencies:
       '@grid/tb-client':
         specifier: workspace:*

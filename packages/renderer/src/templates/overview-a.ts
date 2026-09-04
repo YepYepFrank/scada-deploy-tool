@@ -1,5 +1,7 @@
 import type { TemplateDefinition } from '../schema/registry'
 
+const CHART = ['line', 'dual-axis', 'overview-card', 'alarm-list', 'table', 'image', 'text']
+
 /** 态势总览台(← 现有 LAYOUT_TEMPLATES.console):4 指标位 + 双列四图 + 顶部告警横幅;1920×1080 设计稿,整体缩放。 */
 export const overviewA: TemplateDefinition = {
   id: 'overview-a',
@@ -18,29 +20,29 @@ export const overviewA: TemplateDefinition = {
       name: 's1',
       title: '指标 1',
       area: { x: 40, y: 104, w: 440, h: 176 },
-      accepts: ['number-card', 'gauge', 'status-light', 'text'],
+      accepts: ['number-card', 'gauge', 'status-light', 'overview-card', 'text'],
     },
     {
       name: 's2',
       title: '指标 2',
       area: { x: 506, y: 104, w: 440, h: 176 },
-      accepts: ['number-card', 'gauge', 'status-light', 'text'],
+      accepts: ['number-card', 'gauge', 'status-light', 'overview-card', 'text'],
     },
     {
       name: 's3',
       title: '指标 3',
       area: { x: 974, y: 104, w: 440, h: 176 },
-      accepts: ['number-card', 'gauge', 'status-light', 'text'],
+      accepts: ['number-card', 'gauge', 'status-light', 'overview-card', 'text'],
     },
     {
       name: 's4',
       title: '指标 4',
       area: { x: 1440, y: 104, w: 440, h: 176 },
-      accepts: ['number-card', 'gauge', 'status-light', 'text'],
+      accepts: ['number-card', 'gauge', 'status-light', 'overview-card', 'text'],
     },
-    { name: 'g1', title: '图表 1', area: { x: 40, y: 304, w: 908, h: 364 }, required: true },
-    { name: 'g2', title: '图表 2', area: { x: 972, y: 304, w: 908, h: 364 } },
-    { name: 'g3', title: '图表 3', area: { x: 40, y: 692, w: 908, h: 364 } },
-    { name: 'g4', title: '图表 4', area: { x: 972, y: 692, w: 908, h: 364 } },
+    { name: 'g1', title: '图表 1', accepts: CHART, area: { x: 40, y: 304, w: 908, h: 364 }, required: true },
+    { name: 'g2', title: '图表 2', accepts: CHART, area: { x: 972, y: 304, w: 908, h: 364 } },
+    { name: 'g3', title: '图表 3', accepts: CHART, area: { x: 40, y: 692, w: 908, h: 364 } },
+    { name: 'g4', title: '图表 4', accepts: CHART, area: { x: 972, y: 692, w: 908, h: 364 } },
   ],
 }
