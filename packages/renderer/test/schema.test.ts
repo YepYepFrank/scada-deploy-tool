@@ -33,6 +33,8 @@ describe('PageConfig JSON Schema', () => {
     'action-on-asset.json': /^\/widgets\/0\/actions\/toggle/, // entity.type 必须为 DEVICE
     'bad-window.json': /^\/widgets\/0\/bindings\/series/, // window pattern
     'wrong-version.json': /^\/schemaVersion$/,
+    'ext-missing-params.json': /^\/widgets\/0\/bindings\/rows/, // ext 必填 params
+    'ext-bad-interval.json': /^\/widgets\/0\/bindings\/series/, // interval 不在 kz 枚举
   }
   for (const f of readdirSync(invalidDir)) {
     it(`非法样本被拒:${f}`, () => {

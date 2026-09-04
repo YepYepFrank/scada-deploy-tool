@@ -7,11 +7,19 @@
       "id": "w-s1",
       "slot": "s1",
       "type": "number-card",
-      "props": { "title": "PCS 有功", "unit": "kW", "decimals": 1 },
+      "props": {
+        "title": "PCS 有功",
+        "unit": "kW",
+        "decimals": 1
+      },
       "bindings": {
         "value": {
           "mode": "ts",
-          "entity": { "type": "DEVICE", "id": "96424640-7c36-11f1-8007-51b9f7714bbe" },
+          "entity": {
+            "type": "DEVICE",
+            "id": "96424640-7c36-11f1-8007-51b9f7714bbe",
+            "name": "PCS-1"
+          },
           "key": "P"
         }
       }
@@ -20,11 +28,20 @@
       "id": "w-s2",
       "slot": "s2",
       "type": "gauge",
-      "props": { "title": "SOC", "unit": "%", "min": 0, "max": 100 },
+      "props": {
+        "title": "SOC",
+        "unit": "%",
+        "min": 0,
+        "max": 100
+      },
       "bindings": {
         "value": {
           "mode": "ts",
-          "entity": { "type": "DEVICE", "id": "96424640-7c36-11f1-8007-51b9f7714bbe" },
+          "entity": {
+            "type": "DEVICE",
+            "id": "96424640-7c36-11f1-8007-51b9f7714bbe",
+            "name": "PCS-1"
+          },
           "key": "bms_soc"
         }
       }
@@ -33,11 +50,19 @@
       "id": "w-s3",
       "slot": "s3",
       "type": "status-light",
-      "props": { "title": "通讯", "onValue": 1, "labels": ["中断", "正常"] },
+      "props": {
+        "title": "通讯",
+        "onValue": 1,
+        "labels": ["中断", "正常"]
+      },
       "bindings": {
         "state": {
           "mode": "attr",
-          "entity": { "type": "DEVICE", "id": "96424640-7c36-11f1-8007-51b9f7714bbe" },
+          "entity": {
+            "type": "DEVICE",
+            "id": "96424640-7c36-11f1-8007-51b9f7714bbe",
+            "name": "PCS-1"
+          },
           "scope": "SERVER_SCOPE",
           "key": "active"
         }
@@ -47,19 +72,30 @@
       "id": "w-g1",
       "slot": "g1",
       "type": "line",
-      "props": { "title": "全站功率 24h", "style": "area" },
+      "props": {
+        "title": "全站功率 24h",
+        "style": "area"
+      },
       "bindings": {
         "series": [
           {
             "mode": "ts-history",
-            "entity": { "type": "ASSET", "id": "5ab0e2d0-7c36-11f1-8007-51b9f7714bbe" },
+            "entity": {
+              "type": "ASSET",
+              "id": "5ab0e2d0-7c36-11f1-8007-51b9f7714bbe",
+              "name": "仙人山储能站"
+            },
             "keys": ["calc_total_p"],
             "window": "24h",
             "agg": "AVG"
           },
           {
             "mode": "ts-history",
-            "entity": { "type": "ASSET", "id": "5ab0e2d0-7c36-11f1-8007-51b9f7714bbe" },
+            "entity": {
+              "type": "ASSET",
+              "id": "5ab0e2d0-7c36-11f1-8007-51b9f7714bbe",
+              "name": "仙人山储能站"
+            },
             "keys": ["calc_total_load"],
             "window": "24h"
           }
@@ -70,11 +106,17 @@
       "id": "w-g2",
       "slot": "g2",
       "type": "alarm-list",
-      "props": { "maxRows": 20 },
+      "props": {
+        "maxRows": 20
+      },
       "bindings": {
         "alarms": {
           "mode": "alarm",
-          "entity": { "type": "ASSET", "id": "5ab0e2d0-7c36-11f1-8007-51b9f7714bbe" },
+          "entity": {
+            "type": "ASSET",
+            "id": "5ab0e2d0-7c36-11f1-8007-51b9f7714bbe",
+            "name": "仙人山储能站"
+          },
           "types": ["通讯中断", "电压越限"]
         }
       }
@@ -83,20 +125,31 @@
       "id": "w-g3",
       "slot": "g3",
       "type": "image",
-      "props": { "fit": "contain" },
+      "props": {
+        "fit": "contain"
+      },
       "bindings": {
-        "src": { "mode": "const", "value": "/assets/site-photo.png" }
+        "src": {
+          "mode": "const",
+          "value": "/assets/site-photo.png"
+        }
       }
     },
     {
       "id": "w-g4",
       "slot": "g4",
       "type": "switch",
-      "props": { "label": "PCS 并网" },
+      "props": {
+        "label": "PCS 并网"
+      },
       "bindings": {
         "state": {
           "mode": "attr",
-          "entity": { "type": "DEVICE", "id": "96424640-7c36-11f1-8007-51b9f7714bbe" },
+          "entity": {
+            "type": "DEVICE",
+            "id": "96424640-7c36-11f1-8007-51b9f7714bbe",
+            "name": "PCS-1"
+          },
           "scope": "SHARED_SCOPE",
           "key": "grid_on"
         }
@@ -104,10 +157,42 @@
       "actions": {
         "toggle": {
           "kind": "rpc",
-          "entity": { "type": "DEVICE", "id": "96424640-7c36-11f1-8007-51b9f7714bbe" },
+          "entity": {
+            "type": "DEVICE",
+            "id": "96424640-7c36-11f1-8007-51b9f7714bbe"
+          },
           "method": "setGridOn",
           "confirm": true
         }
+      }
+    },
+    {
+      "id": "w-g2-2",
+      "slot": "g2",
+      "type": "table",
+      "props": {
+        "title": "逐日收益(kz 归档)",
+        "columns": [
+          {
+            "key": "revenue",
+            "label": "净收益",
+            "unit": "元"
+          }
+        ]
+      },
+      "bindings": {
+        "rows": [
+          {
+            "mode": "ext",
+            "source": "kz",
+            "window": "30d",
+            "interval": "1d",
+            "params": {
+              "stationId": "96424640-7c36-11f1-8007-51b9f7714bbe",
+              "metric": "revenue"
+            }
+          }
+        ]
       }
     }
   ]

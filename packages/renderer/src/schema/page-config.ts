@@ -10,9 +10,9 @@
  * - ADR-004 若选「ext 过渡路线」:Binding 增加 `{ mode: 'ext'; source: string; params?: … }`。
  */
 
-import type { EntityRef, AttributeScope, Aggregation } from '@grid/tb-client'
+import type { EntityRef, AttributeScope, Aggregation, ExtInterval } from '@grid/tb-client'
 
-export type { EntityRef, AttributeScope, Aggregation }
+export type { EntityRef, AttributeScope, Aggregation, ExtInterval }
 
 export const SCHEMA_VERSION = 1 as const
 
@@ -51,7 +51,8 @@ export interface WidgetConfig {
   props?: Record<string, unknown>
   /**
    * 绑定:组件「绑定槽位名」→ 数据来源。
-   * 对声明 `multiple: true` 的绑定槽位(如曲线的 series)允许数组,一项一序列;单项可不写数组。
+   * 声明 `multiple: true` 的绑定槽位(如曲线的 series)**必须**写成数组,一项一序列,单条也写成一项的数组;
+   * 非 multiple 槽位必须是单个对象。JSON Schema 无法按槽位区分,由注册表运行时校验强制(T0.1 回填 B2,2026-09-04)。
    */
   bindings: Record<string, Binding | Binding[]>
   /**
@@ -106,7 +107,29 @@ export interface ConstBinding {
   value: unknown
 }
 
-export type Binding = TsBinding | TsHistoryBinding | AttrBinding | AlarmBinding | ConstBinding
+/**
+ * 外部数据源(kz 归档 / 报表):TB 只保留 3–7 天原始遥测,≥ 3 天窗口或 ≥ 1 天粒度的统计一律从 kz 取
+ * (T0.1 回填 A4,2026-09-04;ADR-004 改为正式路线)。`params` 形状待澄清会拿到 kz 通用查询接口后冻结。
+ */
+export interface ExtBinding {
+  mode: 'ext'
+  /**
+   * 外部源标识,一期固定 'kz'。
+   * @pattern ^[a-z][a-z0-9-]*$
+   */
+  source: string
+  /**
+   * 时间窗口:同 ts-history。
+   * @pattern ^\d+(m|h|d)$
+   */
+  window?: string
+  /** 聚合粒度,对齐 kz 支持的枚举。 */
+  interval?: ExtInterval
+  /** 源特有参数(站点 / 业务 id、指标名等)。 */
+  params: Record<string, unknown>
+}
+
+export type Binding = TsBinding | TsHistoryBinding | AttrBinding | AlarmBinding | ConstBinding | ExtBinding
 
 export type BindingMode = Binding['mode']
 

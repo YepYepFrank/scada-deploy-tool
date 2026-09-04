@@ -63,7 +63,10 @@ export interface BindingSlotSpec {
   required?: boolean
   /** 允许的 Binding.mode;为空表示全部允许 */
   modes?: BindingMode[]
-  /** 允许数组形式(多序列) */
+  /**
+   * 多序列槽位:为 true 时该槽位的绑定**必须**是数组(单条也写成一项的数组);为 false / 缺省时必须是单个对象。
+   * 由 registerWidget / <ScadaPage> 运行时校验(T0.1 回填 B2,2026-09-04)。
+   */
   multiple?: boolean
 }
 

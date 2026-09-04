@@ -76,7 +76,7 @@
               }
             ]
           },
-          "description": "绑定:组件「绑定槽位名」→ 数据来源。 对声明 `multiple: true` 的绑定槽位(如曲线的 series)允许数组,一项一序列;单项可不写数组。"
+          "description": "绑定:组件「绑定槽位名」→ 数据来源。 声明 `multiple: true` 的绑定槽位(如曲线的 series)**必须**写成数组,一项一序列,单条也写成一项的数组; 非 multiple 槽位必须是单个对象。JSON Schema 无法按槽位区分,由注册表运行时校验强制(T0.1 回填 B2,2026-09-04)。"
         },
         "actions": {
           "type": "object",
@@ -110,6 +110,9 @@
         },
         {
           "$ref": "#/definitions/ConstBinding"
+        },
+        {
+          "$ref": "#/definitions/ExtBinding"
         }
       ]
     },
@@ -149,6 +152,10 @@
         "id": {
           "type": "string",
           "description": "ThingsBoard 实体 UUID"
+        },
+        "name": {
+          "type": "string",
+          "description": "显示名(设备 name 或 label),由工具发布时按解析结果写入,**仅供组件显示**(标题、图例、表格列), 不作为查找 / 订阅依据——渲染器与数据层仍只按 id 工作。T0.1 回填 A2(庄艳芹)采纳,2026-09-04。"
         }
       },
       "required": [
@@ -281,6 +288,53 @@
       ],
       "additionalProperties": false,
       "description": "常量:编辑器缩略图与 /dev 展示页用假数据渲染;也用于 image.src 这类静态值。"
+    },
+    "ExtBinding": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "ext"
+        },
+        "source": {
+          "type": "string",
+          "description": "外部源标识,一期固定 'kz'。",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "window": {
+          "type": "string",
+          "description": "时间窗口:同 ts-history。",
+          "pattern": "^\\d+(m|h|d)$"
+        },
+        "interval": {
+          "$ref": "#/definitions/ExtInterval",
+          "description": "聚合粒度,对齐 kz 支持的枚举。"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "源特有参数(站点 / 业务 id、指标名等)。"
+        }
+      },
+      "required": [
+        "mode",
+        "source",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "外部数据源(kz 归档 / 报表):TB 只保留 3–7 天原始遥测,≥ 3 天窗口或 ≥ 1 天粒度的统计一律从 kz 取 (T0.1 回填 A4,2026-09-04;ADR-004 改为正式路线)。`params` 形状待澄清会拿到 kz 通用查询接口后冻结。"
+    },
+    "ExtInterval": {
+      "type": "string",
+      "enum": [
+        "1m",
+        "5m",
+        "1h",
+        "1d",
+        "1M",
+        "1y"
+      ],
+      "description": "kz 归档粒度枚举(T0.1 回填 B1:仅支持 1 分钟 / 5 分钟 / 1 小时 / 天 / 月 / 年)。"
     },
     "Action": {
       "anyOf": [

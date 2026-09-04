@@ -14,6 +14,35 @@ export interface EntityRef {
   type: 'DEVICE' | 'ASSET'
   /** ThingsBoard 实体 UUID */
   id: string
+  /**
+   * 显示名(设备 name 或 label),由工具发布时按解析结果写入,**仅供组件显示**(标题、图例、表格列),
+   * 不作为查找 / 订阅依据——渲染器与数据层仍只按 id 工作。T0.1 回填 A2(庄艳芹)采纳,2026-09-04。
+   */
+  name?: string
+}
+
+/**
+ * 外部数据源查询(T0.1 回填 A4 后新增,2026-09-04):TB 只保留 3–7 天原始遥测,长期 / 归档数据在扩展服务(kz)库中,
+ * 由 tbClient 包一层现有 kz 调用实现。`query` 的具体形状待澄清会拿到 kz 通用查询接口后冻结,当前为预留。
+ */
+export interface ExtQuery {
+  /** 外部源标识,一期固定 'kz' */
+  source: string
+  /** 时间窗口字面量(同 ts-history),缺省由实现决定 */
+  window?: string
+  /** 聚合粒度,对齐 kz 支持的枚举 */
+  interval?: ExtInterval
+  /** 源特有参数(站点 / 业务 id、指标名等),形状待冻结 */
+  params: Record<string, unknown>
+}
+
+/** kz 归档粒度枚举(T0.1 回填 B1:仅支持 1 分钟 / 5 分钟 / 1 小时 / 天 / 月 / 年)。 */
+export type ExtInterval = '1m' | '5m' | '1h' | '1d' | '1M' | '1y'
+
+/** 外部源返回统一归一为「序列名 → 点列」,组件按 series 槽位消费;非序列型结果放在 `meta`。 */
+export interface ExtResult {
+  series: Record<string, TsPoint[]>
+  meta?: Record<string, unknown>
 }
 
 /** 遥测 / 属性的单个点。TB 推送的值是字符串,数据层负责转成 number / boolean;不存在的 key 为 null。 */
@@ -98,8 +127,11 @@ export interface DataSource {
   /** 最新值;不存在的 key 返回 null(TB 对不存在的 key 返回 `[{ts, value: null}]`,数据层需归一)。 */
   getLatest(entity: EntityRef, keys: string[]): Promise<Record<string, TsPoint | null>>
 
-  // ext?(source: string, params: Record<string, unknown>): Promise<unknown>
-  //   ↑ 预留:仅当 ADR-004 选「mode: 'ext' 过渡路线」时启用;默认不在契约内。
+  /**
+   * 查外部数据源(kz 归档 / 报表)。T0.1 回填 A4 后由预留改为正式方法;`query.params` 形状待澄清会冻结。
+   * 草案期标为可选,冻结时改为必选。
+   */
+  ext?(query: ExtQuery): Promise<ExtResult>
 }
 
 /** 解析窗口字面量为毫秒;非法格式抛错。 */

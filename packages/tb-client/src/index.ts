@@ -11,5 +11,8 @@ export type {
   ConnectionStatus,
   Unsubscribe,
   DataSource,
+  ExtQuery,
+  ExtInterval,
+  ExtResult,
 } from './data-source'
 export { parseWindow } from './data-source'
