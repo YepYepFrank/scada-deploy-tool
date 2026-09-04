@@ -6,9 +6,9 @@ useDefault = true
 
 [[rules]]
 id = "project-known-passwords"
-description = "本项目环境的已知密码 / 账号字面量"
-regex = '''tenant&2028|GridopsReport#|report@gridops\.local'''
-keywords = ["tenant&2028", "GridopsReport", "gridops.local"]
+description = "本项目环境的已知密码字面量(只匹配密码;账号名不是凭据——首个提交的开发计划曾出现报表账号用户名,历史不改写,本地 pre-commit 仍拦用户名)"
+regex = '''tenant&2028|GridopsReport#'''
+keywords = ["tenant&2028", "GridopsReport"]
 
 [[rules]]
 id = "tb-jwt"
