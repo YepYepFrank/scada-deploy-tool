@@ -13,18 +13,20 @@
       "types": "./src/schema/index.ts",
       "import": "./src/schema/index.ts"
     },
-    "./schema/page-config.schema.json": "./src/schema/page-config.schema.json"
+    "./schema/page-config.schema.json": "./src/schema/page-config.schema.json",
+    "./style.css": "./src/theme/default.css"
   },
   "files": [
     "dist",
     "src"
   ],
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "vue-tsc -p tsconfig.json --noEmit",
     "gen:schema": "node scripts/gen-schema.mjs",
     "test": "vitest run",
     "test:schema": "vitest run test/schema.test.ts",
-    "build": "tsup"
+    "build": "vite build",
+    "dev": "vite --config vite.dev.config.ts --port 5180 --strictPort"
   },
   "peerDependencies": {
     "@grid/tb-client": "workspace:*",
@@ -33,12 +35,18 @@
   "devDependencies": {
     "@grid/tb-client": "workspace:*",
     "@types/node": "^22",
+    "@vitejs/plugin-vue": "^5",
+    "@vue/test-utils": "^2",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
+    "happy-dom": "^15",
     "ts-json-schema-generator": "^2.3.0",
     "typescript": "^5.6.3",
+    "vite": "^5",
+    "vite-plugin-dts": "^4",
     "vitest": "^2.1.8",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "vue-tsc": "^2"
   },
   "publishConfig": {
     "exports": {
@@ -50,8 +58,11 @@
         "types": "./dist/schema/index.d.ts",
         "import": "./dist/schema/index.js"
       },
-      "./schema/page-config.schema.json": "./dist/schema/page-config.schema.json"
+      "./schema/page-config.schema.json": "./dist/schema/page-config.schema.json",
+      "./style.css": "./dist/style.css"
     }
   },
-  "sideEffects": false
+  "sideEffects": [
+    "**/*.css"
+  ]
 }

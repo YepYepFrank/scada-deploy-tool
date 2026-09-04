@@ -1,0 +1,25 @@
+/* @grid/scada-renderer 默认主题令牌——从 apps/deploy-tool/src/siteview/theme-microgrid-site.css 抽出(微电网深蓝)。
+   宿主可在 .sr-page 或任意祖先上覆盖这些变量;组件只用变量,不写死颜色。 */
+.sr-page,
+.sr-theme-default {
+  color-scheme: dark;
+  --sr-bg-0: #041634;
+  --sr-bg-1: #061c40;
+  --sr-bg-2: #0b2a58;
+  --sr-line-0: rgba(83, 196, 255, 0.16);
+  --sr-line-1: rgba(83, 196, 255, 0.32);
+  --sr-ink-0: #ecf9ff;
+  --sr-ink-1: #cdeeff;
+  --sr-ink-2: #8fbce8;
+  --sr-ok: #2ff0bb;
+  --sr-warn: #ffd166;
+  --sr-bad: #ff5f7a;
+  --sr-accent: #19b7ff;
+  --sr-font-title: 'YouShe BiaoTiHei', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --sr-font-num: 'Barlow SemiBold', 'Microsoft YaHei', sans-serif;
+  --sr-font-body: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --sr-chart-axis: #8fbce8;
+  --sr-chart-grid: rgba(83, 196, 255, 0.16);
+  --sr-radius: 6px;
+  --sr-gap: 12px;
+}

@@ -42,11 +42,12 @@ dev/
 ```bash
 pnpm install                 # 安装全部 workspace 依赖(需 pnpm 9,node ≥ 20)
 pnpm dev                     # 部署工具 dev 服务器(5173);或 launch.json 的 deploy-tool 配置
+pnpm -F @grid/scada-renderer dev   # 渲染器 /dev 展示页(5180);或 launch.json 的 renderer-dev 配置
 pnpm typecheck               # 各包 tsc --noEmit
 pnpm test                    # 各包 vitest
 pnpm lint                    # ESLint 9(迁入的向导代码只告警)
 pnpm format:check            # Prettier(*.md 与迁入的旧代码目录已忽略);pnpm format 自动修
-pnpm build                   # tsup 打包三个 packages(ESM + .d.ts),产物可被 Node 直接 import
+pnpm build                   # 打包三个 packages(renderer 用 Vite lib mode,其余 tsup;ESM + .d.ts,产物可被 Node 直接 import)
 pnpm gen:schema              # 由 page-config.ts 重新生成 JSON Schema(改契约后必跑)
 pnpm -F @grid/scada-renderer test:schema   # 仅契约校验测试
 ```

@@ -3,7 +3,8 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "dist",
-    "types": ["vitest/globals", "node"]
+    "types": ["vitest/globals", "node"],
+    "jsx": "preserve"
   },
-  "include": ["src", "test", "scripts"]
+  "include": ["src", "test", "scripts", "dev", "vite.config.ts", "vite.dev.config.ts"]
 }
