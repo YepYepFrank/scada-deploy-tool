@@ -25,6 +25,9 @@ import {
   overviewCardWidget,
   alarmListWidget,
   textWidget,
+  statusLightWidget,
+  tableWidget,
+  imageWidget,
   builtinWidgets,
 } from '../src/index'
 
@@ -196,5 +199,117 @@ describe('text', () => {
     expect(mount(C, { props: { content: 'CB={{value}}', values: { value: '合闸' } } }).text()).toBe('CB=合闸')
     expect(mount(C, { props: { content: '', values: { value: 12 } } }).text()).toBe('12')
     expect(mount(C, { props: { content: 'x', values: {}, errors: { value: 'e' } } }).text()).toBe('数据不可用')
+  })
+})
+
+describe('status-light', () => {
+  it('on / off / unknown 三态与 1/true 等价;错误态', () => {
+    const C = statusLightWidget.component
+    const on = mount(C, {
+      props: { title: 'CB', onValue: '1', onLabel: '合闸', offLabel: '分闸', values: { state: true } },
+    })
+    expect(on.classes()).toContain('sr-state-on')
+    expect(on.find('.sr-sl-label').text()).toBe('合闸')
+    const off = mount(C, { props: { onValue: '1', onLabel: '合闸', offLabel: '分闸', values: { state: '0' } } })
+    expect(off.classes()).toContain('sr-state-off')
+    expect(off.find('.sr-sl-label').text()).toBe('分闸')
+    const str = mount(C, { props: { onValue: 'RUN', values: { state: 'RUN' } } })
+    expect(str.classes()).toContain('sr-state-on')
+    const unknown = mount(C, { props: { values: {} } })
+    expect(unknown.classes()).toContain('sr-state-unknown')
+    expect(unknown.find('.sr-sl-label').text()).toBe('——')
+    const err = mount(C, { props: { values: {}, errors: { state: '403' } } })
+    expect(err.find('.sr-sl-err').exists()).toBe(true)
+  })
+})
+
+describe('table', () => {
+  const pts = (vals: number[], step = 86_400_000) =>
+    vals.map((v, i) => ({ ts: 1_700_000_000_000 + i * step, value: v }))
+  it('latest 模式:每序列一行,标签 / 值 / 单位;空态 / 错误态', () => {
+    const C = tableWidget.component
+    const w = mount(C, {
+      props: {
+        mode: 'latest',
+        columns: [{ label: 'A 相', unit: 'A', decimals: 0 }],
+        values: {
+          rows: [
+            { name: 'Ia', points: pts([1, 2, 3.4]) },
+            { name: 'Ib', points: pts([5.56]) },
+          ],
+        },
+      },
+    })
+    const rows = w.findAll('tbody tr')
+    expect(rows).toHaveLength(2)
+    expect(
+      rows[0]!
+        .findAll('td')
+        .map(t => t.text())
+        .slice(0, 3)
+    ).toEqual(['A 相', '3', 'A'])
+    expect(
+      rows[1]!
+        .findAll('td')
+        .map(t => t.text())
+        .slice(0, 3)
+    ).toEqual(['Ib', '5.6', ''])
+    expect(
+      mount(C, { props: { values: { rows: [] } } })
+        .find('.sr-empty-hint')
+        .text()
+    ).toBe('暂无数据')
+    expect(
+      mount(C, { props: { values: {}, errors: { rows: 'x' } } })
+        .find('.sr-side-err')
+        .exists()
+    ).toBe(true)
+  })
+  it('timeline 模式:按 ts 合并、倒序、maxRows 截断、缺值 ——', () => {
+    const C = tableWidget.component
+    const w = mount(C, {
+      props: {
+        mode: 'timeline',
+        timeFormat: 'date',
+        maxRows: 2,
+        columns: [{ label: '收益', unit: '元', decimals: 0 }, { label: '成本' }],
+        values: {
+          rows: [
+            { name: 'rev', points: pts([100, 200, 300]) },
+            { name: 'cost', points: pts([10, 20]) },
+          ],
+        },
+      },
+    })
+    const head = w.findAll('thead th').map(t => t.text())
+    expect(head).toEqual(['时间', '收益(元)', '成本'])
+    const rows = w.findAll('tbody tr').map(r => r.findAll('td').map(t => t.text()))
+    expect(rows).toHaveLength(2)
+    expect(rows[0]!.slice(1)).toEqual(['300', '——']) // 最新一天成本缺值
+    expect(rows[1]!.slice(1)).toEqual(['200', '20.0'])
+    expect(rows[0]![0]).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+})
+
+describe('image', () => {
+  it('props.src / 绑定 src / 未设置 / 错误态 / 加载失败', async () => {
+    const C = imageWidget.component
+    const a = mount(C, { props: { src: '/a.png', fit: 'cover', values: {} } })
+    expect(a.find('img').attributes('src')).toBe('/a.png')
+    expect(a.find('img').attributes('style')).toContain('object-fit: cover')
+    const b = mount(C, { props: { src: '/a.png', values: { src: '/b.png' } } })
+    expect(b.find('img').attributes('src')).toBe('/b.png') // 绑定优先
+    expect(
+      mount(C, { props: { values: {} } })
+        .find('.sr-empty-hint')
+        .text()
+    ).toBe('未设置图片')
+    expect(
+      mount(C, { props: { values: {}, errors: { src: 'e' } } })
+        .find('.sr-empty-hint')
+        .text()
+    ).toBe('图片地址不可用')
+    await a.find('img').trigger('error')
+    expect(a.find('.sr-empty-hint').text()).toBe('图片加载失败')
   })
 })

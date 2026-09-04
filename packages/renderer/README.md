@@ -25,8 +25,8 @@ src/
   layout/            scaled(父容器为基准缩放)/ grid(grid-template-areas)
   provide.ts
   templates/         overview-a  monitor-3col  grid-3x3(builtinTemplates)
-  widgets/           _shared/(echarts 按需 + CardFrame)  number-card  gauge  line  dual-axis  overview-card  alarm-list  text
-                     (T2.2 加 status-light、table、image)
+  widgets/           _shared/(echarts 按需 + CardFrame)  number-card  gauge  line  dual-axis  overview-card  alarm-list
+                     status-light  table  image  text(共 10 种,builtinWidgets)
   theme/default.css  --sr-* 令牌
 dev/                 展示页(不进 dist)
 test/                schema.test  binding-resolver.test  scada-page.test  mock-data-source

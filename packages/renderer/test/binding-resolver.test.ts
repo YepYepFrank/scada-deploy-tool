@@ -150,6 +150,29 @@ describe('resolveBindings', () => {
     h.dispose()
   })
 
+  it('ts 绑定进序列槽位:实时推送累积成点列(表格当前值 / 无历史的实时曲线)', async () => {
+    const ds = createMockDataSource()
+    const cfg: PageConfig = {
+      schemaVersion: 1,
+      template: 'overview-a',
+      widgets: [{ id: 'w', slot: 'g1', type: 'table', bindings: { rows: [{ mode: 'ts', entity: DEV, key: 'Ia' }] } }],
+    }
+    const h = resolveBindings(cfg, ds, {
+      onValue: () => {},
+      slotSpec: () => ({ name: 'rows', valueType: 'series', multiple: true }),
+      maxPoints: 3,
+    })
+    await flush()
+    const rows = () => (h.values['w']!.rows as { name: string; points: { value: unknown }[] }[])[0]!
+    expect(rows().name).toBe('Ia')
+    expect(rows().points.map(p => p.value)).toEqual([1]) // 首包
+    ds.pushTs(DEV, 'Ia', 2)
+    ds.pushTs(DEV, 'Ia', 3)
+    ds.pushTs(DEV, 'Ia', 4)
+    expect(rows().points.map(p => p.value)).toEqual([2, 3, 4]) // 累积并按 maxPoints 截断
+    h.dispose()
+  })
+
   it('历史点数超过 maxPoints 时丢弃最早的', async () => {
     const ds = createMockDataSource({ history: { k: Array.from({ length: 5 }, (_, i) => ({ ts: i, value: i })) } })
     const cfg: PageConfig = {

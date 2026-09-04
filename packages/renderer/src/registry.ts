@@ -49,9 +49,10 @@ export function resetRegistry(): void {
 }
 
 const MODE_VALUE_TYPES: Record<Binding['mode'], BindingSlotSpec['valueType'][]> = {
-  ts: ['number', 'string', 'boolean', 'any'],
+  // ts / attr 也可喂 series 槽位:解析器把实时推送累积成点列(无历史回填的「实时曲线」/ 表格当前值)
+  ts: ['number', 'string', 'boolean', 'series', 'any'],
   'ts-history': ['series', 'any'],
-  attr: ['number', 'string', 'boolean', 'any'],
+  attr: ['number', 'string', 'boolean', 'series', 'any'],
   alarm: ['alarms', 'any'],
   const: ['number', 'string', 'boolean', 'series', 'alarms', 'any'],
   ext: ['series', 'any'],

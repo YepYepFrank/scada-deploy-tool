@@ -6,6 +6,7 @@
 import { computed, ref } from 'vue'
 import type { DataSource, TsUpdate, ConnectionStatus, AlarmInfo, TsPoint } from '@grid/tb-client'
 import { ScadaPage, listWidgets, listTemplates } from '../src/index'
+import { SAMPLE_SVG } from '../src/widgets/image'
 import type { PageConfig, WidgetConfig } from '../src/schema/page-config'
 
 const widgets = listWidgets()
@@ -91,6 +92,64 @@ const W = {
     props: { title: '实时告警', maxRows: 10 },
     bindings: { alarms: { mode: 'alarm', entity: AST } },
   }),
+  cbLight: (id: string, slot: string): WidgetConfig => ({
+    id,
+    slot,
+    type: 'status-light',
+    props: {
+      title: '断路器',
+      subtitle: 'CB',
+      onValue: '1',
+      onLabel: '合闸',
+      offLabel: '分闸',
+      sub: 'SSP1_GP1_IED1 · CB',
+    },
+    bindings: { state: { mode: 'ts', entity: DEV, key: 'CB' } },
+  }),
+  tbl: (id: string, slot: string): WidgetConfig => ({
+    id,
+    slot,
+    type: 'table',
+    props: {
+      title: '三相电流',
+      mode: 'latest',
+      columns: [
+        { label: 'Ia', unit: 'A' },
+        { label: 'Ib', unit: 'A' },
+        { label: 'Ic', unit: 'A' },
+      ],
+    },
+    bindings: {
+      rows: [
+        { mode: 'ts', entity: DEV, key: 'Ia' },
+        { mode: 'ts', entity: DEV, key: 'Ib' },
+        { mode: 'ts', entity: DEV, key: 'Ic' },
+      ],
+    },
+  }),
+  tblDaily: (id: string, slot: string): WidgetConfig => ({
+    id,
+    slot,
+    type: 'table',
+    props: {
+      title: '逐日收益明细',
+      mode: 'timeline',
+      timeFormat: 'date',
+      columns: [{ label: '净收益', unit: '元', decimals: 0 }],
+    },
+    bindings: {
+      rows: [
+        { mode: 'ext', source: 'kz', window: '30d', interval: '1d', params: { stationId: 'x', metric: 'revenue' } },
+      ],
+    },
+  }),
+  img: (id: string, slot: string): WidgetConfig => ({
+    id,
+    slot,
+    type: 'image',
+    props: { title: '一次接线图(占位)', fit: 'contain', src: SAMPLE_SVG },
+    bindings: {},
+  }),
   ext: (id: string, slot: string): WidgetConfig => ({
     id,
     slot,
@@ -108,28 +167,22 @@ const configs: Record<string, WidgetConfig[]> = {
     W.p('w-s1', 's1'),
     W.soc('w-s2', 's2'),
     W.ov('w-s3', 's3'),
-    W.cb('w-s4', 's4'),
+    W.cbLight('w-s4', 's4'),
     W.line('w-g1', 'g1'),
     W.dual('w-g2', 'g2'),
     W.alarms('w-g3', 'g3'),
-    W.ext('w-g4', 'g4'),
+    W.tblDaily('w-g4', 'g4'),
   ],
   'monitor-3col': [
     W.p('w-l1', 'l1'),
     W.soc('w-l2', 'l2'),
     W.ov('w-l3', 'l3'),
-    {
-      id: 'w-main',
-      slot: 'main',
-      type: 'text',
-      props: { content: '主视区(接线图暂缓,一期放 image / table / line)', align: 'center' },
-      bindings: {},
-    },
+    W.img('w-main', 'main'),
     W.line('w-c1', 'c1'),
     W.dual('w-c2', 'c2'),
     W.alarms('w-r1', 'r1'),
-    W.ext('w-r2', 'r2'),
-    W.cb('w-r3', 'r3'),
+    W.tbl('w-r2', 'r2'),
+    W.cbLight('w-r3', 'r3'),
   ],
   'grid-3x3': [
     W.p('w-r1c1', 'r1c1'),
@@ -139,7 +192,8 @@ const configs: Record<string, WidgetConfig[]> = {
     W.dual('w-r2c2', 'r2c2'),
     W.alarms('w-r2c3', 'r2c3'),
     W.ext('w-r3c1', 'r3c1'),
-    W.cb('w-r3c2', 'r3c2'),
+    W.cbLight('w-r3c2', 'r3c2'),
+    W.img('w-r3c3', 'r3c3'),
   ],
 }
 const config = computed<PageConfig>(() => ({
@@ -152,13 +206,17 @@ const config = computed<PageConfig>(() => ({
 // ---------- MockDataSource ----------
 const statusCbs = new Set<(s: ConnectionStatus) => void>()
 const rnd = (k: string) =>
-  k === 'F'
-    ? 49.9 + Math.random() * 0.2
-    : k.startsWith('I')
-      ? 80 + Math.random() * 40
-      : k === 'Q'
-        ? 20 + Math.random() * 10
-        : 100 + Math.random() * 60
+  k === 'CB'
+    ? Math.random() > 0.3
+      ? 1
+      : 0
+    : k === 'F'
+      ? 49.9 + Math.random() * 0.2
+      : k.startsWith('I')
+        ? 80 + Math.random() * 40
+        : k === 'Q'
+          ? 20 + Math.random() * 10
+          : 100 + Math.random() * 60
 const hist = (k: string, n: number, stepMs: number): TsPoint[] =>
   Array.from({ length: n }, (_, i) => ({
     ts: Date.now() - (n - i) * stepMs,

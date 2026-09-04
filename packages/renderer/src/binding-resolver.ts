@@ -222,13 +222,23 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
         .catch(e => fail(w.id, slot, e))
       return
     }
-    // 标量 mode 出现在多项槽位(概览卡 items):按长度 1 的序列给值,value 由调用方整形
+    // 标量 mode 出现在序列 / 多项槽位:实时推送累积成点列(按 ts 去重、maxPoints 截断);
+    // 多项标量槽位(概览卡 items)由调用方取最后一点整形为 value
+    let acc: TsPoint[] = []
+    const append = (pts: TsPoint[]) => {
+      const lastTs = acc.length ? acc[acc.length - 1]!.ts : -Infinity
+      const fresh = pts.filter(pt => pt.ts > lastTs)
+      if (!fresh.length) return
+      acc = acc.concat(fresh)
+      if (acc.length > maxPoints) acc = acc.slice(acc.length - maxPoints)
+      emit(acc.slice())
+    }
     if (one.mode === 'ts') {
       try {
         track(
           ds.subscribeTs(one.entity, [one.key], ups => {
             const u = ups.find(x => x.key === one.key)
-            if (u) emit(u.points.slice())
+            if (u) append(u.points)
           })
         )
       } catch (e) {
@@ -241,7 +251,7 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
         track(
           ds.subscribeAttr(one.entity, one.scope, [one.key], ups => {
             const u = ups.find(x => x.key === one.key)
-            if (u) emit([{ ts: u.ts, value: u.value as TsPoint['value'] }])
+            if (u) append([{ ts: u.ts, value: u.value as TsPoint['value'] }])
           })
         )
       } catch (e) {

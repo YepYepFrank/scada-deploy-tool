@@ -24,6 +24,9 @@ export { lineWidget } from './widgets/line'
 export { dualAxisWidget } from './widgets/dual-axis'
 export { overviewCardWidget } from './widgets/overview-card'
 export { alarmListWidget } from './widgets/alarm-list'
+export { statusLightWidget } from './widgets/status-light'
+export { tableWidget } from './widgets/table'
+export { imageWidget } from './widgets/image'
 export { overviewA, monitor3col, grid3x3, builtinTemplates } from './templates'
 
 import { registerWidget, registerTemplate } from './registry'
@@ -35,9 +38,12 @@ import { lineWidget } from './widgets/line'
 import { dualAxisWidget } from './widgets/dual-axis'
 import { overviewCardWidget } from './widgets/overview-card'
 import { alarmListWidget } from './widgets/alarm-list'
+import { statusLightWidget } from './widgets/status-light'
+import { tableWidget } from './widgets/table'
+import { imageWidget } from './widgets/image'
 import { builtinTemplates } from './templates'
 
-/** 包内自带组件(T2.1 迁入 6 种;T2.2 补 status-light / table / image) */
+/** 包内自带组件:T2.1 迁入 6 种 + T2.2 新建 status-light / table / image + text */
 export const builtinWidgets: WidgetDefinition[] = [
   numberCardWidget,
   gaugeWidget,
@@ -45,6 +51,9 @@ export const builtinWidgets: WidgetDefinition[] = [
   dualAxisWidget,
   overviewCardWidget,
   alarmListWidget,
+  statusLightWidget,
+  tableWidget,
+  imageWidget,
   textWidget,
 ]
 

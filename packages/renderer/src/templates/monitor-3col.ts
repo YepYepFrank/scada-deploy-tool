@@ -1,6 +1,17 @@
 import type { TemplateDefinition } from '../schema/registry'
 
-const SIDE = ['number-card', 'gauge', 'status-light', 'overview-card', 'alarm-list', 'line', 'dual-axis', 'text']
+const SIDE = [
+  'number-card',
+  'gauge',
+  'status-light',
+  'overview-card',
+  'alarm-list',
+  'line',
+  'dual-axis',
+  'table',
+  'image',
+  'text',
+]
 
 /**
  * 三栏监控屏(← 现有 LAYOUT_TEMPLATES.monitor3):左右各三块面板 + 中央主视区 + 主视区下方双图。
