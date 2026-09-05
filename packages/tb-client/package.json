@@ -1,7 +1,7 @@
 {
   "name": "@grid/tb-client",
   "version": "0.0.1",
-  "description": "ThingsBoard 数据访问包:包一层现有 request.js / websocket.js,实现 DataSource 接口",
+  "description": "ThingsBoard 数据访问包:DataSource 契约类型 + LegacyDataSource(T1.1 预案);同事的 TbClient 实现随 T1.1 加入",
   "type": "module",
   "types": "./src/index.ts",
   "exports": {
@@ -15,12 +15,14 @@
     "src"
   ],
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo \"[@grid/tb-client] test: nothing yet\" && exit 0",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run",
     "build": "tsup"
   },
   "devDependencies": {
-    "typescript": "^5.6.3"
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
   },
   "publishConfig": {
     "exports": {

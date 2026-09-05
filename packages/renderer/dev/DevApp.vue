@@ -2,8 +2,10 @@
 /**
  * /dev 展示页:左侧注册表(组件 + 模板),右侧按所选模板渲染一份覆盖全部内置组件的配置。
  * design 模式用 sampleData;「随机数据」用内置 MockDataSource(2 秒一推,含历史 / 属性 / 告警 / ext);不依赖 TB。
+ * 「镜像真数据」用 LegacyDataSource(T1.1 预案)连镜像 TB:登录 → 选设备 → 把演示配置里的实体 / key 换成该设备实际有的。
  */
 import { computed, ref } from 'vue'
+import { LegacyDataSource } from '@grid/tb-client'
 import type { DataSource, TsUpdate, ConnectionStatus, AlarmInfo, TsPoint } from '@grid/tb-client'
 import { ScadaPage, listWidgets, listTemplates } from '../src/index'
 import { SAMPLE_SVG } from '../src/widgets/image'
@@ -295,7 +297,107 @@ function toggleOffline() {
   offline.value = !offline.value
   statusCbs.forEach(cb => cb(mock.status))
 }
-const dsForPage = computed(() => (live.value ? mock : undefined))
+// ---------- 镜像真数据(T1.1 预案 LegacyDataSource)----------
+// 凭据从表单输入;可在 dev/.env.local 加 VITE_TB_USER / VITE_TB_PASSWORD 预填(仅 dev server 读取,不入库不打包)
+const mirror = ref(false)
+const mBase = ref('/tbm') // vite.dev.config 代理到镜像(含 WS)
+const mUser = ref((import.meta.env.VITE_TB_USER as string | undefined) ?? '')
+const mPass = ref((import.meta.env.VITE_TB_PASSWORD as string | undefined) ?? '')
+const mMsg = ref('')
+const mDevices = ref<{ id: string; name: string; type: string }[]>([])
+const mDeviceId = ref('')
+const mKeys = ref<string[]>([])
+const mStatus = ref<ConnectionStatus>('connecting')
+let mToken = ''
+let mDs: LegacyDataSource | null = null
+const mDsRef = ref<DataSource | null>(null)
+
+async function mFetch(path: string, body?: unknown) {
+  const r = await fetch(mBase.value + path, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'Content-Type': 'application/json', ...(mToken ? { 'X-Authorization': `Bearer ${mToken}` } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!r.ok) throw new Error(`${path.split('?')[0]} → HTTP ${r.status}`)
+  return r.json()
+}
+async function mirrorLogin() {
+  mMsg.value = '登录中…'
+  try {
+    mToken = (await mFetch('/api/auth/login', { username: mUser.value, password: mPass.value })).token
+    const me = await mFetch('/api/auth/user')
+    const page =
+      me.authority === 'CUSTOMER_USER'
+        ? await mFetch(`/api/customer/${me.customerId.id}/devices?pageSize=500&page=0`)
+        : await mFetch('/api/tenant/devices?pageSize=500&page=0')
+    mDevices.value = (page.data as { id: { id: string }; name: string; type: string }[])
+      .map(d => ({ id: d.id.id, name: d.name, type: d.type }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    mDs?.dispose()
+    mDs = new LegacyDataSource({ baseUrl: mBase.value, getToken: () => mToken })
+    mStatus.value = mDs.status
+    mDs.onStatus(s => (mStatus.value = s))
+    mDsRef.value = mDs
+    mMsg.value = `${me.authority} · ${mDevices.value.length} 台设备`
+    if (!mDevices.value.some(d => d.id === mDeviceId.value)) mDeviceId.value = mDevices.value[0]?.id ?? ''
+    await pickDevice()
+    mirror.value = true
+    design.value = false
+    live.value = false
+  } catch (e) {
+    mMsg.value = '失败:' + (e instanceof Error ? e.message : String(e))
+  }
+}
+async function pickDevice() {
+  mKeys.value = mDeviceId.value ? await mFetch(`/api/plugins/telemetry/DEVICE/${mDeviceId.value}/keys/timeseries`) : []
+}
+// 演示配置里的 key → 该设备实际有的 key(按偏好表,找不到就轮着用现有 key)
+const PREF: Record<string, string[]> = {
+  P: ['P', 'p', 'ACTIVE_P', 'Pa', 'AC_P'],
+  Q: ['Q', 'Qa', 'DC_I', 'I'],
+  SOC: ['SOC', 'soc', 'DC_V', 'U'],
+  F: ['F', 'Hz', 'FREQ', 'Ua'],
+  Ia: ['Ia', 'IA', 'I_A'],
+  Ib: ['Ib', 'IB', 'I_B'],
+  Ic: ['Ic', 'IC', 'I_C'],
+  CB: ['CB', 'SW', 'COM', 'SYS_NORMAL', 'RUN'],
+  calc_total_p: ['P', 'p', 'ACTIVE_P'],
+  calc_total_load: ['DC_V', 'U', 'Q', 'Ua'],
+}
+const keyMap = computed(() => {
+  const avail = mKeys.value
+  const out: Record<string, string> = {}
+  Object.entries(PREF).forEach(([k, prefs], i) => {
+    out[k] = prefs.find(x => avail.includes(x)) ?? avail[i % Math.max(avail.length, 1)] ?? k
+  })
+  return out
+})
+const mirrorConfig = computed<PageConfig>(() => {
+  const dev = mDevices.value.find(d => d.id === mDeviceId.value)
+  if (!dev) return config.value
+  const ent = { type: 'DEVICE', id: dev.id, name: dev.name }
+  const km = keyMap.value
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(walk)
+    if (v && typeof v === 'object') {
+      const o = v as Record<string, unknown>
+      if ((o.type === 'DEVICE' || o.type === 'ASSET') && typeof o.id === 'string' && Object.keys(o).length <= 3)
+        return ent
+      const r: Record<string, unknown> = {}
+      for (const [k, x] of Object.entries(o)) {
+        if (k === 'key' && typeof x === 'string') r[k] = km[x] ?? x
+        else if (k === 'keys' && Array.isArray(x)) r[k] = x.map(y => km[String(y)] ?? y)
+        else if (k === 'sub' && typeof x === 'string') r[k] = dev.name
+        else r[k] = walk(x)
+      }
+      return r
+    }
+    return v
+  }
+  return { ...config.value, title: `镜像 · ${dev.name}`, widgets: walk(config.value.widgets) as WidgetConfig[] }
+})
+const pageConfig = computed(() => (mirror.value ? mirrorConfig.value : config.value))
+const dsForPage = computed(() => (mirror.value ? (mDsRef.value ?? undefined) : live.value ? mock : undefined))
 const issues = ref<{ path: string; message: string }[]>([])
 </script>
 
@@ -331,6 +433,33 @@ const issues = ref<{ path: string; message: string }[]>([])
         <label><input v-model="showStatus" type="checkbox" /> 显示连接状态徽标</label>
         <button :disabled="!live" @click="toggleOffline">{{ offline ? '恢复连接' : '模拟断线' }}</button>
       </section>
+      <section class="mirror">
+        <h2>镜像真数据(LegacyDataSource · T1.1 预案)</h2>
+        <label>地址 <input v-model="mBase" placeholder="/tbm(代理)或 http://host:8080" /></label>
+        <label>账号 <input v-model="mUser" autocomplete="username" /></label>
+        <label>密码 <input v-model="mPass" type="password" autocomplete="current-password" /></label>
+        <button @click="mirrorLogin">登录并连接</button>
+        <span class="dim">{{ mMsg }}</span>
+        <template v-if="mDevices.length">
+          <label
+            >设备
+            <select v-model="mDeviceId" @change="pickDevice">
+              <option v-for="d in mDevices" :key="d.id" :value="d.id">{{ d.name }} · {{ d.type }}</option>
+            </select></label
+          >
+          <label
+            ><input v-model="mirror" type="checkbox" :disabled="!mDsRef" @change="mirror && (design = live = false)" />
+            用镜像数据渲染</label
+          >
+          <div class="dim">
+            连接:<code>{{ mStatus }}</code> · 测点 {{ mKeys.length }} 个 · 映射:{{
+              Object.entries(keyMap)
+                .map(([k, v]) => `${k}→${v}`)
+                .join(' ')
+            }}
+          </div>
+        </template>
+      </section>
       <section v-if="issues.length">
         <h2>校验问题</h2>
         <ul>
@@ -342,7 +471,7 @@ const issues = ref<{ path: string; message: string }[]>([])
     </aside>
     <main class="dev-main">
       <ScadaPage
-        :config="config"
+        :config="pageConfig"
         :data-source="dsForPage"
         :design="design"
         :show-status="showStatus"
@@ -394,6 +523,16 @@ const issues = ref<{ path: string; message: string }[]>([])
 }
 .dev-side button {
   margin-top: 8px;
+}
+.dev-side .mirror input,
+.dev-side .mirror select {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 2px;
+  background: #0b1a33;
+  color: inherit;
+  border: 1px solid rgba(83, 196, 255, 0.3);
+  padding: 3px 6px;
 }
 .dev-main {
   padding: 16px;
