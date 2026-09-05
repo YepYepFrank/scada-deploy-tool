@@ -308,6 +308,11 @@ const mDevices = ref<{ id: string; name: string; type: string }[]>([])
 const mDeviceId = ref('')
 const mKeys = ref<string[]>([])
 const mStatus = ref<ConnectionStatus>('connecting')
+// 镜像上的 ScadaPage 资产(契约 §5):选中后原样渲染其 pageConfig,不做实体 / key 重映射
+const mPages = ref<{ id: string; name: string; version?: number }[]>([])
+const mPageId = ref('')
+const mPage = ref<PageConfig | null>(null)
+const mPageMsg = ref('')
 let mToken = ''
 let mDs: LegacyDataSource | null = null
 const mDsRef = ref<DataSource | null>(null)
@@ -330,6 +335,17 @@ async function mirrorLogin() {
       me.authority === 'CUSTOMER_USER'
         ? await mFetch(`/api/customer/${me.customerId.id}/devices?pageSize=500&page=0`)
         : await mFetch('/api/tenant/devices?pageSize=500&page=0')
+    const pages =
+      me.authority === 'CUSTOMER_USER'
+        ? await mFetch(`/api/customer/${me.customerId.id}/assets?pageSize=50&page=0&type=ScadaPage`)
+        : await mFetch('/api/tenant/assets?pageSize=50&page=0&type=ScadaPage')
+    mPages.value = (pages.data as { id: { id: string }; name: string; additionalInfo?: { version?: number } }[]).map(
+      a => ({
+        id: a.id.id,
+        name: a.name,
+        version: a.additionalInfo?.version,
+      })
+    )
     mDevices.value = (page.data as { id: { id: string }; name: string; type: string }[])
       .map(d => ({ id: d.id.id, name: d.name, type: d.type }))
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -346,6 +362,25 @@ async function mirrorLogin() {
     live.value = false
   } catch (e) {
     mMsg.value = '失败:' + (e instanceof Error ? e.message : String(e))
+  }
+}
+async function pickPage() {
+  mPage.value = null
+  mPageMsg.value = ''
+  if (!mPageId.value) return
+  try {
+    const attrs = (await mFetch(
+      `/api/plugins/telemetry/ASSET/${mPageId.value}/values/attributes/SERVER_SCOPE?keys=pageConfig`
+    )) as {
+      key: string
+      value: unknown
+    }[]
+    const raw = attrs.find(a => a.key === 'pageConfig')?.value
+    if (!raw) throw new Error('资产上没有 pageConfig 属性')
+    mPage.value = (typeof raw === 'string' ? JSON.parse(raw) : raw) as PageConfig
+    mPageMsg.value = `${mPage.value.template} · ${mPage.value.widgets.length} 个组件`
+  } catch (e) {
+    mPageMsg.value = '读取失败:' + (e instanceof Error ? e.message : String(e))
   }
 }
 async function pickDevice() {
@@ -396,7 +431,7 @@ const mirrorConfig = computed<PageConfig>(() => {
   }
   return { ...config.value, title: `镜像 · ${dev.name}`, widgets: walk(config.value.widgets) as WidgetConfig[] }
 })
-const pageConfig = computed(() => (mirror.value ? mirrorConfig.value : config.value))
+const pageConfig = computed(() => (mirror.value ? (mPage.value ?? mirrorConfig.value) : config.value))
 const dsForPage = computed(() => (mirror.value ? (mDsRef.value ?? undefined) : live.value ? mock : undefined))
 const issues = ref<{ path: string; message: string }[]>([])
 </script>
@@ -447,6 +482,16 @@ const issues = ref<{ path: string; message: string }[]>([])
               <option v-for="d in mDevices" :key="d.id" :value="d.id">{{ d.name }} · {{ d.type }}</option>
             </select></label
           >
+          <label
+            >页面(ScadaPage 资产)
+            <select v-model="mPageId" @change="pickPage">
+              <option value="">(演示配置 · 按上面设备重映射)</option>
+              <option v-for="p in mPages" :key="p.id" :value="p.id">
+                {{ p.name }}{{ p.version ? ` · v${p.version}` : '' }}
+              </option>
+            </select></label
+          >
+          <div v-if="mPageMsg" class="dim">{{ mPageMsg }}</div>
           <label
             ><input v-model="mirror" type="checkbox" :disabled="!mDsRef" @change="mirror && (design = live = false)" />
             用镜像数据渲染</label
