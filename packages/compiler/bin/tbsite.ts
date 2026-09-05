@@ -23,10 +23,10 @@ const USAGE = `用法:
   tbsite cleanup  <站点.tbsite.json> [连接参数]
 
 连接参数(都可以省略,默认从环境变量取):
-  --base URL           TB 地址,默认 $TB_BASE
+  --base URL           TB 地址,默认 $TB_BASE,再默认镜像 http://192.168.20.61:8080
   --user 账号          默认 $TB_USER
   --password-env NAME  放密码的环境变量名,默认 TB_PASSWORD(不接受 --password 明文)
-  --env-file PATH      先从这个 KEY=VALUE 文件加载环境变量;默认当前目录的 .env.local(有则读)
+  --env-file PATH      先从这个 KEY=VALUE 文件加载环境变量;默认从当前目录向上找 .env.local
 
 plan 只打印写入计划,不登录、不写 TB;--ids 可给出 {devices,assets,chains} 名→id 映射替换占位串。`
 
@@ -57,6 +57,19 @@ function loadEnvFile(path: string) {
   }
 }
 
+/** 从当前目录向上找 .env.local(pnpm -F 会把 cwd 切到包目录,monorepo 根的 .env.local 也要能找到) */
+function findEnvFile(): string {
+  let dir = resolve('.')
+  for (let i = 0; i < 4; i++) {
+    const f = resolve(dir, '.env.local')
+    if (existsSync(f)) return f
+    const parent = resolve(dir, '..')
+    if (parent === dir) break
+    dir = parent
+  }
+  return resolve('.env.local')
+}
+
 function readConfig(file: string): TbsiteConfig {
   if (!file) throw new Error('缺少站点文件参数')
   return JSON.parse(readFileSync(resolve(file), 'utf8'))
@@ -64,8 +77,11 @@ function readConfig(file: string): TbsiteConfig {
 
 async function connect(flags: Args['flags']): Promise<{ api: TbApi; user: string; base: string }> {
   if ('password' in flags) throw new Error('不接受 --password 明文,请用 --password-env 指定环境变量名')
-  loadEnvFile(typeof flags['env-file'] === 'string' ? flags['env-file'] : resolve('.env.local'))
-  const base = (typeof flags.base === 'string' ? flags.base : process.env.TB_BASE || '').replace(/\/$/, '')
+  loadEnvFile(typeof flags['env-file'] === 'string' ? flags['env-file'] : findEnvFile())
+  // 默认镜像地址与 scripts/tb-*.mjs 一致;正式环境请显式给 --base 或 TB_BASE
+  const base = (
+    typeof flags.base === 'string' ? flags.base : process.env.TB_BASE || 'http://192.168.20.61:8080'
+  ).replace(/\/$/, '')
   const user = typeof flags.user === 'string' ? flags.user : process.env.TB_USER || ''
   const pwEnv = typeof flags['password-env'] === 'string' ? flags['password-env'] : 'TB_PASSWORD'
   const password = process.env[pwEnv] || ''
