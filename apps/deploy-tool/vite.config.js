@@ -13,6 +13,7 @@ export default defineConfig({
       input: {
         provisioner: resolve(__dirname, 'provisioner.html'),
         site: resolve(__dirname, 'site.html'),
+        editor: resolve(__dirname, 'editor.html'),
       },
     },
   },

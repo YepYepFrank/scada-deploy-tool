@@ -60,15 +60,33 @@ importers:
         specifier: ^3.5.13
         version: 3.5.42(typescript@5.9.3)
     devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.20.1
       '@vitejs/plugin-vue':
         specifier: ^5.2.1
         version: 5.2.4(vite@5.4.21(@types/node@22.20.1))(vue@3.5.42(typescript@5.9.3))
+      '@vue/test-utils':
+        specifier: ^2
+        version: 2.5.0(@vue/compiler-dom@3.5.42)(@vue/server-renderer@3.5.42)(vue@3.5.42(typescript@5.9.3))
+      happy-dom:
+        specifier: ^15
+        version: 15.11.7
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
       vite:
         specifier: ^5.4.11
         version: 5.4.21(@types/node@22.20.1)
       vite-plugin-singlefile:
         specifier: ^2.3.3
         version: 2.3.3(rollup@4.63.1)(vite@5.4.21(@types/node@22.20.1))
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)(happy-dom@15.11.7)
+      vue-tsc:
+        specifier: ^2
+        version: 2.2.12(typescript@5.9.3)
 
   packages/compiler:
     devDependencies:

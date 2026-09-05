@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "types": ["vitest/globals", "node", "vite/client"],
+    "jsx": "preserve",
+    "allowJs": false
+  },
+  "include": ["src/editor/**/*.ts", "src/editor/**/*.vue", "src/migrate/**/*.ts", "test/**/*.ts"]
+}

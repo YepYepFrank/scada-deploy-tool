@@ -26,6 +26,7 @@ dev/
 │  ├─ renderer/                 # @grid/scada-renderer  组态渲染器 + 契约(schema 子路径导出)
 │  ├─ tb-client/                # @grid/tb-client       TB 数据访问(包一层同事 request.js / websocket.js)
 │  └─ compiler/                 # @grid/tbsite-compiler 规则编译核心 + 写入器 + tbsite CLI(唯一编译器)
+│                              #   apps/deploy-tool:provisioner.html 向导 · site.html 老大屏 · editor.html 新组态编辑器(T3.2 起)
 ├─ apps/
 │  └─ deploy-tool/              # 部署工具(编辑壳)——由 tb-frontend/ 迁入,引用上面三个包
 └─ docs/

@@ -50,11 +50,16 @@ function validate(cfg: PageConfig) {
     emit('invalid', [...(fatal.value ? [{ path: '/template', message: fatal.value }] : []), ...errors])
 }
 
-/** 每个组件的阻断性问题(有则该槽位渲染错误态) */
+/**
+ * 每个组件的阻断性问题(有则该槽位渲染错误态)。
+ * 设计态(design)只把结构问题(未知类型 / 槽位不匹配 / id 重复)当阻断,绑定缺失不算:
+ * 编辑器刚放进去的组件绑定为空,仍要用 sampleData 画出缩略图。
+ */
 const widgetErrors = computed(() => {
   const m = new Map<string, string[]>()
   for (const i of issues.value) {
     if (i.level !== 'error') continue
+    if (props.design && i.path.includes('/bindings')) continue
     const mm = /^\/widgets\/([^/]+)/.exec(i.path)
     if (mm) (m.get(mm[1]!) ?? m.set(mm[1]!, []).get(mm[1]!)!).push(i.message)
   }
