@@ -19,7 +19,9 @@ import {
 import TemplatePicker from './TemplatePicker.vue'
 import SlotBoard from './SlotBoard.vue'
 import WidgetPicker from './WidgetPicker.vue'
+import PropsForm from './PropsForm.vue'
 import { useEditorState } from './useEditorState'
+import { validateProps } from './props-form'
 
 registerBuiltins()
 const templates = listTemplates()
@@ -49,7 +51,23 @@ const selectedSlot = computed<TemplateSlotDefinition | null>(
   () => template.value.slots.find(s => s.name === selected.value) ?? null
 )
 const selectedWidget = computed(() => (selected.value ? ed.widgetAt(selected.value) : undefined))
+const selectedDef = computed(() =>
+  selectedWidget.value ? widgets.find(w => w.type === selectedWidget.value!.type) : undefined
+)
 const pickerOpen = ref(false)
+
+/** 属性面板 v-model:显示 defaults 与已设值的合并,写回时只存与默认不同的键 */
+const widgetProps = computed<Record<string, unknown>>({
+  get: () => ({ ...(selectedDef.value?.defaults ?? {}), ...(selectedWidget.value?.props ?? {}) }),
+  set: next => {
+    const w = selectedWidget.value
+    if (!w) return
+    const defaults = (selectedDef.value?.defaults ?? {}) as Record<string, unknown>
+    const props: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(next)) if (JSON.stringify(v) !== JSON.stringify(defaults[k])) props[k] = v
+    ed.setWidgetProps(w.id, props)
+  },
+})
 
 function onSelect(slot: string) {
   selected.value = slot
@@ -74,6 +92,13 @@ const issues = computed(() => {
   const list: { level: string; path: string; message: string }[] = []
   if (!sv.ok) list.push(...sv.issues.map(i => ({ level: 'error', path: i.path, message: i.message })))
   list.push(...validateAgainstRegistry(cfg))
+  // 属性值校验(propsSchema:越界 / 类型 / 枚举),T3.5 会并入统一校验层
+  for (const w of cfg.widgets) {
+    const def = widgets.find(d => d.type === w.type)
+    if (!def) continue
+    for (const i of validateProps(def.propsSchema, w.props ?? {}))
+      list.push({ level: 'error', path: `/widgets/${w.id}/props/${i.path}`, message: i.message })
+  }
   return list
 })
 const errorCount = computed(() => issues.value.filter(i => i.level === 'error').length)
@@ -180,12 +205,19 @@ function toast(m: string) {
         </div>
         <div v-if="selectedWidget" class="ed-widget">
           组件 <code>{{ selectedWidget.type }}</code> <span class="dim">id {{ selectedWidget.id }}</span>
-          <div class="dim">属性面板(T3.3)与绑定选择器(T3.4)接在这里</div>
         </div>
         <div v-else class="dim">空槽位</div>
         <button type="button" @click="pickerOpen = true">{{ selectedWidget ? '更换 / 移除组件' : '选择组件' }}</button>
       </div>
       <div v-else class="dim">在示意图上点一个槽位</div>
+
+      <template v-if="selectedWidget && selectedDef">
+        <h2>
+          属性 <span class="dim">{{ selectedDef.name }} · 改了即时反映到示意图</span>
+        </h2>
+        <PropsForm :key="selectedWidget.id" v-model="widgetProps" :schema="selectedDef.propsSchema" />
+        <div class="dim ed-note">绑定选择器(T3.4)接在这里</div>
+      </template>
 
       <h2>校验</h2>
       <ul v-if="issues.length" class="ed-issue-list">
@@ -340,6 +372,9 @@ body {
 }
 .ed-widget {
   margin-top: 6px;
+}
+.ed-note {
+  margin-top: 10px;
 }
 .ed-issue-list {
   padding-left: 16px;
