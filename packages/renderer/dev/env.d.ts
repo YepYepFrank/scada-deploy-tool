@@ -3,4 +3,6 @@
 interface ImportMetaEnv {
   readonly VITE_TB_USER?: string
   readonly VITE_TB_PASSWORD?: string
+  readonly VITE_TB_TENANT_USER?: string
+  readonly VITE_TB_TENANT_PASSWORD?: string
 }

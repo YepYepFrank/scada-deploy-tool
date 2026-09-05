@@ -38,3 +38,17 @@ export {
 } from './writer/api'
 export { publish, wireRootChain, type PublishOptions } from './writer/publish'
 export { cleanup } from './writer/cleanup'
+export {
+  migrateSiteConfig,
+  legacyHistoryWindow,
+  type LegacySiteConfig,
+  type LegacySlot,
+  type LegacyPage,
+  type EntityIds,
+  type MigrationResult,
+  type MigrationNote,
+  type MigratedPage,
+  type PageConfigLike,
+  type WidgetLike,
+  type MigrateOptions,
+} from './migrate/site-config-to-page-config'

@@ -303,6 +303,24 @@ const mirror = ref(false)
 const mBase = ref('/tbm') // vite.dev.config 代理到镜像(含 WS)
 const mUser = ref((import.meta.env.VITE_TB_USER as string | undefined) ?? '')
 const mPass = ref((import.meta.env.VITE_TB_PASSWORD as string | undefined) ?? '')
+// 身份预填:客户视角(VITE_TB_USER)/ 租户视角(VITE_TB_TENANT_USER);T3.6「Customer 视角预览」就是看这两者的差
+const IDENTITIES = [
+  { id: 'customer', label: '客户视角', user: import.meta.env.VITE_TB_USER, pass: import.meta.env.VITE_TB_PASSWORD },
+  {
+    id: 'tenant',
+    label: '租户视角',
+    user: import.meta.env.VITE_TB_TENANT_USER,
+    pass: import.meta.env.VITE_TB_TENANT_PASSWORD,
+  },
+].filter(i => i.user && i.pass)
+const mIdentity = ref(IDENTITIES[0]?.id ?? '')
+function pickIdentity() {
+  const i = IDENTITIES.find(x => x.id === mIdentity.value)
+  if (i) {
+    mUser.value = i.user as string
+    mPass.value = i.pass as string
+  }
+}
 const mMsg = ref('')
 const mDevices = ref<{ id: string; name: string; type: string }[]>([])
 const mDeviceId = ref('')
@@ -471,6 +489,12 @@ const issues = ref<{ path: string; message: string }[]>([])
       <section class="mirror">
         <h2>镜像真数据(LegacyDataSource · T1.1 预案)</h2>
         <label>地址 <input v-model="mBase" placeholder="/tbm(代理)或 http://host:8080" /></label>
+        <label v-if="IDENTITIES.length > 1"
+          >身份预填
+          <select v-model="mIdentity" @change="pickIdentity">
+            <option v-for="i in IDENTITIES" :key="i.id" :value="i.id">{{ i.label }} · {{ i.user }}</option>
+          </select></label
+        >
         <label>账号 <input v-model="mUser" autocomplete="username" /></label>
         <label>密码 <input v-model="mPass" type="password" autocomplete="current-password" /></label>
         <button @click="mirrorLogin">登录并连接</button>
