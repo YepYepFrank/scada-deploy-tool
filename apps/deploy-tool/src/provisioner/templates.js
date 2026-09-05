@@ -9,10 +9,10 @@ export const WINDOWS = [
 
 // 模板分类 — 供部署人员按业务场景查找
 export const CATEGORIES = {
-  elec:   { name: '电气运算', desc: '实时派生:由现有测点即时算出新测点' },
+  elec: { name: '电气运算', desc: '实时派生:由现有测点即时算出新测点' },
   energy: { name: '电量统计', desc: '周期统计:定时汇总并落库为历史数据' },
-  alarm:  { name: '告警监视', desc: '越限/状态监视:自动产生与清除平台告警' },
-  site:   { name: '全站汇聚', desc: '跨设备汇总:同名测点求和/平均,结果存入独立虚拟资产(如 全站总有功功率)' },
+  alarm: { name: '告警监视', desc: '越限/状态监视:自动产生与清除平台告警' },
+  site: { name: '全站汇聚', desc: '跨设备汇总:同名测点求和/平均,结果存入独立虚拟资产(如 全站总有功功率)' },
 }
 
 export const TEMPLATES = {
@@ -124,44 +124,78 @@ export const TEMPLATES = {
 // 常用方案:一键生成设备模板(选择器 + 条目),现场只需微调阈值
 export const PRESETS = [
   {
-    id: 'volt', name: '电压越限监控', icon: '⚡',
+    id: 'volt',
+    name: '电压越限监控',
+    icon: '⚡',
     desc: '三相电压 Ua/Ub/Uc 越限告警(>250V 警告),缺相的设备自动跳过',
-    tplName: '电压越限监控', selector: { profiles: ['IED'], prefixes: [] },
-    items: ['Ua', 'Ub', 'Uc'].map((k) => ({
-      template: 'alarm.threshold', name: `${k}相电压越限告警`, key: k,
-      condition: { op: 'gt', value: 250 }, severity: 'WARNING', trigger: 'level',
+    tplName: '电压越限监控',
+    selector: { profiles: ['IED'], prefixes: [] },
+    items: ['Ua', 'Ub', 'Uc'].map(k => ({
+      template: 'alarm.threshold',
+      name: `${k}相电压越限告警`,
+      key: k,
+      condition: { op: 'gt', value: 250 },
+      severity: 'WARNING',
+      trigger: 'level',
       message: `${k}相电压越限:{value} V,请检查`,
     })),
   },
   {
-    id: 'power', name: '功率监控统计', icon: '📈',
+    id: 'power',
+    name: '功率监控统计',
+    icon: '📈',
     desc: '有功功率 P 越限告警(变化才报)+ 多级归档(5分钟/1小时/1天 均值·最大)',
-    tplName: '功率监控统计', selector: { profiles: ['IED'], prefixes: [] },
+    tplName: '功率监控统计',
+    selector: { profiles: ['IED'], prefixes: [] },
     items: [
-      { template: 'alarm.threshold', name: '功率越限告警', key: 'P',
-        condition: { op: 'gt', value: 500 }, severity: 'WARNING', trigger: 'edge',
-        message: '有功功率越限:{value} kW' },
+      {
+        template: 'alarm.threshold',
+        name: '功率越限告警',
+        key: 'P',
+        condition: { op: 'gt', value: 500 },
+        severity: 'WARNING',
+        trigger: 'edge',
+        message: '有功功率越限:{value} kW',
+      },
       { template: 'window.cascade', keys: ['P'], aggs: ['avg', 'max'] },
     ],
   },
   {
-    id: 'com', name: '通讯异常告警', icon: '📡',
+    id: 'com',
+    name: '通讯异常告警',
+    icon: '📡',
     desc: '通讯状态 COM ≠ 1 时告警(变化才报,恢复自动清除)',
-    tplName: '通讯异常告警', selector: { profiles: ['IED'], prefixes: [] },
+    tplName: '通讯异常告警',
+    selector: { profiles: ['IED'], prefixes: [] },
     items: [
-      { template: 'alarm.threshold', name: '通讯异常告警', key: 'COM',
-        condition: { op: 'ne', value: 1 }, severity: 'CRITICAL', trigger: 'edge',
-        message: '设备通讯异常,请检查链路' },
+      {
+        template: 'alarm.threshold',
+        name: '通讯异常告警',
+        key: 'COM',
+        condition: { op: 'ne', value: 1 },
+        severity: 'CRITICAL',
+        trigger: 'edge',
+        message: '设备通讯异常,请检查链路',
+      },
     ],
   },
   {
-    id: 'cb', name: '开关变位提醒', icon: '🔀',
+    id: 'cb',
+    name: '开关变位提醒',
+    icon: '🔀',
     desc: '断路器 CB 分合变位时提醒一次(变化才报,不刷屏)',
-    tplName: '开关变位提醒', selector: { profiles: ['IED'], prefixes: [] },
+    tplName: '开关变位提醒',
+    selector: { profiles: ['IED'], prefixes: [] },
     items: [
-      { template: 'alarm.threshold', name: '开关变位提醒', key: 'CB',
-        condition: { op: 'eq', value: 1 }, severity: 'MINOR', trigger: 'edge',
-        message: '开关合闸(CB={value})' },
+      {
+        template: 'alarm.threshold',
+        name: '开关变位提醒',
+        key: 'CB',
+        condition: { op: 'eq', value: 1 },
+        severity: 'MINOR',
+        trigger: 'edge',
+        message: '开关合闸(CB={value})',
+      },
     ],
   },
 ]

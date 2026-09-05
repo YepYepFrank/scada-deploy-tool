@@ -21,9 +21,14 @@ export const LAYOUT_TEMPLATES = {
     stats: [],
     // 全部按图表位处理;渲染时按 triple 分栏
     grid: [
-      { id: 'l1', span: 1 }, { id: 'l2', span: 1 }, { id: 'l3', span: 1 },
-      { id: 'c1', span: 1 }, { id: 'c2', span: 1 },
-      { id: 'r1', span: 1 }, { id: 'r2', span: 1 }, { id: 'r3', span: 1 },
+      { id: 'l1', span: 1 },
+      { id: 'l2', span: 1 },
+      { id: 'l3', span: 1 },
+      { id: 'c1', span: 1 },
+      { id: 'c2', span: 1 },
+      { id: 'r1', span: 1 },
+      { id: 'r2', span: 1 },
+      { id: 'r3', span: 1 },
     ],
     triple: {
       left: ['l1', 'l2', 'l3'],

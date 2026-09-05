@@ -19,42 +19,44 @@ function build() {
   const ok = Number.isFinite(v)
   return {
     animation: false,
-    series: [{
-      type: 'gauge',
-      startAngle: 200,
-      endAngle: -20,
-      min: 0,
-      max: props.max || 100,
-      center: ['50%', '62%'],
-      radius: '95%',
-      pointer: { show: false },
-      progress: {
-        show: true,
-        width: 10,
-        roundCap: true,
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: echarts.color.modifyAlpha(props.color, 0.55) },
-            { offset: 1, color: props.color },
-          ]),
-          shadowColor: echarts.color.modifyAlpha(props.color, 0.5),
-          shadowBlur: 10,
+    series: [
+      {
+        type: 'gauge',
+        startAngle: 200,
+        endAngle: -20,
+        min: 0,
+        max: props.max || 100,
+        center: ['50%', '62%'],
+        radius: '95%',
+        pointer: { show: false },
+        progress: {
+          show: true,
+          width: 10,
+          roundCap: true,
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0, color: echarts.color.modifyAlpha(props.color, 0.55) },
+              { offset: 1, color: props.color },
+            ]),
+            shadowColor: echarts.color.modifyAlpha(props.color, 0.5),
+            shadowBlur: 10,
+          },
         },
+        axisLine: { lineStyle: { width: 10, color: [[1, 'rgba(108,114,128,0.22)']] } },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: { show: false },
+        detail: {
+          offsetCenter: [0, '-12%'],
+          formatter: () => (ok ? `${v.toFixed(1)}${props.unit ? '\n' + props.unit : ''}` : '——'),
+          color: '#eef0f4',
+          fontSize: 20,
+          fontFamily: 'IBM Plex Mono',
+          lineHeight: 22,
+        },
+        data: [{ value: ok ? v : 0 }],
       },
-      axisLine: { lineStyle: { width: 10, color: [[1, 'rgba(108,114,128,0.22)']] } },
-      axisTick: { show: false },
-      splitLine: { show: false },
-      axisLabel: { show: false },
-      detail: {
-        offsetCenter: [0, '-12%'],
-        formatter: () => (ok ? `${v.toFixed(1)}${props.unit ? '\n' + props.unit : ''}` : '——'),
-        color: '#eef0f4',
-        fontSize: 20,
-        fontFamily: 'IBM Plex Mono',
-        lineHeight: 22,
-      },
-      data: [{ value: ok ? v : 0 }],
-    }],
+    ],
   }
 }
 
@@ -68,7 +70,10 @@ onMounted(() => {
     chart.dispose()
   })
 })
-watch(() => [props.value, props.max], () => chart && chart.setOption(build()))
+watch(
+  () => [props.value, props.max],
+  () => chart && chart.setOption(build())
+)
 </script>
 
 <template>
@@ -76,5 +81,9 @@ watch(() => [props.value, props.max], () => chart && chart.setOption(build()))
 </template>
 
 <style scoped>
-.gauge-box { width: 100%; height: 100%; min-height: 110px; }
+.gauge-box {
+  width: 100%;
+  height: 100%;
+  min-height: 110px;
+}
 </style>

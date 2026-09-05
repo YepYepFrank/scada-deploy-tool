@@ -44,7 +44,7 @@ watch(
     if (path.length > 400) path.shift()
     trail.setLatLngs(path)
     map.panTo([lat, lng], { animate: true, duration: 0.8 })
-  },
+  }
 )
 
 onUnmounted(() => map && map.remove())

@@ -4,7 +4,15 @@
 import { publish as publishPlan, cleanup } from '@grid/tbsite-compiler'
 
 export { cleanup }
-export { validateConfig, expandTemplates, matchSelector, resolveAggMembers, buildAggCfs, compile, summarizePlan } from '@grid/tbsite-compiler'
+export {
+  validateConfig,
+  expandTemplates,
+  matchSelector,
+  resolveAggMembers,
+  buildAggCfs,
+  compile,
+  summarizePlan,
+} from '@grid/tbsite-compiler'
 
 export function publish(cfg, devIds, api, report, publishedBy = '', retry = null) {
   return publishPlan(cfg, devIds, api, report, { publishedBy, retry })

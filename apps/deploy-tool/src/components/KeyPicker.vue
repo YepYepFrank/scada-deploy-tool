@@ -5,7 +5,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
-  groups: { type: Array, default: () => [] },   // [{ label, items: [{value, label}], pinned? }]
+  groups: { type: Array, default: () => [] }, // [{ label, items: [{value, label}], pinned? }]
   topItems: { type: Array, default: () => [] }, // 不分组的固定项(如【常数】)
   placeholder: { type: String, default: '请选择…' },
 })
@@ -36,7 +36,9 @@ function place() {
       : { top: r.bottom + 4 + 'px', bottom: 'auto' }),
   }
 }
-function onWinMove() { if (open.value) place() }
+function onWinMove() {
+  if (open.value) place()
+}
 
 const selLabel = computed(() => {
   for (const t of props.topItems) if (t.value === props.modelValue) return t.label
@@ -48,13 +50,16 @@ const filtered = computed(() => {
   const f = q.value.trim().toLowerCase()
   if (!f) return props.groups
   return props.groups
-    .map((g) => ({ ...g, items: g.items.filter((it) =>
-      it.label.toLowerCase().includes(f) || g.label.toLowerCase().includes(f)) }))
-    .filter((g) => g.items.length)
+    .map(g => ({
+      ...g,
+      items: g.items.filter(it => it.label.toLowerCase().includes(f) || g.label.toLowerCase().includes(f)),
+    }))
+    .filter(g => g.items.length)
 })
-const isExpanded = (g) =>
-  q.value.trim() ? true : (g.label in openMap.value ? openMap.value[g.label] : !!g.pinned)
-const toggleG = (g) => { openMap.value[g.label] = !isExpanded(g) }
+const isExpanded = g => (q.value.trim() ? true : g.label in openMap.value ? openMap.value[g.label] : !!g.pinned)
+const toggleG = g => {
+  openMap.value[g.label] = !isExpanded(g)
+}
 function pick(it) {
   emit('update:modelValue', it.value)
   emit('change', it.value)
@@ -63,12 +68,22 @@ function pick(it) {
 }
 async function toggle() {
   open.value = !open.value
-  if (open.value) { q.value = ''; place(); await nextTick(); place(); qInput.value?.focus() }
+  if (open.value) {
+    q.value = ''
+    place()
+    await nextTick()
+    place()
+    qInput.value?.focus()
+  }
 }
 function onDocDown(e) {
-  if (open.value && root.value
-      && !root.value.contains(e.target)
-      && !(panelEl.value && panelEl.value.contains(e.target))) open.value = false
+  if (
+    open.value &&
+    root.value &&
+    !root.value.contains(e.target) &&
+    !(panelEl.value && panelEl.value.contains(e.target))
+  )
+    open.value = false
 }
 onMounted(() => {
   document.addEventListener('mousedown', onDocDown, true)
@@ -89,32 +104,57 @@ onBeforeUnmount(() => {
       <span class="kp-caret">{{ open ? '▴' : '▾' }}</span>
     </button>
     <Teleport to="body">
-    <div v-if="open" ref="panelEl" class="kp-panel" :style="panelStyle">
-      <input ref="qInput" v-model="q" class="kp-q" type="text"
-             placeholder="🔍 关键字过滤(设备名 / 测点名 / 中文名)…" />
-      <div class="kp-list">
-        <div v-for="t in topItems" :key="t.value" class="kp-item top" :title="t.label"
-             :class="{ on: t.value === modelValue }" @mousedown.prevent="pick(t)">{{ t.label }}</div>
-        <template v-for="g in filtered" :key="g.label">
-          <div class="kp-group" :class="{ pinned: g.pinned }" @mousedown.prevent="toggleG(g)">
-            <span class="kp-fold">{{ isExpanded(g) ? '▼' : '▶' }}</span>
-            <span class="kp-gname">{{ g.label }}</span>
-            <span class="kp-cnt">{{ g.items.length }}</span>
+      <div v-if="open" ref="panelEl" class="kp-panel" :style="panelStyle">
+        <input
+          ref="qInput"
+          v-model="q"
+          class="kp-q"
+          type="text"
+          placeholder="🔍 关键字过滤(设备名 / 测点名 / 中文名)…"
+        />
+        <div class="kp-list">
+          <div
+            v-for="t in topItems"
+            :key="t.value"
+            class="kp-item top"
+            :title="t.label"
+            :class="{ on: t.value === modelValue }"
+            @mousedown.prevent="pick(t)"
+          >
+            {{ t.label }}
           </div>
-          <template v-if="isExpanded(g)">
-            <div v-for="it in g.items" :key="it.value" class="kp-item" :title="`${g.label} · ${it.label}`"
-                 :class="{ on: it.value === modelValue }" @mousedown.prevent="pick(it)">{{ it.label }}</div>
+          <template v-for="g in filtered" :key="g.label">
+            <div class="kp-group" :class="{ pinned: g.pinned }" @mousedown.prevent="toggleG(g)">
+              <span class="kp-fold">{{ isExpanded(g) ? '▼' : '▶' }}</span>
+              <span class="kp-gname">{{ g.label }}</span>
+              <span class="kp-cnt">{{ g.items.length }}</span>
+            </div>
+            <template v-if="isExpanded(g)">
+              <div
+                v-for="it in g.items"
+                :key="it.value"
+                class="kp-item"
+                :title="`${g.label} · ${it.label}`"
+                :class="{ on: it.value === modelValue }"
+                @mousedown.prevent="pick(it)"
+              >
+                {{ it.label }}
+              </div>
+            </template>
           </template>
-        </template>
-        <div v-if="!filtered.length && !topItems.length" class="kp-empty">无匹配项</div>
+          <div v-if="!filtered.length && !topItems.length" class="kp-empty">无匹配项</div>
+        </div>
       </div>
-    </div>
     </Teleport>
   </div>
 </template>
 
 <style scoped>
-.kp { position: relative; min-width: 240px; flex: 1; }
+.kp {
+  position: relative;
+  min-width: 240px;
+  flex: 1;
+}
 .kp-btn {
   width: 100%;
   display: flex;
@@ -130,10 +170,22 @@ onBeforeUnmount(() => {
   cursor: pointer;
   text-align: left;
 }
-.kp-btn:hover { border-color: var(--accent); }
-.kp-sel { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kp-sel.ph { color: var(--ink-2); }
-.kp-caret { color: var(--ink-2); font-size: 11px; }
+.kp-btn:hover {
+  border-color: var(--accent);
+}
+.kp-sel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kp-sel.ph {
+  color: var(--ink-2);
+}
+.kp-caret {
+  color: var(--ink-2);
+  font-size: 11px;
+}
 .kp-panel {
   /* 定位与尺寸由 place() 以 fixed 内联样式给出;Teleport 到 body,需盖过弹窗遮罩 */
   z-index: 220;
@@ -145,8 +197,16 @@ onBeforeUnmount(() => {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   padding: 8px;
 }
-.kp-q { width: 100%; margin-bottom: 6px; flex-shrink: 0; }
-.kp-list { flex: 1; min-height: 0; overflow-y: auto; }
+.kp-q {
+  width: 100%;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+.kp-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 .kp-group {
   display: flex;
   align-items: center;
@@ -159,9 +219,17 @@ onBeforeUnmount(() => {
   font-weight: 600;
   border-radius: 4px;
 }
-.kp-group:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-.kp-group.pinned .kp-gname { color: var(--accent); }
-.kp-fold { color: var(--ink-2); font-size: 9px; width: 12px; }
+.kp-group:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.kp-group.pinned .kp-gname {
+  color: var(--accent);
+}
+.kp-fold {
+  color: var(--ink-2);
+  font-size: 9px;
+  width: 12px;
+}
 .kp-cnt {
   margin-left: auto;
   color: var(--ink-2);
@@ -180,8 +248,21 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.kp-item:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.kp-item.on { color: var(--accent); font-weight: 600; }
-.kp-item.top { padding-left: 8px; color: var(--ink-0); }
-.kp-empty { padding: 10px; color: var(--ink-2); font-size: 12px; text-align: center; }
+.kp-item:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.kp-item.on {
+  color: var(--accent);
+  font-weight: 600;
+}
+.kp-item.top {
+  padding-left: 8px;
+  color: var(--ink-0);
+}
+.kp-empty {
+  padding: 10px;
+  color: var(--ink-2);
+  font-size: 12px;
+  text-align: center;
+}
 </style>

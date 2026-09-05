@@ -27,7 +27,7 @@ watch(
     flash.value = true
     clearTimeout(t)
     t = setTimeout(() => (flash.value = false), 320)
-  },
+  }
 )
 </script>
 

@@ -82,7 +82,7 @@ function build() {
       backgroundColor: TIP_BG,
       borderColor: TIP_LINE,
       textStyle: { color: '#eef0f4', fontSize: 12, fontFamily: 'IBM Plex Mono' },
-      valueFormatter: (v) => (v == null ? '—' : `${v}${props.unit ? ' ' + props.unit : ''}`),
+      valueFormatter: v => (v == null ? '—' : `${v}${props.unit ? ' ' + props.unit : ''}`),
     },
     xAxis: {
       type: 'time',
@@ -99,15 +99,18 @@ function build() {
         name: props.unit,
         nameTextStyle: { color: AXIS_INK, fontSize: 10, fontFamily: 'IBM Plex Mono', align: 'right' },
       }
-      if (!props.series.some((s) => s.y2)) return left
-      return [left, {
-        type: 'value',
-        scale: true,
-        axisLabel: { color: AXIS_INK, fontSize: 10, fontFamily: 'IBM Plex Mono' },
-        splitLine: { show: false },
-        name: props.unit2,
-        nameTextStyle: { color: AXIS_INK, fontSize: 10, fontFamily: 'IBM Plex Mono', align: 'left' },
-      }]
+      if (!props.series.some(s => s.y2)) return left
+      return [
+        left,
+        {
+          type: 'value',
+          scale: true,
+          axisLabel: { color: AXIS_INK, fontSize: 10, fontFamily: 'IBM Plex Mono' },
+          splitLine: { show: false },
+          name: props.unit2,
+          nameTextStyle: { color: AXIS_INK, fontSize: 10, fontFamily: 'IBM Plex Mono', align: 'left' },
+        },
+      ]
     })(),
     series: props.series.map(mkSeries),
   }
@@ -125,8 +128,8 @@ onMounted(() => {
 })
 
 watch(
-  () => props.series.map((s) => s.data.length + ':' + (s.data.at(-1)?.[0] ?? 0)).join('|'),
-  () => chart && chart.setOption({ series: props.series.map((s) => ({ data: s.data })) }),
+  () => props.series.map(s => s.data.length + ':' + (s.data.at(-1)?.[0] ?? 0)).join('|'),
+  () => chart && chart.setOption({ series: props.series.map(s => ({ data: s.data })) })
 )
 </script>
 

@@ -14,14 +14,18 @@ import {
   type PageConfig,
   type TemplateDefinition,
   type TemplateSlotDefinition,
+  type WidgetConfig,
   type WidgetDefinition,
 } from '@grid/scada-renderer'
 import TemplatePicker from './TemplatePicker.vue'
 import SlotBoard from './SlotBoard.vue'
 import WidgetPicker from './WidgetPicker.vue'
 import PropsForm from './PropsForm.vue'
+import BindingsPanel from './BindingsPanel.vue'
 import { useEditorState } from './useEditorState'
 import { validateProps } from './props-form'
+import { useMeta } from '../meta/useMeta'
+import type { BindingFlag } from './binding-check'
 
 registerBuiltins()
 const templates = listTemplates()
@@ -29,6 +33,13 @@ const widgets = listWidgets()
 
 const initial: PageConfig = { schemaVersion: 1, template: templates[0]!.id, title: '新页面', widgets: [] }
 const ed = useEditorState(initial)
+// TB 连接 + 元数据树(绑定选择器用);凭据只在内存
+const meta = useMeta()
+const bindingFlags = ref<Record<string, BindingFlag | null>>({})
+function onBindings(next: WidgetConfig['bindings']) {
+  const w = selectedWidget.value
+  if (w) ed.patchWidget(w.id, x => (x.bindings = next))
+}
 
 const template = computed<TemplateDefinition>(() => getTemplate(ed.config.value.template) ?? templates[0]!)
 const templateId = computed({
@@ -99,6 +110,15 @@ const issues = computed(() => {
     for (const i of validateProps(def.propsSchema, w.props ?? {}))
       list.push({ level: 'error', path: `/widgets/${w.id}/props/${i.path}`, message: i.message })
   }
+  // 当前组件绑定面板给出的类型提示(黄)
+  if (selectedWidget.value)
+    for (const [slot, f] of Object.entries(bindingFlags.value))
+      if (f?.level === 'warning')
+        list.push({
+          level: 'warning',
+          path: `/widgets/${selectedWidget.value.id}/bindings/${slot}`,
+          message: f.message,
+        })
   return list
 })
 const errorCount = computed(() => issues.value.filter(i => i.level === 'error').length)
@@ -167,6 +187,31 @@ function toast(m: string) {
       <label class="ed-field">页面标题 <input v-model.lazy="title" /></label>
       <h2>模板</h2>
       <TemplatePicker v-model="templateId" :templates="templates" />
+
+      <h2>ThingsBoard <span class="dim">绑定选择器的实体 / 测点来源</span></h2>
+      <div class="ed-conn">
+        <label class="ed-field">地址 <input v-model="meta.conn.base" /></label>
+        <label v-if="meta.identities.length > 1" class="ed-field"
+          >身份预填
+          <select v-model="meta.conn.identity" @change="meta.pickIdentity()">
+            <option v-for="i in meta.identities" :key="i.id" :value="i.id">{{ i.label }} · {{ i.user }}</option>
+          </select></label
+        >
+        <label class="ed-field">账号 <input v-model="meta.conn.user" autocomplete="username" /></label>
+        <label class="ed-field"
+          >密码 <input v-model="meta.conn.pass" type="password" autocomplete="current-password"
+        /></label>
+        <label class="ed-field">站点名 <input v-model="meta.conn.siteName" placeholder="树根显示用" /></label>
+        <div class="ed-conn-foot">
+          <button type="button" :disabled="meta.conn.busy" @click="meta.connect()">
+            {{ meta.connected.value ? '重新连接' : '连接' }}
+          </button>
+          <button v-if="meta.connected.value" type="button" :disabled="meta.conn.busy" @click="meta.refresh()">
+            刷新树
+          </button>
+          <span class="dim">{{ meta.conn.msg }}</span>
+        </div>
+      </div>
     </aside>
 
     <main class="ed-main">
@@ -216,7 +261,21 @@ function toast(m: string) {
           属性 <span class="dim">{{ selectedDef.name }} · 改了即时反映到示意图</span>
         </h2>
         <PropsForm :key="selectedWidget.id" v-model="widgetProps" :schema="selectedDef.propsSchema" />
-        <div class="dim ed-note">绑定选择器(T3.4)接在这里</div>
+        <h2>
+          绑定
+          <span class="dim">{{
+            meta.connected.value ? `${meta.entityCount.value} 个实体可选` : '未连接 TB,可手输'
+          }}</span>
+        </h2>
+        <BindingsPanel
+          :key="'b' + selectedWidget.id"
+          :def="selectedDef"
+          :widget="selectedWidget"
+          :tree="meta.tree.value"
+          :client="meta.client.value"
+          @update="onBindings"
+          @flags="bindingFlags = $event"
+        />
       </template>
 
       <h2>校验</h2>
@@ -373,8 +432,28 @@ body {
 .ed-widget {
   margin-top: 6px;
 }
-.ed-note {
-  margin-top: 10px;
+.ed-conn {
+  display: grid;
+  gap: 4px;
+}
+.ed-conn .ed-field {
+  margin-bottom: 4px;
+}
+.ed-conn select {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--ed-bg-1);
+  border: 1px solid var(--ed-line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: inherit;
+  font: inherit;
+}
+.ed-conn-foot {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 .ed-issue-list {
   padding-left: 16px;

@@ -3,7 +3,7 @@
 // mirror 走 /tbm 代理,Public 客户 id 相同——演示环境 20.60 已退役。
 // 仍保留 ?env=mirror 参数是为了兼容既有书签与向导生成的大屏链接——两条路径现在等价。
 const ENVS = {
-  demo:   { base: '',     publicId: '03fe0130-55ac-11f1-90ba-53cf2ab0fe96' },
+  demo: { base: '', publicId: '03fe0130-55ac-11f1-90ba-53cf2ab0fe96' },
   mirror: { base: '/tbm', publicId: '03fe0130-55ac-11f1-90ba-53cf2ab0fe96' },
 }
 const QS = new URLSearchParams(location.search)
@@ -26,9 +26,11 @@ const REPORT_AUTH = {
 }
 let kzToken = null
 async function kzLogin() {
-  if (!REPORT_AUTH.username || !REPORT_AUTH.password) throw new Error('report account not configured (VITE_REPORT_USER/PASSWORD)')
+  if (!REPORT_AUTH.username || !REPORT_AUTH.password)
+    throw new Error('report account not configured (VITE_REPORT_USER/PASSWORD)')
   const r = await fetch(`${API_BASE}/api/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(REPORT_AUTH),
   })
   if (!r.ok) throw new Error(`报表账号登录失败: ${r.status}`)
@@ -41,7 +43,7 @@ async function kzLogin() {
 export async function kzRevenueTrend(stationId, _retried = false) {
   if (!HAS_KZ) return { mode: 'day', rows: [] }
   if (!kzToken) await kzLogin()
-  const q = async (queryType) => {
+  const q = async queryType => {
     const r = await fetch('/kz/kzserver/biz/power/stationRevenueTrend', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Authorization': `Bearer ${kzToken}` },
@@ -53,10 +55,18 @@ export async function kzRevenueTrend(stationId, _retried = false) {
     return j.data || []
   }
   const day = await q(2)
-  if (day === null) { kzToken = null; await kzLogin(); return kzRevenueTrend(stationId, true) }
+  if (day === null) {
+    kzToken = null
+    await kzLogin()
+    return kzRevenueTrend(stationId, true)
+  }
   if (day.length) return { mode: 'day', rows: day }
   const month = await q(3)
-  if (month === null) { kzToken = null; await kzLogin(); return kzRevenueTrend(stationId, true) }
+  if (month === null) {
+    kzToken = null
+    await kzLogin()
+    return kzRevenueTrend(stationId, true)
+  }
   return { mode: 'month', rows: month }
 }
 // 大屏第二只读身份(镜像):报表账号是「客户账号」客户下的 CUSTOMER_USER,
@@ -73,13 +83,16 @@ export async function reportAuth() {
       reportCustomerId = (await r.json()).customerId?.id || null
     }
     return reportCustomerId ? { token: kzToken, customerId: reportCustomerId } : null
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
 export async function getCustomerDevices(customerId, tok) {
   const out = []
   for (let p = 0, hasNext = true; hasNext; p++) {
-    const r = await fetch(`${API_BASE}/api/customer/${customerId}/devices?pageSize=100&page=${p}`,
-      { headers: { 'X-Authorization': `Bearer ${tok}` } })
+    const r = await fetch(`${API_BASE}/api/customer/${customerId}/devices?pageSize=100&page=${p}`, {
+      headers: { 'X-Authorization': `Bearer ${tok}` },
+    })
     if (!r.ok) break
     const page = await r.json()
     out.push(...page.data)
@@ -94,7 +107,7 @@ export async function kzStations(tbToken) {
     headers: { 'X-Authorization': `Bearer ${tbToken}` },
   })
   const j = await r.json()
-  return j.code === 200 ? (j.data || []) : []
+  return j.code === 200 ? j.data || [] : []
 }
 
 let token = null
@@ -139,13 +152,11 @@ export async function getHistory(deviceId, keys, minutes = 15, entityType = 'DEV
   const raw = await req(
     `/api/plugins/telemetry/${entityType}/${deviceId}/values/timeseries` +
       `?keys=${keys.join(',')}&startTs=${startTs}&endTs=${endTs}&limit=2000&agg=NONE`,
-    tok,
+    tok
   )
   const out = {}
   for (const [key, arr] of Object.entries(raw)) {
-    out[key] = arr
-      .map((p) => [p.ts, parseFloat(p.value)])
-      .sort((a, b) => a[0] - b[0])
+    out[key] = arr.map(p => [p.ts, parseFloat(p.value)]).sort((a, b) => a[0] - b[0])
   }
   return out
 }

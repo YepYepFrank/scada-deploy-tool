@@ -48,11 +48,11 @@ export function connect(devices, token = null) {
             cmdId: i + 1,
           }
         }),
-      }),
+      })
     )
   }
 
-  ws.onmessage = (ev) => {
+  ws.onmessage = ev => {
     const msg = JSON.parse(ev.data)
     const name = cmdToName[msg.subscriptionId]
     if (!name || !msg.data) return
