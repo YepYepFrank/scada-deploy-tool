@@ -25,7 +25,7 @@ dev/
 ├─ packages/
 │  ├─ renderer/                 # @grid/scada-renderer  组态渲染器 + 契约(schema 子路径导出)
 │  ├─ tb-client/                # @grid/tb-client       TB 数据访问(包一层同事 request.js / websocket.js)
-│  └─ compiler/                 # @grid/tbsite-compiler 规则编译核心(从 publisher.js 抽 TS)+ CLI bin
+│  └─ compiler/                 # @grid/tbsite-compiler 规则编译核心 + 写入器 + tbsite CLI(唯一编译器)
 ├─ apps/
 │  └─ deploy-tool/              # 部署工具(编辑壳)——由 tb-frontend/ 迁入,引用上面三个包
 └─ docs/
@@ -52,7 +52,7 @@ pnpm gen:schema              # 由 page-config.ts 重新生成 JSON Schema(改�
 pnpm -F @grid/scada-renderer test:schema   # 仅契约校验测试
 ```
 
-`../tb-frontend/` 已冻结,只作参照(见其 `README-FROZEN.md` / 计划 §2.3);`tbsite_compile.py` 在 T1.3 同构测试通过后冻结。
+`../tb-frontend/` 已冻结,只作参照(见其 `README-FROZEN.md` / 计划 §2.3);`tbsite_compile.py` 已于 2026-09-05 冻结(T1.3 parity 通过),只保留 `--plan-json` 供对照。
 
 契约人读版:[`docs/契约-v1.md`](docs/契约-v1.md)(状态见其顶部;权威定义在 `packages/renderer/src/schema/` 与 `packages/tb-client/src/data-source.ts`)。
 

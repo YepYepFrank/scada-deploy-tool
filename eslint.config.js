@@ -13,7 +13,6 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/*.schema.json',
       'apps/deploy-tool/src/provisioner/Provisioner.vue',
-      'apps/deploy-tool/src/provisioner/publisher.js',
     ],
   },
   js.configs.recommended,

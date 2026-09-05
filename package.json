@@ -12,6 +12,7 @@
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
     "gen:schema": "pnpm -F @grid/scada-renderer run gen:schema",
+    "tbsite": "pnpm -F @grid/tbsite-compiler run tbsite --",
     "dev": "pnpm -F deploy-tool dev",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

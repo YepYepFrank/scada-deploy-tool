@@ -44,7 +44,8 @@ jobs:
         run: |
           node -e "import('./packages/tb-client/dist/index.js').then(m => { if (m.parseWindow('24h') !== 86400000) process.exit(1) })"
           node -e "import('./packages/renderer/dist/schema/index.js').then(m => { if (!m.validatePageConfig({schemaVersion:1,template:'x',widgets:[]}).ok) process.exit(1) })"
-          node -e "import('./packages/compiler/dist/index.js').then(m => { if (!m.version) process.exit(1) })"
+          node -e "import('./packages/compiler/dist/index.js').then(m => { const p = m.compile({schemaVersion:0,schema:'tbsite/v2',site:{name:'ci'},devices:[{name:'d',keys:[{key:'p'}]}],computations:[{template:'alarm.threshold',device:'d',key:'p',name:'x',condition:{op:'gt',value:1},severity:'MINOR',message:'m'}]}); if (!p.alarm || p.alarm.metadata.nodes.length !== 5) process.exit(1) })"
+          node packages/compiler/bin/tbsite.mjs plan packages/compiler/test/fixtures/demo-site.tbsite.json
 
       - name: Test
         run: pnpm test

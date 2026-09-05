@@ -1,0 +1,1577 @@
+{
+  "site": {
+    "name": "demo-site",
+    "assetType": "tbsite"
+  },
+  "validation": {
+    "errors": [],
+    "notes": []
+  },
+  "computations": [
+    {
+      "template": "expr.subtract",
+      "device": "BS_1_EMS",
+      "inputs": {
+        "a": {
+          "device": "BS_1_EMS",
+          "key": "totalChargeEnergy"
+        },
+        "b": {
+          "device": "BS_1_EMS",
+          "key": "totalDischargeEnergy"
+        }
+      },
+      "output": "netStoredEnergy"
+    },
+    {
+      "template": "window.aggregate",
+      "device": "BS_1_MO1",
+      "keys": ["AMBIENT_T", "BAT_T"],
+      "aggs": ["avg"],
+      "window": "5m"
+    },
+    {
+      "template": "window.aggregate",
+      "device": "BS_1_MO1",
+      "keys": ["BAT_T"],
+      "aggs": ["max"],
+      "window": "5m"
+    },
+    {
+      "template": "window.aggregate",
+      "device": "PDR1_LP1_IED1",
+      "keys": ["Ua", "Ub", "Uc"],
+      "aggs": ["avg"],
+      "window": "5m"
+    },
+    {
+      "template": "window.delta",
+      "device": "BS_1_EMS",
+      "key": "totalChargeEnergy",
+      "window": "5m",
+      "output": "charge5m"
+    },
+    {
+      "template": "window.delta",
+      "device": "BS_1_EMS",
+      "key": "totalDischargeEnergy",
+      "window": "5m",
+      "output": "discharge5m"
+    },
+    {
+      "template": "window.integrate",
+      "device": "PDR1_LP1_IED1",
+      "key": "P",
+      "window": "5m",
+      "output": "loadEnergy5m"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "电池组温度告警",
+      "device": "BS_1_MO1",
+      "key": "BAT_T",
+      "condition": {
+        "op": "gt",
+        "value": 50
+      },
+      "severity": "CRITICAL",
+      "message": "电池组温度预警,当前温度:{value}度"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "环境温度告警",
+      "device": "BS_1_MO1",
+      "key": "AMBIENT_T",
+      "condition": {
+        "op": "gt",
+        "value": 45
+      },
+      "severity": "WARNING",
+      "message": "环境温度预警,当前温度:{value}度"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "烟感告警",
+      "device": "BS_1_SENS",
+      "key": "SMOKE_DET_ALM",
+      "condition": {
+        "op": "eq",
+        "value": 1
+      },
+      "severity": "CRITICAL",
+      "message": "烟感状态异常,可能着火"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "通讯异常告警",
+      "device": "BS_1_SENS",
+      "key": "COM",
+      "condition": {
+        "op": "eq",
+        "value": 0
+      },
+      "severity": "WARNING",
+      "message": "基站通讯异常"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "系统状态告警",
+      "device": "BS_1_SENS",
+      "key": "SYS_NORMAL",
+      "condition": {
+        "op": "eq",
+        "value": 0
+      },
+      "severity": "WARNING",
+      "message": "基站系统状态异常"
+    },
+    {
+      "template": "alarm.threshold",
+      "name": "电压越限告警",
+      "device": "PDR1_LP1_IED1",
+      "key": "Ua",
+      "condition": {
+        "op": "gt",
+        "value": 245
+      },
+      "severity": "WARNING",
+      "message": "A相电压越限:{value}V"
+    }
+  ],
+  "cfs": [
+    {
+      "device": "BS_1_EMS",
+      "output": "netStoredEnergy",
+      "template": "expr.subtract",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:BS_1_EMS"
+        },
+        "type": "SIMPLE",
+        "name": "netStoredEnergy",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "totalChargeEnergy"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "totalDischargeEnergy"
+              }
+            }
+          },
+          "expression": "a - b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "netStoredEnergy",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    }
+  ],
+  "aggregates": [],
+  "revenue": null,
+  "rollup": {
+    "chainName": "Periodic Rollups",
+    "groups": {
+      "BS_1_MO1@@5m": {
+        "avg": ["AMBIENT_T", "BAT_T"],
+        "min": [],
+        "max": ["BAT_T"],
+        "sum": [],
+        "delta": {},
+        "integrate": {}
+      },
+      "PDR1_LP1_IED1@@5m": {
+        "avg": ["Ua", "Ub", "Uc"],
+        "min": [],
+        "max": [],
+        "sum": [],
+        "delta": {},
+        "integrate": {
+          "P": "loadEnergy5m"
+        }
+      },
+      "BS_1_EMS@@5m": {
+        "avg": [],
+        "min": [],
+        "max": [],
+        "sum": [],
+        "delta": {
+          "totalChargeEnergy": "charge5m",
+          "totalDischargeEnergy": "discharge5m"
+        },
+        "integrate": {}
+      }
+    },
+    "cascades": [],
+    "metadata": {
+      "ruleChainId": {
+        "entityType": "RULE_CHAIN",
+        "id": "chain:Periodic Rollups"
+      },
+      "firstNodeIndex": null,
+      "nodes": [
+        {
+          "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
+          "name": "save rollups",
+          "configuration": {
+            "defaultTTL": 0
+          },
+          "additionalInfo": {
+            "layoutX": 1000,
+            "layoutY": 300
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.debug.TbMsgGeneratorNode",
+          "name": "tick BS_1_EMS @5m",
+          "configuration": {
+            "msgCount": 0,
+            "periodInSeconds": 300,
+            "originatorId": "dev:BS_1_EMS",
+            "originatorType": "DEVICE",
+            "queueName": null,
+            "jsScript": "var msg = {}; var metadata = { rollup: 'true' }; var msgType = 'ROLLUP_TICK'; return { msg: msg, metadata: metadata, msgType: msgType };"
+          },
+          "additionalInfo": {
+            "layoutX": 100,
+            "layoutY": 80
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.metadata.TbGetTelemetryNode",
+          "name": "fetch BS_1_EMS @5m",
+          "configuration": {
+            "latestTsKeyNames": ["totalChargeEnergy", "totalDischargeEnergy"],
+            "fetchMode": "ALL",
+            "orderBy": "ASC",
+            "aggregation": "NONE",
+            "limit": 1000,
+            "useMetadataIntervalPatterns": false,
+            "startInterval": 300,
+            "startIntervalTimeUnit": "SECONDS",
+            "endInterval": 1,
+            "endIntervalTimeUnit": "SECONDS"
+          },
+          "additionalInfo": {
+            "layoutX": 400,
+            "layoutY": 80
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+          "name": "aggregate BS_1_EMS @5m",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "\nvar out = {};\nvar spec = {\"avg\": [], \"min\": [], \"max\": [], \"sum\": [], \"delta\": {\"totalChargeEnergy\": \"charge5m\", \"totalDischargeEnergy\": \"discharge5m\"}, \"integrate\": {}, \"sfx\": {\"avg\": \"Avg5m\", \"min\": \"Min5m\", \"max\": \"Max5m\", \"sum\": \"Sum5m\"}};\nfunction series(key) {\n    var raw = metadata[key];\n    if (!raw) return [];\n    var arr = JSON.parse(raw);\n    return arr.map(function (p) { return parseFloat(p.value); })\n              .filter(function (v) { return !isNaN(v); });\n}\nfunction agg(keys, suffix, fn) {\n    keys.forEach(function (k) {\n        var v = series(k);\n        if (v.length) out[k + suffix] = Math.round(fn(v) * 10000) / 10000;\n    });\n}\nagg(spec.avg, spec.sfx.avg, function (v) { return v.reduce(function (a, b) { return a + b; }, 0) / v.length; });\nagg(spec.min, spec.sfx.min, function (v) { return Math.min.apply(null, v); });\nagg(spec.max, spec.sfx.max, function (v) { return Math.max.apply(null, v); });\nagg(spec.sum || [], spec.sfx.sum, function (v) { return v.reduce(function (a, b) { return a + b; }, 0); });\nObject.keys(spec.delta).forEach(function (k) {\n    var v = series(k);\n    if (v.length > 1) out[spec.delta[k]] = Math.round((v[v.length - 1] - v[0]) * 10000) / 10000;\n});\nObject.keys(spec.integrate || {}).forEach(function (k) {\n    var raw = metadata[k];\n    if (!raw) return;\n    var pts = JSON.parse(raw)\n        .map(function (p) { return [parseInt(p.ts), parseFloat(p.value)]; })\n        .filter(function (p) { return !isNaN(p[0]) && !isNaN(p[1]); })\n        .sort(function (a, b) { return a[0] - b[0]; });\n    if (pts.length < 2) return;\n    var wh = 0;\n    for (var i = 1; i < pts.length; i++) {\n        var dtH = (pts[i][0] - pts[i - 1][0]) / 3600000;\n        if (dtH > 0) wh += (pts[i][1] + pts[i - 1][1]) / 2 * dtH;\n    }\n    out[spec.integrate[k]] = Math.round(wh / 1000 * 10000) / 10000;\n});\nif (Object.keys(out).length === 0) return { msg: msg, metadata: metadata, msgType: msgType };\nreturn { msg: out, metadata: metadata, msgType: 'POST_TELEMETRY_REQUEST' };\n"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 80
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.debug.TbMsgGeneratorNode",
+          "name": "tick BS_1_MO1 @5m",
+          "configuration": {
+            "msgCount": 0,
+            "periodInSeconds": 300,
+            "originatorId": "dev:BS_1_MO1",
+            "originatorType": "DEVICE",
+            "queueName": null,
+            "jsScript": "var msg = {}; var metadata = { rollup: 'true' }; var msgType = 'ROLLUP_TICK'; return { msg: msg, metadata: metadata, msgType: msgType };"
+          },
+          "additionalInfo": {
+            "layoutX": 100,
+            "layoutY": 200
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.metadata.TbGetTelemetryNode",
+          "name": "fetch BS_1_MO1 @5m",
+          "configuration": {
+            "latestTsKeyNames": ["AMBIENT_T", "BAT_T"],
+            "fetchMode": "ALL",
+            "orderBy": "ASC",
+            "aggregation": "NONE",
+            "limit": 1000,
+            "useMetadataIntervalPatterns": false,
+            "startInterval": 300,
+            "startIntervalTimeUnit": "SECONDS",
+            "endInterval": 1,
+            "endIntervalTimeUnit": "SECONDS"
+          },
+          "additionalInfo": {
+            "layoutX": 400,
+            "layoutY": 200
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+          "name": "aggregate BS_1_MO1 @5m",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "\nvar out = {};\nvar spec = {\"avg\": [\"AMBIENT_T\", \"BAT_T\"], \"min\": [], \"max\": [\"BAT_T\"], \"sum\": [], \"delta\": {}, \"integrate\": {}, \"sfx\": {\"avg\": \"Avg5m\", \"min\": \"Min5m\", \"max\": \"Max5m\", \"sum\": \"Sum5m\"}};\nfunction series(key) {\n    var raw = metadata[key];\n    if (!raw) return [];\n    var arr = JSON.parse(raw);\n    return arr.map(function (p) { return parseFloat(p.value); })\n              .filter(function (v) { return !isNaN(v); });\n}\nfunction agg(keys, suffix, fn) {\n    keys.forEach(function (k) {\n        var v = series(k);\n        if (v.length) out[k + suffix] = Math.round(fn(v) * 10000) / 10000;\n    });\n}\nagg(spec.avg, spec.sfx.avg, function (v) { return v.reduce(function (a, b) { return a + b; }, 0) / v.length; });\nagg(spec.min, spec.sfx.min, function (v) { return Math.min.apply(null, v); });\nagg(spec.max, spec.sfx.max, function (v) { return Math.max.apply(null, v); });\nagg(spec.sum || [], spec.sfx.sum, function (v) { return v.reduce(function (a, b) { return a + b; }, 0); });\nObject.keys(spec.delta).forEach(function (k) {\n    var v = series(k);\n    if (v.length > 1) out[spec.delta[k]] = Math.round((v[v.length - 1] - v[0]) * 10000) / 10000;\n});\nObject.keys(spec.integrate || {}).forEach(function (k) {\n    var raw = metadata[k];\n    if (!raw) return;\n    var pts = JSON.parse(raw)\n        .map(function (p) { return [parseInt(p.ts), parseFloat(p.value)]; })\n        .filter(function (p) { return !isNaN(p[0]) && !isNaN(p[1]); })\n        .sort(function (a, b) { return a[0] - b[0]; });\n    if (pts.length < 2) return;\n    var wh = 0;\n    for (var i = 1; i < pts.length; i++) {\n        var dtH = (pts[i][0] - pts[i - 1][0]) / 3600000;\n        if (dtH > 0) wh += (pts[i][1] + pts[i - 1][1]) / 2 * dtH;\n    }\n    out[spec.integrate[k]] = Math.round(wh / 1000 * 10000) / 10000;\n});\nif (Object.keys(out).length === 0) return { msg: msg, metadata: metadata, msgType: msgType };\nreturn { msg: out, metadata: metadata, msgType: 'POST_TELEMETRY_REQUEST' };\n"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 200
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.debug.TbMsgGeneratorNode",
+          "name": "tick PDR1_LP1_IED1 @5m",
+          "configuration": {
+            "msgCount": 0,
+            "periodInSeconds": 300,
+            "originatorId": "dev:PDR1_LP1_IED1",
+            "originatorType": "DEVICE",
+            "queueName": null,
+            "jsScript": "var msg = {}; var metadata = { rollup: 'true' }; var msgType = 'ROLLUP_TICK'; return { msg: msg, metadata: metadata, msgType: msgType };"
+          },
+          "additionalInfo": {
+            "layoutX": 100,
+            "layoutY": 320
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.metadata.TbGetTelemetryNode",
+          "name": "fetch PDR1_LP1_IED1 @5m",
+          "configuration": {
+            "latestTsKeyNames": ["P", "Ua", "Ub", "Uc"],
+            "fetchMode": "ALL",
+            "orderBy": "ASC",
+            "aggregation": "NONE",
+            "limit": 1000,
+            "useMetadataIntervalPatterns": false,
+            "startInterval": 300,
+            "startIntervalTimeUnit": "SECONDS",
+            "endInterval": 1,
+            "endIntervalTimeUnit": "SECONDS"
+          },
+          "additionalInfo": {
+            "layoutX": 400,
+            "layoutY": 320
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+          "name": "aggregate PDR1_LP1_IED1 @5m",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "\nvar out = {};\nvar spec = {\"avg\": [\"Ua\", \"Ub\", \"Uc\"], \"min\": [], \"max\": [], \"sum\": [], \"delta\": {}, \"integrate\": {\"P\": \"loadEnergy5m\"}, \"sfx\": {\"avg\": \"Avg5m\", \"min\": \"Min5m\", \"max\": \"Max5m\", \"sum\": \"Sum5m\"}};\nfunction series(key) {\n    var raw = metadata[key];\n    if (!raw) return [];\n    var arr = JSON.parse(raw);\n    return arr.map(function (p) { return parseFloat(p.value); })\n              .filter(function (v) { return !isNaN(v); });\n}\nfunction agg(keys, suffix, fn) {\n    keys.forEach(function (k) {\n        var v = series(k);\n        if (v.length) out[k + suffix] = Math.round(fn(v) * 10000) / 10000;\n    });\n}\nagg(spec.avg, spec.sfx.avg, function (v) { return v.reduce(function (a, b) { return a + b; }, 0) / v.length; });\nagg(spec.min, spec.sfx.min, function (v) { return Math.min.apply(null, v); });\nagg(spec.max, spec.sfx.max, function (v) { return Math.max.apply(null, v); });\nagg(spec.sum || [], spec.sfx.sum, function (v) { return v.reduce(function (a, b) { return a + b; }, 0); });\nObject.keys(spec.delta).forEach(function (k) {\n    var v = series(k);\n    if (v.length > 1) out[spec.delta[k]] = Math.round((v[v.length - 1] - v[0]) * 10000) / 10000;\n});\nObject.keys(spec.integrate || {}).forEach(function (k) {\n    var raw = metadata[k];\n    if (!raw) return;\n    var pts = JSON.parse(raw)\n        .map(function (p) { return [parseInt(p.ts), parseFloat(p.value)]; })\n        .filter(function (p) { return !isNaN(p[0]) && !isNaN(p[1]); })\n        .sort(function (a, b) { return a[0] - b[0]; });\n    if (pts.length < 2) return;\n    var wh = 0;\n    for (var i = 1; i < pts.length; i++) {\n        var dtH = (pts[i][0] - pts[i - 1][0]) / 3600000;\n        if (dtH > 0) wh += (pts[i][1] + pts[i - 1][1]) / 2 * dtH;\n    }\n    out[spec.integrate[k]] = Math.round(wh / 1000 * 10000) / 10000;\n});\nif (Object.keys(out).length === 0) return { msg: msg, metadata: metadata, msgType: msgType };\nreturn { msg: out, metadata: metadata, msgType: 'POST_TELEMETRY_REQUEST' };\n"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 320
+          }
+        }
+      ],
+      "connections": [
+        {
+          "fromIndex": 1,
+          "toIndex": 2,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 2,
+          "toIndex": 3,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 3,
+          "toIndex": 0,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 4,
+          "toIndex": 5,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 5,
+          "toIndex": 6,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 6,
+          "toIndex": 0,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 7,
+          "toIndex": 8,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 8,
+          "toIndex": 9,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 9,
+          "toIndex": 0,
+          "type": "Success"
+        }
+      ],
+      "ruleChainConnections": null
+    }
+  },
+  "alarm": {
+    "chainName": "Site Alarms · demo-site",
+    "rootFlowName": "site alarms flow · demo-site",
+    "items": [
+      {
+        "template": "alarm.threshold",
+        "name": "电池组温度告警",
+        "device": "BS_1_MO1",
+        "key": "BAT_T",
+        "condition": {
+          "op": "gt",
+          "value": 50
+        },
+        "severity": "CRITICAL",
+        "message": "电池组温度预警,当前温度:{value}度"
+      },
+      {
+        "template": "alarm.threshold",
+        "name": "环境温度告警",
+        "device": "BS_1_MO1",
+        "key": "AMBIENT_T",
+        "condition": {
+          "op": "gt",
+          "value": 45
+        },
+        "severity": "WARNING",
+        "message": "环境温度预警,当前温度:{value}度"
+      },
+      {
+        "template": "alarm.threshold",
+        "name": "烟感告警",
+        "device": "BS_1_SENS",
+        "key": "SMOKE_DET_ALM",
+        "condition": {
+          "op": "eq",
+          "value": 1
+        },
+        "severity": "CRITICAL",
+        "message": "烟感状态异常,可能着火"
+      },
+      {
+        "template": "alarm.threshold",
+        "name": "通讯异常告警",
+        "device": "BS_1_SENS",
+        "key": "COM",
+        "condition": {
+          "op": "eq",
+          "value": 0
+        },
+        "severity": "WARNING",
+        "message": "基站通讯异常"
+      },
+      {
+        "template": "alarm.threshold",
+        "name": "系统状态告警",
+        "device": "BS_1_SENS",
+        "key": "SYS_NORMAL",
+        "condition": {
+          "op": "eq",
+          "value": 0
+        },
+        "severity": "WARNING",
+        "message": "基站系统状态异常"
+      },
+      {
+        "template": "alarm.threshold",
+        "name": "电压越限告警",
+        "device": "PDR1_LP1_IED1",
+        "key": "Ua",
+        "condition": {
+          "op": "gt",
+          "value": 245
+        },
+        "severity": "WARNING",
+        "message": "A相电压越限:{value}V"
+      }
+    ],
+    "metadata": {
+      "ruleChainId": {
+        "entityType": "RULE_CHAIN",
+        "id": "chain:Site Alarms · demo-site"
+      },
+      "firstNodeIndex": 0,
+      "nodes": [
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "entry",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return true;"
+          },
+          "additionalInfo": {
+            "layoutX": 40,
+            "layoutY": 40
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "关于 BS_1_MO1.BAT_T?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return metadata.deviceName === 'BS_1_MO1' && typeof msg['BAT_T'] !== 'undefined';"
+          },
+          "additionalInfo": {
+            "layoutX": 60,
+            "layoutY": 120
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "BAT_T > 50?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return Number(msg['BAT_T']) > 50;"
+          },
+          "additionalInfo": {
+            "layoutX": 380,
+            "layoutY": 120
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbCreateAlarmNode",
+          "name": "告警: BAT_T",
+          "configuration": {
+            "alarmType": "电池组温度告警",
+            "severity": "CRITICAL",
+            "propagate": false,
+            "useMessageAlarmData": false,
+            "overwriteAlarmDetails": false,
+            "dynamicSeverity": false,
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; details.message = '电池组温度预警,当前温度:' + msg['BAT_T'] + '度'; details.key = 'BAT_T'; details.value = msg['BAT_T']; details.threshold = 50; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 90
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbClearAlarmNode",
+          "name": "清除: BAT_T",
+          "configuration": {
+            "alarmType": "电池组温度告警",
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 180
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "关于 BS_1_MO1.AMBIENT_T?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return metadata.deviceName === 'BS_1_MO1' && typeof msg['AMBIENT_T'] !== 'undefined';"
+          },
+          "additionalInfo": {
+            "layoutX": 60,
+            "layoutY": 260
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "AMBIENT_T > 45?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return Number(msg['AMBIENT_T']) > 45;"
+          },
+          "additionalInfo": {
+            "layoutX": 380,
+            "layoutY": 260
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbCreateAlarmNode",
+          "name": "告警: AMBIENT_T",
+          "configuration": {
+            "alarmType": "环境温度告警",
+            "severity": "WARNING",
+            "propagate": false,
+            "useMessageAlarmData": false,
+            "overwriteAlarmDetails": false,
+            "dynamicSeverity": false,
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; details.message = '环境温度预警,当前温度:' + msg['AMBIENT_T'] + '度'; details.key = 'AMBIENT_T'; details.value = msg['AMBIENT_T']; details.threshold = 45; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 230
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbClearAlarmNode",
+          "name": "清除: AMBIENT_T",
+          "configuration": {
+            "alarmType": "环境温度告警",
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 320
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "关于 BS_1_SENS.SMOKE_DET_ALM?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return metadata.deviceName === 'BS_1_SENS' && typeof msg['SMOKE_DET_ALM'] !== 'undefined';"
+          },
+          "additionalInfo": {
+            "layoutX": 60,
+            "layoutY": 400
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "SMOKE_DET_ALM == 1?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return Number(msg['SMOKE_DET_ALM']) == 1;"
+          },
+          "additionalInfo": {
+            "layoutX": 380,
+            "layoutY": 400
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbCreateAlarmNode",
+          "name": "告警: SMOKE_DET_ALM",
+          "configuration": {
+            "alarmType": "烟感告警",
+            "severity": "CRITICAL",
+            "propagate": false,
+            "useMessageAlarmData": false,
+            "overwriteAlarmDetails": false,
+            "dynamicSeverity": false,
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; details.message = '烟感状态异常,可能着火'; details.key = 'SMOKE_DET_ALM'; details.value = msg['SMOKE_DET_ALM']; details.threshold = 1; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 370
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbClearAlarmNode",
+          "name": "清除: SMOKE_DET_ALM",
+          "configuration": {
+            "alarmType": "烟感告警",
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 460
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "关于 BS_1_SENS.COM?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return metadata.deviceName === 'BS_1_SENS' && typeof msg['COM'] !== 'undefined';"
+          },
+          "additionalInfo": {
+            "layoutX": 60,
+            "layoutY": 540
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "COM == 0?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return Number(msg['COM']) == 0;"
+          },
+          "additionalInfo": {
+            "layoutX": 380,
+            "layoutY": 540
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbCreateAlarmNode",
+          "name": "告警: COM",
+          "configuration": {
+            "alarmType": "通讯异常告警",
+            "severity": "WARNING",
+            "propagate": false,
+            "useMessageAlarmData": false,
+            "overwriteAlarmDetails": false,
+            "dynamicSeverity": false,
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; details.message = '基站通讯异常'; details.key = 'COM'; details.value = msg['COM']; details.threshold = 0; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 510
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbClearAlarmNode",
+          "name": "清除: COM",
+          "configuration": {
+            "alarmType": "通讯异常告警",
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 600
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "关于 BS_1_SENS.SYS_NORMAL?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return metadata.deviceName === 'BS_1_SENS' && typeof msg['SYS_NORMAL'] !== 'undefined';"
+          },
+          "additionalInfo": {
+            "layoutX": 60,
+            "layoutY": 680
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "SYS_NORMAL == 0?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return Number(msg['SYS_NORMAL']) == 0;"
+          },
+          "additionalInfo": {
+            "layoutX": 380,
+            "layoutY": 680
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbCreateAlarmNode",
+          "name": "告警: SYS_NORMAL",
+          "configuration": {
+            "alarmType": "系统状态告警",
+            "severity": "WARNING",
+            "propagate": false,
+            "useMessageAlarmData": false,
+            "overwriteAlarmDetails": false,
+            "dynamicSeverity": false,
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; details.message = '基站系统状态异常'; details.key = 'SYS_NORMAL'; details.value = msg['SYS_NORMAL']; details.threshold = 0; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 650
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbClearAlarmNode",
+          "name": "清除: SYS_NORMAL",
+          "configuration": {
+            "alarmType": "系统状态告警",
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 740
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "关于 PDR1_LP1_IED1.Ua?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return metadata.deviceName === 'PDR1_LP1_IED1' && typeof msg['Ua'] !== 'undefined';"
+          },
+          "additionalInfo": {
+            "layoutX": 60,
+            "layoutY": 820
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "Ua > 245?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return Number(msg['Ua']) > 245;"
+          },
+          "additionalInfo": {
+            "layoutX": 380,
+            "layoutY": 820
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbCreateAlarmNode",
+          "name": "告警: Ua",
+          "configuration": {
+            "alarmType": "电压越限告警",
+            "severity": "WARNING",
+            "propagate": false,
+            "useMessageAlarmData": false,
+            "overwriteAlarmDetails": false,
+            "dynamicSeverity": false,
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; details.message = 'A相电压越限:' + msg['Ua'] + 'V'; details.key = 'Ua'; details.value = msg['Ua']; details.threshold = 245; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 790
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbClearAlarmNode",
+          "name": "清除: Ua",
+          "configuration": {
+            "alarmType": "电压越限告警",
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 880
+          }
+        }
+      ],
+      "connections": [
+        {
+          "fromIndex": 0,
+          "toIndex": 1,
+          "type": "True"
+        },
+        {
+          "fromIndex": 1,
+          "toIndex": 2,
+          "type": "True"
+        },
+        {
+          "fromIndex": 2,
+          "toIndex": 3,
+          "type": "True"
+        },
+        {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "type": "False"
+        },
+        {
+          "fromIndex": 0,
+          "toIndex": 5,
+          "type": "True"
+        },
+        {
+          "fromIndex": 5,
+          "toIndex": 6,
+          "type": "True"
+        },
+        {
+          "fromIndex": 6,
+          "toIndex": 7,
+          "type": "True"
+        },
+        {
+          "fromIndex": 6,
+          "toIndex": 8,
+          "type": "False"
+        },
+        {
+          "fromIndex": 0,
+          "toIndex": 9,
+          "type": "True"
+        },
+        {
+          "fromIndex": 9,
+          "toIndex": 10,
+          "type": "True"
+        },
+        {
+          "fromIndex": 10,
+          "toIndex": 11,
+          "type": "True"
+        },
+        {
+          "fromIndex": 10,
+          "toIndex": 12,
+          "type": "False"
+        },
+        {
+          "fromIndex": 0,
+          "toIndex": 13,
+          "type": "True"
+        },
+        {
+          "fromIndex": 13,
+          "toIndex": 14,
+          "type": "True"
+        },
+        {
+          "fromIndex": 14,
+          "toIndex": 15,
+          "type": "True"
+        },
+        {
+          "fromIndex": 14,
+          "toIndex": 16,
+          "type": "False"
+        },
+        {
+          "fromIndex": 0,
+          "toIndex": 17,
+          "type": "True"
+        },
+        {
+          "fromIndex": 17,
+          "toIndex": 18,
+          "type": "True"
+        },
+        {
+          "fromIndex": 18,
+          "toIndex": 19,
+          "type": "True"
+        },
+        {
+          "fromIndex": 18,
+          "toIndex": 20,
+          "type": "False"
+        },
+        {
+          "fromIndex": 0,
+          "toIndex": 21,
+          "type": "True"
+        },
+        {
+          "fromIndex": 21,
+          "toIndex": 22,
+          "type": "True"
+        },
+        {
+          "fromIndex": 22,
+          "toIndex": 23,
+          "type": "True"
+        },
+        {
+          "fromIndex": 22,
+          "toIndex": 24,
+          "type": "False"
+        }
+      ],
+      "ruleChainConnections": null
+    }
+  },
+  "siteAsset": {
+    "name": "demo-site",
+    "type": "tbsite",
+    "attributes": {
+      "siteConfig": {
+        "schema": "tbsite/v1",
+        "site": {
+          "name": "demo-site",
+          "label": "基站储能演示站"
+        },
+        "devices": [
+          {
+            "name": "BS_1_SENS",
+            "type": "sensor",
+            "keys": [
+              {
+                "key": "SYS_NORMAL",
+                "label": "系统状态",
+                "unit": ""
+              },
+              {
+                "key": "SMOKE_DET_ALM",
+                "label": "烟感状态",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "通讯状态",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "BS_2_SENS",
+            "type": "sensor",
+            "keys": [
+              {
+                "key": "SYS_NORMAL",
+                "label": "系统状态",
+                "unit": ""
+              },
+              {
+                "key": "SMOKE_DET_ALM",
+                "label": "烟感状态",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "通讯状态",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "BS_1_MO1",
+            "type": "battery",
+            "keys": [
+              {
+                "key": "AMBIENT_T",
+                "label": "环境温度",
+                "unit": "°C"
+              },
+              {
+                "key": "BAT_T",
+                "label": "电池组温度",
+                "unit": "°C"
+              },
+              {
+                "key": "SOC",
+                "label": "电量",
+                "unit": "%"
+              }
+            ]
+          },
+          {
+            "name": "BS_2_MO1",
+            "type": "battery",
+            "keys": [
+              {
+                "key": "AMBIENT_T",
+                "label": "环境温度",
+                "unit": "°C"
+              },
+              {
+                "key": "BAT_T",
+                "label": "电池组温度",
+                "unit": "°C"
+              },
+              {
+                "key": "SOC",
+                "label": "电量",
+                "unit": "%"
+              }
+            ]
+          },
+          {
+            "name": "BS_1_EMS",
+            "type": "ems",
+            "keys": [
+              {
+                "key": "P",
+                "label": "充放电功率",
+                "unit": "W"
+              },
+              {
+                "key": "totalChargeEnergy",
+                "label": "累计充电量",
+                "unit": "kWh"
+              },
+              {
+                "key": "totalDischargeEnergy",
+                "label": "累计放电量",
+                "unit": "kWh"
+              }
+            ]
+          },
+          {
+            "name": "PDR1_LP1_IED1",
+            "type": "ied",
+            "keys": [
+              {
+                "key": "Ua",
+                "label": "A相电压",
+                "unit": "V"
+              },
+              {
+                "key": "Ub",
+                "label": "B相电压",
+                "unit": "V"
+              },
+              {
+                "key": "Uc",
+                "label": "C相电压",
+                "unit": "V"
+              },
+              {
+                "key": "P",
+                "label": "有功功率",
+                "unit": "W"
+              },
+              {
+                "key": "Q",
+                "label": "无功功率",
+                "unit": "var"
+              },
+              {
+                "key": "CB",
+                "label": "断路器状态",
+                "unit": ""
+              }
+            ]
+          }
+        ],
+        "computations": [
+          {
+            "template": "expr.subtract",
+            "device": "BS_1_EMS",
+            "inputs": {
+              "a": {
+                "device": "BS_1_EMS",
+                "key": "totalChargeEnergy"
+              },
+              "b": {
+                "device": "BS_1_EMS",
+                "key": "totalDischargeEnergy"
+              }
+            },
+            "output": "netStoredEnergy"
+          },
+          {
+            "template": "window.aggregate",
+            "device": "BS_1_MO1",
+            "keys": ["AMBIENT_T", "BAT_T"],
+            "aggs": ["avg"],
+            "window": "5m"
+          },
+          {
+            "template": "window.aggregate",
+            "device": "BS_1_MO1",
+            "keys": ["BAT_T"],
+            "aggs": ["max"],
+            "window": "5m"
+          },
+          {
+            "template": "window.aggregate",
+            "device": "PDR1_LP1_IED1",
+            "keys": ["Ua", "Ub", "Uc"],
+            "aggs": ["avg"],
+            "window": "5m"
+          },
+          {
+            "template": "window.delta",
+            "device": "BS_1_EMS",
+            "key": "totalChargeEnergy",
+            "window": "5m",
+            "output": "charge5m"
+          },
+          {
+            "template": "window.delta",
+            "device": "BS_1_EMS",
+            "key": "totalDischargeEnergy",
+            "window": "5m",
+            "output": "discharge5m"
+          },
+          {
+            "template": "window.integrate",
+            "device": "PDR1_LP1_IED1",
+            "key": "P",
+            "window": "5m",
+            "output": "loadEnergy5m"
+          },
+          {
+            "template": "alarm.threshold",
+            "name": "电池组温度告警",
+            "device": "BS_1_MO1",
+            "key": "BAT_T",
+            "condition": {
+              "op": "gt",
+              "value": 50
+            },
+            "severity": "CRITICAL",
+            "message": "电池组温度预警,当前温度:{value}度"
+          },
+          {
+            "template": "alarm.threshold",
+            "name": "环境温度告警",
+            "device": "BS_1_MO1",
+            "key": "AMBIENT_T",
+            "condition": {
+              "op": "gt",
+              "value": 45
+            },
+            "severity": "WARNING",
+            "message": "环境温度预警,当前温度:{value}度"
+          },
+          {
+            "template": "alarm.threshold",
+            "name": "烟感告警",
+            "device": "BS_1_SENS",
+            "key": "SMOKE_DET_ALM",
+            "condition": {
+              "op": "eq",
+              "value": 1
+            },
+            "severity": "CRITICAL",
+            "message": "烟感状态异常,可能着火"
+          },
+          {
+            "template": "alarm.threshold",
+            "name": "通讯异常告警",
+            "device": "BS_1_SENS",
+            "key": "COM",
+            "condition": {
+              "op": "eq",
+              "value": 0
+            },
+            "severity": "WARNING",
+            "message": "基站通讯异常"
+          },
+          {
+            "template": "alarm.threshold",
+            "name": "系统状态告警",
+            "device": "BS_1_SENS",
+            "key": "SYS_NORMAL",
+            "condition": {
+              "op": "eq",
+              "value": 0
+            },
+            "severity": "WARNING",
+            "message": "基站系统状态异常"
+          },
+          {
+            "template": "alarm.threshold",
+            "name": "电压越限告警",
+            "device": "PDR1_LP1_IED1",
+            "key": "Ua",
+            "condition": {
+              "op": "gt",
+              "value": 245
+            },
+            "severity": "WARNING",
+            "message": "A相电压越限:{value}V"
+          }
+        ],
+        "rollup": {
+          "chainName": "Periodic Rollups"
+        },
+        "layout": {
+          "header": {
+            "title": "基站储能综合监控",
+            "subtitle": "滨湖宝兴村 · BS-1/BS-2",
+            "showClock": true,
+            "showDate": true
+          },
+          "pages": [
+            {
+              "id": "p1",
+              "title": "储能总览",
+              "template": "console",
+              "slots": {
+                "s1": {
+                  "kind": "metric",
+                  "device": "BS_1_MO1",
+                  "key": "BAT_T",
+                  "card": "stat",
+                  "title": "电池组温度"
+                },
+                "s2": {
+                  "kind": "metric",
+                  "device": "BS_1_EMS",
+                  "key": "P",
+                  "card": "stat",
+                  "title": "充放电功率"
+                },
+                "s3": {
+                  "kind": "metric",
+                  "device": "BS_1_MO1",
+                  "key": "SOC",
+                  "card": "stat",
+                  "title": "电池电量"
+                },
+                "s4": {
+                  "kind": "alarm",
+                  "device": "BS_1_SENS",
+                  "key": "烟感告警",
+                  "card": "alarm",
+                  "title": "烟感监控"
+                },
+                "g1": {
+                  "kind": "metric",
+                  "device": "BS_1_MO1",
+                  "key": "BAT_T",
+                  "card": "line",
+                  "title": "电池组温度趋势"
+                },
+                "g2": {
+                  "kind": "metric",
+                  "device": "BS_1_EMS",
+                  "key": "P",
+                  "card": "line",
+                  "title": "EMS 充放电功率"
+                },
+                "g3": {
+                  "kind": "metric",
+                  "device": "BS_1_EMS",
+                  "key": "charge5m",
+                  "card": "bar",
+                  "title": "每5分钟充电量"
+                },
+                "g4": {
+                  "kind": "metric",
+                  "device": "BS_1_EMS",
+                  "key": "discharge5m",
+                  "card": "bar",
+                  "title": "每5分钟放电量"
+                }
+              }
+            },
+            {
+              "id": "p2",
+              "title": "配电监测",
+              "template": "focus",
+              "slots": {
+                "s1": {
+                  "kind": "metric",
+                  "device": "PDR1_LP1_IED1",
+                  "key": "avgVoltage",
+                  "card": "stat",
+                  "title": "三相平均电压"
+                },
+                "s2": {
+                  "kind": "metric",
+                  "device": "PDR1_LP1_IED1",
+                  "key": "P",
+                  "card": "stat",
+                  "title": "有功功率"
+                },
+                "s3": {
+                  "kind": "alarm",
+                  "device": "PDR1_LP1_IED1",
+                  "key": "电压越限告警",
+                  "card": "alarm",
+                  "title": "电压越限监控"
+                },
+                "g1": {
+                  "kind": "metric",
+                  "device": "PDR1_LP1_IED1",
+                  "key": "Ua",
+                  "card": "line",
+                  "title": "A相电压趋势"
+                },
+                "g2": {
+                  "kind": "metric",
+                  "device": "PDR1_LP1_IED1",
+                  "key": "loadEnergy5m",
+                  "card": "bar",
+                  "title": "每5分钟用电量"
+                },
+                "g3": {
+                  "kind": "metric",
+                  "device": "PDR1_LP1_IED1",
+                  "key": "Q",
+                  "card": "line",
+                  "title": "无功功率"
+                }
+              }
+            },
+            {
+              "id": "p3",
+              "title": "环境安全",
+              "template": "console",
+              "slots": {
+                "s1": {
+                  "kind": "metric",
+                  "device": "BS_1_MO1",
+                  "key": "AMBIENT_T",
+                  "card": "stat",
+                  "title": "基站1环境温度"
+                },
+                "s2": {
+                  "kind": "metric",
+                  "device": "BS_2_MO1",
+                  "key": "AMBIENT_T",
+                  "card": "stat",
+                  "title": "基站2环境温度"
+                },
+                "s3": {
+                  "kind": "alarm",
+                  "device": "BS_1_SENS",
+                  "key": "通讯异常告警",
+                  "card": "alarm",
+                  "title": "通讯监控"
+                },
+                "s4": {
+                  "kind": "alarm",
+                  "device": "BS_1_SENS",
+                  "key": "系统状态告警",
+                  "card": "alarm",
+                  "title": "系统状态"
+                },
+                "g1": {
+                  "kind": "metric",
+                  "device": "BS_1_MO1",
+                  "key": "AMBIENT_T",
+                  "card": "line",
+                  "title": "基站1环境温度趋势"
+                },
+                "g2": {
+                  "kind": "metric",
+                  "device": "BS_2_MO1",
+                  "key": "BAT_T",
+                  "card": "line",
+                  "title": "基站2电池温度趋势"
+                }
+              }
+            }
+          ]
+        },
+        "display": [
+          {
+            "device": "BS_1_MO1",
+            "key": "BAT_T",
+            "kind": "metric",
+            "card": "stat"
+          },
+          {
+            "device": "BS_1_EMS",
+            "key": "P",
+            "kind": "metric",
+            "card": "stat"
+          },
+          {
+            "device": "BS_1_MO1",
+            "key": "SOC",
+            "kind": "metric",
+            "card": "stat"
+          },
+          {
+            "device": "BS_1_SENS",
+            "key": "烟感告警",
+            "kind": "alarm",
+            "card": "badge"
+          },
+          {
+            "device": "BS_1_MO1",
+            "key": "BAT_T",
+            "kind": "metric",
+            "card": "line"
+          },
+          {
+            "device": "BS_1_EMS",
+            "key": "P",
+            "kind": "metric",
+            "card": "line"
+          },
+          {
+            "device": "BS_1_EMS",
+            "key": "charge5m",
+            "kind": "metric",
+            "card": "bar"
+          },
+          {
+            "device": "BS_1_EMS",
+            "key": "discharge5m",
+            "kind": "metric",
+            "card": "bar"
+          },
+          {
+            "device": "PDR1_LP1_IED1",
+            "key": "avgVoltage",
+            "kind": "metric",
+            "card": "stat"
+          },
+          {
+            "device": "PDR1_LP1_IED1",
+            "key": "P",
+            "kind": "metric",
+            "card": "stat"
+          },
+          {
+            "device": "PDR1_LP1_IED1",
+            "key": "电压越限告警",
+            "kind": "alarm",
+            "card": "badge"
+          },
+          {
+            "device": "PDR1_LP1_IED1",
+            "key": "Ua",
+            "kind": "metric",
+            "card": "line"
+          },
+          {
+            "device": "PDR1_LP1_IED1",
+            "key": "loadEnergy5m",
+            "kind": "metric",
+            "card": "bar"
+          },
+          {
+            "device": "PDR1_LP1_IED1",
+            "key": "Q",
+            "kind": "metric",
+            "card": "line"
+          },
+          {
+            "device": "BS_1_MO1",
+            "key": "AMBIENT_T",
+            "kind": "metric",
+            "card": "stat"
+          },
+          {
+            "device": "BS_2_MO1",
+            "key": "AMBIENT_T",
+            "kind": "metric",
+            "card": "stat"
+          },
+          {
+            "device": "BS_1_SENS",
+            "key": "通讯异常告警",
+            "kind": "alarm",
+            "card": "badge"
+          },
+          {
+            "device": "BS_1_SENS",
+            "key": "系统状态告警",
+            "kind": "alarm",
+            "card": "badge"
+          },
+          {
+            "device": "BS_1_MO1",
+            "key": "AMBIENT_T",
+            "kind": "metric",
+            "card": "line"
+          },
+          {
+            "device": "BS_2_MO1",
+            "key": "BAT_T",
+            "kind": "metric",
+            "card": "line"
+          },
+          {
+            "device": "BS_1_MO1",
+            "key": "电池组温度告警",
+            "kind": "alarm",
+            "card": "banner"
+          },
+          {
+            "device": "BS_1_MO1",
+            "key": "环境温度告警",
+            "kind": "alarm",
+            "card": "banner"
+          }
+        ]
+      }
+    }
+  }
+}

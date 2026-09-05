@@ -1,0 +1,4827 @@
+{
+  "site": {
+    "name": "xrs-mirror-test",
+    "assetType": "tbsite"
+  },
+  "validation": {
+    "errors": [],
+    "notes": []
+  },
+  "computations": [
+    {
+      "template": "alarm.threshold",
+      "name": "功率越限告警",
+      "key": "P",
+      "condition": {
+        "op": "gt",
+        "value": 500
+      },
+      "severity": "WARNING",
+      "message": "有功功率越限:{value} kW",
+      "trigger": "edge",
+      "device": "SSP1_GP1_IED1",
+      "devices": [
+        "SSP1_GP1_IED1",
+        "SSP1_GP4_IED1",
+        "SSP1_GP5_IED1",
+        "SSP1_GP6_IED1",
+        "SSP1_GP7_IED1",
+        "SSP1_GP8_IED1",
+        "SSP1_GP9_IED1",
+        "SSP1_GP10_IED1",
+        "SSP1_GP11_IED1",
+        "SSP1_GP12_IED1",
+        "SSP1_GP13_IED1",
+        "SSP1_GP14_IED1",
+        "SSP1_GP15_IED1",
+        "SSP1_GP16_IED1",
+        "SSP1_GP19_IED1",
+        "SSP2_GP1_IED1",
+        "SSP2_GP4_IED1",
+        "SSP2_GP5_IED1",
+        "SSP2_GP6_IED1",
+        "SSP2_GP7_IED1",
+        "SSP2_GP8_IED1",
+        "PDR1_LP1_IED1",
+        "PDR1_LP9_IED1",
+        "PDR2_GP1_IED1",
+        "PDR2_GP3_IED1",
+        "PDR2_LP1_IED1",
+        "PDR3_GP1_IED1",
+        "PDR3_GP3_IED1",
+        "PDR3_LP1_IED1",
+        "PDR4_T3_IED1",
+        "PDR4_LP1_IED1",
+        "PDR4_LP9_IED1"
+      ]
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP1_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP1_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP1_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP4_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP4_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP4_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP5_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP5_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP5_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP6_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP6_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP6_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP7_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP7_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP7_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP8_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP8_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP8_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP9_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP9_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP9_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP10_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP10_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP10_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP11_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP11_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP11_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP12_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP12_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP12_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP13_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP13_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP13_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP14_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP14_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP14_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP15_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP15_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP15_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP16_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP16_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP16_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP1_GP19_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP1_GP19_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP1_GP19_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP2_GP1_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP2_GP1_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP2_GP1_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP2_GP4_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP2_GP4_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP2_GP4_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP2_GP5_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP2_GP5_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP2_GP5_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP2_GP6_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP2_GP6_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP2_GP6_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP2_GP7_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP2_GP7_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP2_GP7_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "SSP2_GP8_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "SSP2_GP8_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "SSP2_GP8_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR1_LP1_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "PDR1_LP1_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR1_LP1_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR1_LP9_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "PDR1_LP9_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR1_LP9_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR2_GP1_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "PDR2_GP1_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR2_GP1_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR2_GP3_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "PDR2_GP3_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR2_GP3_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR2_LP1_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "PDR2_LP1_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR2_LP1_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR3_GP1_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "PDR3_GP1_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR3_GP1_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR3_GP3_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "PDR3_GP3_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR3_GP3_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR3_LP1_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "PDR3_LP1_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR3_LP1_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR4_T3_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "PDR4_T3_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR4_T3_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR4_LP1_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "PDR4_LP1_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR4_LP1_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR4_LP9_IED1",
+      "output": "pqSum",
+      "inputs": {
+        "a": {
+          "device": "PDR4_LP9_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR4_LP9_IED1",
+          "key": "Q"
+        }
+      }
+    },
+    {
+      "template": "aggregate.crossEntity",
+      "name": "全站总有功功率",
+      "selector": {
+        "profiles": ["IED"],
+        "prefixes": []
+      },
+      "key": "P",
+      "agg": "sum",
+      "asset": "RT_TOTAL_P_TEST",
+      "output": "totalP"
+    },
+    {
+      "template": "revenue.periodic",
+      "name": "润扬储能收益",
+      "charge": {
+        "device": "RY_GZ_ESS_PCS",
+        "key": "AC_CHG_HIST"
+      },
+      "discharge": {
+        "device": "RY_GZ_ESS_PCS",
+        "key": "AC_DISCHG_HIST"
+      },
+      "priceAsset": "JIZHAN_EELECTRICITY_PRICE_CONFIG",
+      "window": "5m",
+      "asset": "RT_REVENUE_TEST",
+      "output": "revenue5m"
+    },
+    {
+      "template": "window.cascade",
+      "device": "PDR1_LP1_IED1",
+      "keys": ["P"],
+      "aggs": ["avg", "max"]
+    },
+    {
+      "template": "expr.custom",
+      "device": "PDR1_LP1_IED1",
+      "output": "absQ",
+      "terms": [
+        {
+          "kind": "key",
+          "device": "PDR1_LP1_IED1",
+          "key": "Q",
+          "abs": true
+        },
+        {
+          "kind": "const",
+          "value": 0
+        }
+      ],
+      "ops": ["+"]
+    },
+    {
+      "template": "expr.add",
+      "device": "PDR1_LP1_IED1",
+      "output": "pqState",
+      "outputMode": "attr",
+      "inputs": {
+        "a": {
+          "device": "PDR1_LP1_IED1",
+          "key": "P"
+        },
+        "b": {
+          "device": "PDR1_LP1_IED1",
+          "key": "Q"
+        }
+      }
+    }
+  ],
+  "cfs": [
+    {
+      "device": "SSP1_GP1_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP1_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP4_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP4_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP5_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP5_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP6_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP6_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP7_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP7_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP8_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP8_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP9_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP9_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP10_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP10_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP11_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP11_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP12_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP12_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP13_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP13_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP14_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP14_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP15_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP15_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP16_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP16_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP1_GP19_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP1_GP19_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP2_GP1_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP2_GP1_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP2_GP4_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP2_GP4_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP2_GP5_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP2_GP5_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP2_GP6_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP2_GP6_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP2_GP7_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP2_GP7_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "SSP2_GP8_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:SSP2_GP8_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR1_LP1_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR1_LP1_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR1_LP9_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR1_LP9_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR2_GP1_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR2_GP1_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR2_GP3_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR2_GP3_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR2_LP1_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR2_LP1_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR3_GP1_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR3_GP1_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR3_GP3_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR3_GP3_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR3_LP1_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR3_LP1_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR4_T3_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR4_T3_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR4_LP1_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR4_LP1_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR4_LP9_IED1",
+      "output": "pqSum",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR4_LP9_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqSum",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "pqSum",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR1_LP1_IED1",
+      "output": "absQ",
+      "template": "expr.custom",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR1_LP1_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "absQ",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "v0": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "(abs(v0)) + 0",
+          "output": {
+            "type": "TIME_SERIES",
+            "name": "absQ",
+            "scope": null,
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    },
+    {
+      "device": "PDR1_LP1_IED1",
+      "output": "pqState",
+      "template": "expr.add",
+      "body": {
+        "entityId": {
+          "entityType": "DEVICE",
+          "id": "dev:PDR1_LP1_IED1"
+        },
+        "type": "SIMPLE",
+        "name": "pqState",
+        "configurationVersion": 1,
+        "configuration": {
+          "type": "SIMPLE",
+          "arguments": {
+            "a": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "P"
+              }
+            },
+            "b": {
+              "refEntityKey": {
+                "type": "TS_LATEST",
+                "key": "Q"
+              }
+            }
+          },
+          "expression": "a + b",
+          "output": {
+            "type": "ATTRIBUTES",
+            "name": "pqState",
+            "scope": "SERVER_SCOPE",
+            "decimalsByDefault": 2
+          }
+        }
+      }
+    }
+  ],
+  "aggregates": [
+    {
+      "output": "totalP",
+      "asset": "RT_TOTAL_P_TEST",
+      "members": [
+        "SSP1_GP1_IED1",
+        "SSP1_GP4_IED1",
+        "SSP1_GP5_IED1",
+        "SSP1_GP6_IED1",
+        "SSP1_GP7_IED1",
+        "SSP1_GP8_IED1",
+        "SSP1_GP9_IED1",
+        "SSP1_GP10_IED1",
+        "SSP1_GP11_IED1",
+        "SSP1_GP12_IED1",
+        "SSP1_GP13_IED1",
+        "SSP1_GP14_IED1",
+        "SSP1_GP15_IED1",
+        "SSP1_GP16_IED1",
+        "SSP1_GP19_IED1",
+        "SSP2_GP1_IED1",
+        "SSP2_GP4_IED1",
+        "SSP2_GP5_IED1",
+        "SSP2_GP6_IED1",
+        "SSP2_GP7_IED1",
+        "SSP2_GP8_IED1",
+        "PDR1_LP1_IED1",
+        "PDR1_LP9_IED1",
+        "PDR2_GP1_IED1",
+        "PDR2_GP3_IED1",
+        "PDR2_LP1_IED1",
+        "PDR3_GP1_IED1",
+        "PDR3_GP3_IED1",
+        "PDR3_LP1_IED1",
+        "PDR4_T3_IED1",
+        "PDR4_LP1_IED1",
+        "PDR4_LP9_IED1"
+      ],
+      "layered": true,
+      "bodies": [
+        {
+          "type": "SIMPLE",
+          "name": "totalP__p0",
+          "configurationVersion": 1,
+          "configuration": {
+            "type": "SIMPLE",
+            "arguments": {
+              "v0": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP1_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v1": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP4_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v2": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP5_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v3": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP6_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v4": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP7_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v5": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP8_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v6": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP9_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v7": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP10_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v8": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP11_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v9": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP12_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              }
+            },
+            "expression": "v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9",
+            "output": {
+              "type": "TIME_SERIES",
+              "name": "totalP__p0",
+              "scope": null,
+              "decimalsByDefault": 2,
+              "strategy": {
+                "type": "IMMEDIATE",
+                "ttl": 0,
+                "saveTimeSeries": true,
+                "saveLatest": true,
+                "sendWsUpdate": true,
+                "processCfs": true
+              }
+            }
+          }
+        },
+        {
+          "type": "SIMPLE",
+          "name": "totalP__p1",
+          "configurationVersion": 1,
+          "configuration": {
+            "type": "SIMPLE",
+            "arguments": {
+              "v0": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP13_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v1": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP14_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v2": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP15_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v3": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP16_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v4": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP1_GP19_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v5": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP2_GP1_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v6": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP2_GP4_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v7": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP2_GP5_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v8": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP2_GP6_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v9": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP2_GP7_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              }
+            },
+            "expression": "v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9",
+            "output": {
+              "type": "TIME_SERIES",
+              "name": "totalP__p1",
+              "scope": null,
+              "decimalsByDefault": 2,
+              "strategy": {
+                "type": "IMMEDIATE",
+                "ttl": 0,
+                "saveTimeSeries": true,
+                "saveLatest": true,
+                "sendWsUpdate": true,
+                "processCfs": true
+              }
+            }
+          }
+        },
+        {
+          "type": "SIMPLE",
+          "name": "totalP__p2",
+          "configurationVersion": 1,
+          "configuration": {
+            "type": "SIMPLE",
+            "arguments": {
+              "v0": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:SSP2_GP8_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v1": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:PDR1_LP1_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v2": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:PDR1_LP9_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v3": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:PDR2_GP1_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v4": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:PDR2_GP3_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v5": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:PDR2_LP1_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v6": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:PDR3_GP1_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v7": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:PDR3_GP3_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v8": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:PDR3_LP1_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v9": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:PDR4_T3_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              }
+            },
+            "expression": "v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9",
+            "output": {
+              "type": "TIME_SERIES",
+              "name": "totalP__p2",
+              "scope": null,
+              "decimalsByDefault": 2,
+              "strategy": {
+                "type": "IMMEDIATE",
+                "ttl": 0,
+                "saveTimeSeries": true,
+                "saveLatest": true,
+                "sendWsUpdate": true,
+                "processCfs": true
+              }
+            }
+          }
+        },
+        {
+          "type": "SIMPLE",
+          "name": "totalP__p3",
+          "configurationVersion": 1,
+          "configuration": {
+            "type": "SIMPLE",
+            "arguments": {
+              "v0": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:PDR4_LP1_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              },
+              "v1": {
+                "refEntityId": {
+                  "entityType": "DEVICE",
+                  "id": "dev:PDR4_LP9_IED1"
+                },
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "P"
+                },
+                "defaultValue": "0"
+              }
+            },
+            "expression": "v0 + v1",
+            "output": {
+              "type": "TIME_SERIES",
+              "name": "totalP__p3",
+              "scope": null,
+              "decimalsByDefault": 2,
+              "strategy": {
+                "type": "IMMEDIATE",
+                "ttl": 0,
+                "saveTimeSeries": true,
+                "saveLatest": true,
+                "sendWsUpdate": true,
+                "processCfs": true
+              }
+            }
+          }
+        },
+        {
+          "type": "SIMPLE",
+          "name": "totalP",
+          "configurationVersion": 1,
+          "configuration": {
+            "type": "SIMPLE",
+            "arguments": {
+              "p0": {
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "totalP__p0"
+                },
+                "defaultValue": "0"
+              },
+              "p1": {
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "totalP__p1"
+                },
+                "defaultValue": "0"
+              },
+              "p2": {
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "totalP__p2"
+                },
+                "defaultValue": "0"
+              },
+              "p3": {
+                "refEntityKey": {
+                  "type": "TS_LATEST",
+                  "key": "totalP__p3"
+                },
+                "defaultValue": "0"
+              }
+            },
+            "expression": "p0 + p1 + p2 + p3",
+            "output": {
+              "type": "TIME_SERIES",
+              "name": "totalP",
+              "scope": null,
+              "decimalsByDefault": 2,
+              "strategy": {
+                "type": "IMMEDIATE",
+                "ttl": 0,
+                "saveTimeSeries": true,
+                "saveLatest": true,
+                "sendWsUpdate": true,
+                "processCfs": true
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "revenue": {
+    "chainName": "Site Revenue · xrs-mirror-test",
+    "assets": ["RT_REVENUE_TEST"],
+    "items": [
+      {
+        "template": "revenue.periodic",
+        "name": "润扬储能收益",
+        "charge": {
+          "device": "RY_GZ_ESS_PCS",
+          "key": "AC_CHG_HIST"
+        },
+        "discharge": {
+          "device": "RY_GZ_ESS_PCS",
+          "key": "AC_DISCHG_HIST"
+        },
+        "priceAsset": "JIZHAN_EELECTRICITY_PRICE_CONFIG",
+        "window": "5m",
+        "asset": "RT_REVENUE_TEST",
+        "output": "revenue5m"
+      }
+    ],
+    "metadata": {
+      "ruleChainId": {
+        "entityType": "RULE_CHAIN",
+        "id": "chain:Site Revenue · xrs-mirror-test"
+      },
+      "firstNodeIndex": null,
+      "nodes": [
+        {
+          "type": "org.thingsboard.rule.engine.debug.TbMsgGeneratorNode",
+          "name": "tick 收益 revenue5m",
+          "configuration": {
+            "msgCount": 0,
+            "periodInSeconds": 300,
+            "originatorId": "dev:RY_GZ_ESS_PCS",
+            "originatorType": "DEVICE",
+            "queueName": null,
+            "jsScript": "return { msg: {}, metadata: { revenue: 'true' }, msgType: 'REVENUE_TICK' };"
+          },
+          "additionalInfo": {
+            "layoutX": 60,
+            "layoutY": 80
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.metadata.TbGetTelemetryNode",
+          "name": "取电量 revenue5m",
+          "configuration": {
+            "latestTsKeyNames": ["AC_CHG_HIST", "AC_DISCHG_HIST"],
+            "fetchMode": "ALL",
+            "orderBy": "ASC",
+            "aggregation": "NONE",
+            "limit": 1000,
+            "useMetadataIntervalPatterns": false,
+            "startInterval": 300,
+            "startIntervalTimeUnit": "SECONDS",
+            "endInterval": 1,
+            "endIntervalTimeUnit": "SECONDS"
+          },
+          "additionalInfo": {
+            "layoutX": 280,
+            "layoutY": 80
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
+          "name": "切到资产 JIZHAN_EELECTRICITY_PRICE_CONFIG",
+          "configuration": {
+            "originatorSource": "ENTITY",
+            "entityType": "ASSET",
+            "entityNamePattern": "JIZHAN_EELECTRICITY_PRICE_CONFIG",
+            "relationsQuery": {
+              "direction": "FROM",
+              "maxLevel": 1,
+              "filters": [
+                {
+                  "relationType": "Contains",
+                  "entityTypes": [],
+                  "negate": false
+                }
+              ],
+              "fetchLastLevelOnly": false
+            }
+          },
+          "additionalInfo": {
+            "layoutX": 500,
+            "layoutY": 80
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.metadata.TbGetAttributesNode",
+          "name": "取电价配置",
+          "configuration": {
+            "tellFailureIfAbsent": true,
+            "fetchTo": "METADATA",
+            "clientAttributeNames": [],
+            "sharedAttributeNames": [],
+            "serverAttributeNames": ["electricityPrice"],
+            "latestTsKeyNames": [],
+            "getLatestValueWithTs": false
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 80
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+          "name": "算收益 revenue5m",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "\nvar spec = {\"chargeKey\": \"AC_CHG_HIST\", \"dischargeKey\": \"AC_DISCHG_HIST\", \"output\": \"revenue5m\"};\nfunction delta(key) {\n    var raw = metadata[key];\n    if (!raw) return 0;\n    var pts = JSON.parse(raw)\n        .map(function (p) { return [parseInt(p.ts), parseFloat(p.value)]; })\n        .filter(function (p) { return !isNaN(p[0]) && !isNaN(p[1]); })\n        .sort(function (a, b) { return a[0] - b[0]; });\n    if (pts.length < 2) return 0;\n    var d = pts[pts.length - 1][1] - pts[0][1];\n    return d > 0 ? d : 0;\n}\nvar cfg = {};\ntry { cfg = JSON.parse(metadata.ss_electricityPrice || '{}'); } catch (e) {}\nvar prices = cfg.prices || [];\nvar hour = new Date(Date.now() + 8 * 3600000).getUTCHours(); // 东八区时段(TB 服务器可能是 UTC)\nvar price = prices.length === 24 ? parseFloat(prices[hour]) : 0;\nvar charge = delta(spec.chargeKey);\nvar discharge = delta(spec.dischargeKey);\nvar out = {};\nout[spec.output] = Math.round((discharge - charge) * price * 10000) / 10000;\nout[spec.output + 'Income'] = Math.round(discharge * price * 10000) / 10000;\nout[spec.output + 'Cost'] = Math.round(charge * price * 10000) / 10000;\nreturn { msg: out, metadata: metadata, msgType: 'POST_TELEMETRY_REQUEST' };\n"
+          },
+          "additionalInfo": {
+            "layoutX": 900,
+            "layoutY": 80
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbChangeOriginatorNode",
+          "name": "切到资产 RT_REVENUE_TEST",
+          "configuration": {
+            "originatorSource": "ENTITY",
+            "entityType": "ASSET",
+            "entityNamePattern": "RT_REVENUE_TEST",
+            "relationsQuery": {
+              "direction": "FROM",
+              "maxLevel": 1,
+              "filters": [
+                {
+                  "relationType": "Contains",
+                  "entityTypes": [],
+                  "negate": false
+                }
+              ],
+              "fetchLastLevelOnly": false
+            }
+          },
+          "additionalInfo": {
+            "layoutX": 1100,
+            "layoutY": 80
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
+          "name": "存收益 revenue5m",
+          "configuration": {
+            "defaultTTL": 0
+          },
+          "additionalInfo": {
+            "layoutX": 1300,
+            "layoutY": 80
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.debug.TbMsgGeneratorNode",
+          "name": "tick 日收益 revenue5m",
+          "configuration": {
+            "msgCount": 0,
+            "periodInSeconds": 300,
+            "originatorId": "asset:RT_REVENUE_TEST",
+            "originatorType": "ASSET",
+            "queueName": null,
+            "jsScript": "var now = Date.now(); var tz = 8 * 3600000; var dayStart = Math.floor((now + tz) / 86400000) * 86400000 - tz; return { msg: {}, metadata: { revenueDaily: 'true', dayStartTs: String(dayStart), dayEndTs: String(now) }, msgType: 'REVENUE_DAILY_TICK' };"
+          },
+          "additionalInfo": {
+            "layoutX": 60,
+            "layoutY": 150
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.metadata.TbGetTelemetryNode",
+          "name": "取当日收益 revenue5m",
+          "configuration": {
+            "latestTsKeyNames": ["revenue5m", "revenue5mIncome", "revenue5mCost"],
+            "fetchMode": "ALL",
+            "orderBy": "ASC",
+            "aggregation": "NONE",
+            "limit": 1000,
+            "useMetadataIntervalPatterns": true,
+            "startIntervalPattern": "${dayStartTs}",
+            "endIntervalPattern": "${dayEndTs}",
+            "startInterval": 86400,
+            "startIntervalTimeUnit": "SECONDS",
+            "endInterval": 1,
+            "endIntervalTimeUnit": "SECONDS"
+          },
+          "additionalInfo": {
+            "layoutX": 280,
+            "layoutY": 150
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+          "name": "算日收益 revenue5m",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "\nvar spec = {\"entries\": [{\"src\": \"revenue5m\", \"out\": \"revenue5mDaily\", \"fn\": \"sum\"}, {\"src\": \"revenue5mIncome\", \"out\": \"revenue5mIncomeDaily\", \"fn\": \"sum\"}, {\"src\": \"revenue5mCost\", \"out\": \"revenue5mCostDaily\", \"fn\": \"sum\"}]};\nfunction series(key) {\n    var raw = metadata[key];\n    if (!raw) return [];\n    return JSON.parse(raw).map(function (p) { return parseFloat(p.value); })\n        .filter(function (v) { return !isNaN(v); });\n}\nvar fns = {\n    avg: function (v) { return v.reduce(function (a, b) { return a + b; }, 0) / v.length; },\n    min: function (v) { return Math.min.apply(null, v); },\n    max: function (v) { return Math.max.apply(null, v); },\n    sum: function (v) { return v.reduce(function (a, b) { return a + b; }, 0); },\n};\nvar out = {};\nspec.entries.forEach(function (e) {\n    var v = series(e.src);\n    if (v.length) out[e.out] = Math.round(fns[e.fn](v) * 10000) / 10000;\n});\nif (Object.keys(out).length === 0) return { msg: msg, metadata: metadata, msgType: msgType };\nreturn { msg: out, metadata: metadata, msgType: 'POST_TELEMETRY_REQUEST' };\n"
+          },
+          "additionalInfo": {
+            "layoutX": 500,
+            "layoutY": 150
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
+          "name": "存日收益 revenue5m",
+          "configuration": {
+            "defaultTTL": 0
+          },
+          "additionalInfo": {
+            "layoutX": 720,
+            "layoutY": 150
+          }
+        }
+      ],
+      "connections": [
+        {
+          "fromIndex": 0,
+          "toIndex": 1,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 1,
+          "toIndex": 2,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 2,
+          "toIndex": 3,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 3,
+          "toIndex": 4,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 4,
+          "toIndex": 5,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 5,
+          "toIndex": 6,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 7,
+          "toIndex": 8,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 8,
+          "toIndex": 9,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 9,
+          "toIndex": 10,
+          "type": "Success"
+        }
+      ],
+      "ruleChainConnections": null
+    }
+  },
+  "rollup": {
+    "chainName": "Site Rollups · xrs-mirror-test",
+    "groups": {},
+    "cascades": [
+      {
+        "template": "window.cascade",
+        "device": "PDR1_LP1_IED1",
+        "keys": ["P"],
+        "aggs": ["avg", "max"]
+      }
+    ],
+    "metadata": {
+      "ruleChainId": {
+        "entityType": "RULE_CHAIN",
+        "id": "chain:Site Rollups · xrs-mirror-test"
+      },
+      "firstNodeIndex": null,
+      "nodes": [
+        {
+          "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
+          "name": "save rollups",
+          "configuration": {
+            "defaultTTL": 0
+          },
+          "additionalInfo": {
+            "layoutX": 1000,
+            "layoutY": 300
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.debug.TbMsgGeneratorNode",
+          "name": "tick 级联 PDR1_LP1_IED1 @5m",
+          "configuration": {
+            "msgCount": 0,
+            "periodInSeconds": 300,
+            "originatorId": "dev:PDR1_LP1_IED1",
+            "originatorType": "DEVICE",
+            "queueName": null,
+            "jsScript": "return { msg: {}, metadata: { cascade: 'true' }, msgType: 'CASCADE_TICK' };"
+          },
+          "additionalInfo": {
+            "layoutX": 100,
+            "layoutY": 900
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.metadata.TbGetTelemetryNode",
+          "name": "fetch 级联 PDR1_LP1_IED1 @5m",
+          "configuration": {
+            "latestTsKeyNames": ["P"],
+            "fetchMode": "ALL",
+            "orderBy": "ASC",
+            "aggregation": "NONE",
+            "limit": 1000,
+            "useMetadataIntervalPatterns": false,
+            "startInterval": 300,
+            "startIntervalTimeUnit": "SECONDS",
+            "endInterval": 1,
+            "endIntervalTimeUnit": "SECONDS"
+          },
+          "additionalInfo": {
+            "layoutX": 400,
+            "layoutY": 900
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+          "name": "级联汇算 PDR1_LP1_IED1 @5m",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "\nvar spec = {\"entries\": [{\"src\": \"P\", \"out\": \"PAvg5m\", \"fn\": \"avg\"}, {\"src\": \"P\", \"out\": \"PMax5m\", \"fn\": \"max\"}]};\nfunction series(key) {\n    var raw = metadata[key];\n    if (!raw) return [];\n    return JSON.parse(raw).map(function (p) { return parseFloat(p.value); })\n        .filter(function (v) { return !isNaN(v); });\n}\nvar fns = {\n    avg: function (v) { return v.reduce(function (a, b) { return a + b; }, 0) / v.length; },\n    min: function (v) { return Math.min.apply(null, v); },\n    max: function (v) { return Math.max.apply(null, v); },\n    sum: function (v) { return v.reduce(function (a, b) { return a + b; }, 0); },\n};\nvar out = {};\nspec.entries.forEach(function (e) {\n    var v = series(e.src);\n    if (v.length) out[e.out] = Math.round(fns[e.fn](v) * 10000) / 10000;\n});\nif (Object.keys(out).length === 0) return { msg: msg, metadata: metadata, msgType: msgType };\nreturn { msg: out, metadata: metadata, msgType: 'POST_TELEMETRY_REQUEST' };\n"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 900
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
+          "name": "save ttl=7d",
+          "configuration": {
+            "defaultTTL": 604800
+          },
+          "additionalInfo": {
+            "layoutX": 1300,
+            "layoutY": 60
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.debug.TbMsgGeneratorNode",
+          "name": "tick 级联 PDR1_LP1_IED1 @1h",
+          "configuration": {
+            "msgCount": 0,
+            "periodInSeconds": 3600,
+            "originatorId": "dev:PDR1_LP1_IED1",
+            "originatorType": "DEVICE",
+            "queueName": null,
+            "jsScript": "return { msg: {}, metadata: { cascade: 'true' }, msgType: 'CASCADE_TICK' };"
+          },
+          "additionalInfo": {
+            "layoutX": 100,
+            "layoutY": 1020
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.metadata.TbGetTelemetryNode",
+          "name": "fetch 级联 PDR1_LP1_IED1 @1h",
+          "configuration": {
+            "latestTsKeyNames": ["PAvg5m", "PMax5m"],
+            "fetchMode": "ALL",
+            "orderBy": "ASC",
+            "aggregation": "NONE",
+            "limit": 1000,
+            "useMetadataIntervalPatterns": false,
+            "startInterval": 3600,
+            "startIntervalTimeUnit": "SECONDS",
+            "endInterval": 1,
+            "endIntervalTimeUnit": "SECONDS"
+          },
+          "additionalInfo": {
+            "layoutX": 400,
+            "layoutY": 1020
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+          "name": "级联汇算 PDR1_LP1_IED1 @1h",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "\nvar spec = {\"entries\": [{\"src\": \"PAvg5m\", \"out\": \"PAvg1h\", \"fn\": \"avg\"}, {\"src\": \"PMax5m\", \"out\": \"PMax1h\", \"fn\": \"max\"}]};\nfunction series(key) {\n    var raw = metadata[key];\n    if (!raw) return [];\n    return JSON.parse(raw).map(function (p) { return parseFloat(p.value); })\n        .filter(function (v) { return !isNaN(v); });\n}\nvar fns = {\n    avg: function (v) { return v.reduce(function (a, b) { return a + b; }, 0) / v.length; },\n    min: function (v) { return Math.min.apply(null, v); },\n    max: function (v) { return Math.max.apply(null, v); },\n    sum: function (v) { return v.reduce(function (a, b) { return a + b; }, 0); },\n};\nvar out = {};\nspec.entries.forEach(function (e) {\n    var v = series(e.src);\n    if (v.length) out[e.out] = Math.round(fns[e.fn](v) * 10000) / 10000;\n});\nif (Object.keys(out).length === 0) return { msg: msg, metadata: metadata, msgType: msgType };\nreturn { msg: out, metadata: metadata, msgType: 'POST_TELEMETRY_REQUEST' };\n"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 1020
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
+          "name": "save ttl=90d",
+          "configuration": {
+            "defaultTTL": 7776000
+          },
+          "additionalInfo": {
+            "layoutX": 1300,
+            "layoutY": 160
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.debug.TbMsgGeneratorNode",
+          "name": "tick 级联 PDR1_LP1_IED1 @1d",
+          "configuration": {
+            "msgCount": 0,
+            "periodInSeconds": 86400,
+            "originatorId": "dev:PDR1_LP1_IED1",
+            "originatorType": "DEVICE",
+            "queueName": null,
+            "jsScript": "return { msg: {}, metadata: { cascade: 'true' }, msgType: 'CASCADE_TICK' };"
+          },
+          "additionalInfo": {
+            "layoutX": 100,
+            "layoutY": 1140
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.metadata.TbGetTelemetryNode",
+          "name": "fetch 级联 PDR1_LP1_IED1 @1d",
+          "configuration": {
+            "latestTsKeyNames": ["PAvg1h", "PMax1h"],
+            "fetchMode": "ALL",
+            "orderBy": "ASC",
+            "aggregation": "NONE",
+            "limit": 1000,
+            "useMetadataIntervalPatterns": false,
+            "startInterval": 86400,
+            "startIntervalTimeUnit": "SECONDS",
+            "endInterval": 1,
+            "endIntervalTimeUnit": "SECONDS"
+          },
+          "additionalInfo": {
+            "layoutX": 400,
+            "layoutY": 1140
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+          "name": "级联汇算 PDR1_LP1_IED1 @1d",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "\nvar spec = {\"entries\": [{\"src\": \"PAvg1h\", \"out\": \"PAvg1d\", \"fn\": \"avg\"}, {\"src\": \"PMax1h\", \"out\": \"PMax1d\", \"fn\": \"max\"}]};\nfunction series(key) {\n    var raw = metadata[key];\n    if (!raw) return [];\n    return JSON.parse(raw).map(function (p) { return parseFloat(p.value); })\n        .filter(function (v) { return !isNaN(v); });\n}\nvar fns = {\n    avg: function (v) { return v.reduce(function (a, b) { return a + b; }, 0) / v.length; },\n    min: function (v) { return Math.min.apply(null, v); },\n    max: function (v) { return Math.max.apply(null, v); },\n    sum: function (v) { return v.reduce(function (a, b) { return a + b; }, 0); },\n};\nvar out = {};\nspec.entries.forEach(function (e) {\n    var v = series(e.src);\n    if (v.length) out[e.out] = Math.round(fns[e.fn](v) * 10000) / 10000;\n});\nif (Object.keys(out).length === 0) return { msg: msg, metadata: metadata, msgType: msgType };\nreturn { msg: out, metadata: metadata, msgType: 'POST_TELEMETRY_REQUEST' };\n"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 1140
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode",
+          "name": "save ttl=∞",
+          "configuration": {
+            "defaultTTL": 0
+          },
+          "additionalInfo": {
+            "layoutX": 1300,
+            "layoutY": 260
+          }
+        }
+      ],
+      "connections": [
+        {
+          "fromIndex": 1,
+          "toIndex": 2,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 2,
+          "toIndex": 3,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 3,
+          "toIndex": 4,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 5,
+          "toIndex": 6,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 6,
+          "toIndex": 7,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 7,
+          "toIndex": 8,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 9,
+          "toIndex": 10,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 10,
+          "toIndex": 11,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 11,
+          "toIndex": 12,
+          "type": "Success"
+        }
+      ],
+      "ruleChainConnections": null
+    }
+  },
+  "alarm": {
+    "chainName": "Site Alarms · xrs-mirror-test",
+    "rootFlowName": "site alarms flow · xrs-mirror-test",
+    "items": [
+      {
+        "template": "alarm.threshold",
+        "name": "功率越限告警",
+        "key": "P",
+        "condition": {
+          "op": "gt",
+          "value": 500
+        },
+        "severity": "WARNING",
+        "message": "有功功率越限:{value} kW",
+        "trigger": "edge",
+        "device": "SSP1_GP1_IED1",
+        "devices": [
+          "SSP1_GP1_IED1",
+          "SSP1_GP4_IED1",
+          "SSP1_GP5_IED1",
+          "SSP1_GP6_IED1",
+          "SSP1_GP7_IED1",
+          "SSP1_GP8_IED1",
+          "SSP1_GP9_IED1",
+          "SSP1_GP10_IED1",
+          "SSP1_GP11_IED1",
+          "SSP1_GP12_IED1",
+          "SSP1_GP13_IED1",
+          "SSP1_GP14_IED1",
+          "SSP1_GP15_IED1",
+          "SSP1_GP16_IED1",
+          "SSP1_GP19_IED1",
+          "SSP2_GP1_IED1",
+          "SSP2_GP4_IED1",
+          "SSP2_GP5_IED1",
+          "SSP2_GP6_IED1",
+          "SSP2_GP7_IED1",
+          "SSP2_GP8_IED1",
+          "PDR1_LP1_IED1",
+          "PDR1_LP9_IED1",
+          "PDR2_GP1_IED1",
+          "PDR2_GP3_IED1",
+          "PDR2_LP1_IED1",
+          "PDR3_GP1_IED1",
+          "PDR3_GP3_IED1",
+          "PDR3_LP1_IED1",
+          "PDR4_T3_IED1",
+          "PDR4_LP1_IED1",
+          "PDR4_LP9_IED1"
+        ]
+      }
+    ],
+    "metadata": {
+      "ruleChainId": {
+        "entityType": "RULE_CHAIN",
+        "id": "chain:Site Alarms · xrs-mirror-test"
+      },
+      "firstNodeIndex": 0,
+      "nodes": [
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "entry",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return true;"
+          },
+          "additionalInfo": {
+            "layoutX": 40,
+            "layoutY": 40
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "关于 32 台设备.P?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return [\"SSP1_GP1_IED1\", \"SSP1_GP4_IED1\", \"SSP1_GP5_IED1\", \"SSP1_GP6_IED1\", \"SSP1_GP7_IED1\", \"SSP1_GP8_IED1\", \"SSP1_GP9_IED1\", \"SSP1_GP10_IED1\", \"SSP1_GP11_IED1\", \"SSP1_GP12_IED1\", \"SSP1_GP13_IED1\", \"SSP1_GP14_IED1\", \"SSP1_GP15_IED1\", \"SSP1_GP16_IED1\", \"SSP1_GP19_IED1\", \"SSP2_GP1_IED1\", \"SSP2_GP4_IED1\", \"SSP2_GP5_IED1\", \"SSP2_GP6_IED1\", \"SSP2_GP7_IED1\", \"SSP2_GP8_IED1\", \"PDR1_LP1_IED1\", \"PDR1_LP9_IED1\", \"PDR2_GP1_IED1\", \"PDR2_GP3_IED1\", \"PDR2_LP1_IED1\", \"PDR3_GP1_IED1\", \"PDR3_GP3_IED1\", \"PDR3_LP1_IED1\", \"PDR4_T3_IED1\", \"PDR4_LP1_IED1\", \"PDR4_LP9_IED1\"].indexOf(metadata.deviceName) >= 0 && typeof msg['P'] !== 'undefined';"
+          },
+          "additionalInfo": {
+            "layoutX": 60,
+            "layoutY": 120
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "P > 500?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return Number(msg['P']) > 500;"
+          },
+          "additionalInfo": {
+            "layoutX": 380,
+            "layoutY": 120
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbCreateAlarmNode",
+          "name": "告警: P",
+          "configuration": {
+            "alarmType": "功率越限告警",
+            "severity": "WARNING",
+            "propagate": false,
+            "useMessageAlarmData": false,
+            "overwriteAlarmDetails": false,
+            "dynamicSeverity": false,
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; details.message = '有功功率越限:' + msg['P'] + ' kW'; details.key = 'P'; details.value = msg['P']; details.threshold = 500; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 90
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.action.TbClearAlarmNode",
+          "name": "清除: P",
+          "configuration": {
+            "alarmType": "功率越限告警",
+            "scriptLang": "JS",
+            "alarmDetailsBuildJs": "var details = {}; return details;"
+          },
+          "additionalInfo": {
+            "layoutX": 700,
+            "layoutY": 180
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.metadata.TbGetAttributesNode",
+          "name": "取上次状态",
+          "configuration": {
+            "tellFailureIfAbsent": false,
+            "fetchTo": "METADATA",
+            "clientAttributeNames": [],
+            "sharedAttributeNames": [],
+            "serverAttributeNames": ["almState_P_gt"],
+            "latestTsKeyNames": [],
+            "getLatestValueWithTs": false
+          },
+          "additionalInfo": {
+            "layoutX": 240,
+            "layoutY": 120
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+          "name": "判定变化 功率越限告警",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "var cond = Number(msg['P']) > 500; metadata.cond = String(cond); metadata.changed = String(String(cond) !== metadata.ss_almState_P_gt); return { msg: msg, metadata: metadata, msgType: msgType };"
+          },
+          "additionalInfo": {
+            "layoutX": 400,
+            "layoutY": 120
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.filter.TbJsFilterNode",
+          "name": "状态翻转?",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "return metadata.changed === 'true';"
+          },
+          "additionalInfo": {
+            "layoutX": 540,
+            "layoutY": 120
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.transform.TbTransformMsgNode",
+          "name": "写状态 功率越限告警",
+          "configuration": {
+            "scriptLang": "JS",
+            "jsScript": "var m = {}; m['almState_P_gt'] = metadata.cond === 'true'; return { msg: m, metadata: metadata, msgType: 'POST_ATTRIBUTES_REQUEST' };"
+          },
+          "additionalInfo": {
+            "layoutX": 900,
+            "layoutY": 150
+          }
+        },
+        {
+          "type": "org.thingsboard.rule.engine.telemetry.TbMsgAttributesNode",
+          "name": "存状态属性",
+          "configuration": {
+            "processingSettings": {
+              "type": "ON_EVERY_MESSAGE"
+            },
+            "scope": "SERVER_SCOPE",
+            "notifyDevice": false,
+            "sendAttributesUpdatedNotification": false,
+            "updateAttributesOnlyOnValueChange": true
+          },
+          "additionalInfo": {
+            "layoutX": 1050,
+            "layoutY": 150
+          }
+        }
+      ],
+      "connections": [
+        {
+          "fromIndex": 0,
+          "toIndex": 1,
+          "type": "True"
+        },
+        {
+          "fromIndex": 1,
+          "toIndex": 5,
+          "type": "True"
+        },
+        {
+          "fromIndex": 5,
+          "toIndex": 6,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 6,
+          "toIndex": 7,
+          "type": "Success"
+        },
+        {
+          "fromIndex": 7,
+          "toIndex": 2,
+          "type": "True"
+        },
+        {
+          "fromIndex": 2,
+          "toIndex": 3,
+          "type": "True"
+        },
+        {
+          "fromIndex": 2,
+          "toIndex": 4,
+          "type": "False"
+        },
+        {
+          "fromIndex": 3,
+          "toIndex": 8,
+          "type": "Created"
+        },
+        {
+          "fromIndex": 3,
+          "toIndex": 8,
+          "type": "Updated"
+        },
+        {
+          "fromIndex": 4,
+          "toIndex": 8,
+          "type": "Cleared"
+        },
+        {
+          "fromIndex": 4,
+          "toIndex": 8,
+          "type": "False"
+        },
+        {
+          "fromIndex": 8,
+          "toIndex": 9,
+          "type": "Success"
+        }
+      ],
+      "ruleChainConnections": null
+    }
+  },
+  "siteAsset": {
+    "name": "xrs-mirror-test",
+    "type": "tbsite",
+    "attributes": {
+      "siteConfig": {
+        "schema": "tbsite/v2",
+        "site": {
+          "name": "xrs-mirror-test",
+          "label": "仙人山镜像验证站"
+        },
+        "devices": [
+          {
+            "name": "SSP1_GP1_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "Uab",
+                "label": "Uab",
+                "unit": ""
+              },
+              {
+                "key": "Ubc",
+                "label": "Ubc",
+                "unit": ""
+              },
+              {
+                "key": "Uca",
+                "label": "Uca",
+                "unit": ""
+              },
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "F",
+                "label": "F",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP4_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP5_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP6_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP7_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP8_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "Uab",
+                "label": "Uab",
+                "unit": ""
+              },
+              {
+                "key": "Ubc",
+                "label": "Ubc",
+                "unit": ""
+              },
+              {
+                "key": "Uca",
+                "label": "Uca",
+                "unit": ""
+              },
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "F",
+                "label": "F",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP9_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP10_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP11_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP12_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP13_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP14_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP15_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP16_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP1_GP19_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "Uab",
+                "label": "Uab",
+                "unit": ""
+              },
+              {
+                "key": "Ubc",
+                "label": "Ubc",
+                "unit": ""
+              },
+              {
+                "key": "Uca",
+                "label": "Uca",
+                "unit": ""
+              },
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "F",
+                "label": "F",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP2_GP1_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "Uca",
+                "label": "Uca",
+                "unit": ""
+              },
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Uab",
+                "label": "Uab",
+                "unit": ""
+              },
+              {
+                "key": "Ubc",
+                "label": "Ubc",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP2_GP4_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP2_GP5_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP2_GP6_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP2_GP7_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "SSP2_GP8_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "PDR1_LP1_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ua",
+                "label": "Ua",
+                "unit": ""
+              },
+              {
+                "key": "Ub",
+                "label": "Ub",
+                "unit": ""
+              },
+              {
+                "key": "Uc",
+                "label": "Uc",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              },
+              {
+                "key": "Ua1",
+                "label": "Ua1",
+                "unit": ""
+              },
+              {
+                "key": "Ub1",
+                "label": "Ub1",
+                "unit": ""
+              },
+              {
+                "key": "Uc1",
+                "label": "Uc1",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "PDR1_LP9_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ua",
+                "label": "Ua",
+                "unit": ""
+              },
+              {
+                "key": "Ub",
+                "label": "Ub",
+                "unit": ""
+              },
+              {
+                "key": "Uc",
+                "label": "Uc",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "PDR2_GP1_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "Uab",
+                "label": "Uab",
+                "unit": ""
+              },
+              {
+                "key": "Ubc",
+                "label": "Ubc",
+                "unit": ""
+              },
+              {
+                "key": "Uca",
+                "label": "Uca",
+                "unit": ""
+              },
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "PDR2_GP3_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "PDR2_LP1_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "Ua",
+                "label": "Ua",
+                "unit": ""
+              },
+              {
+                "key": "Ub",
+                "label": "Ub",
+                "unit": ""
+              },
+              {
+                "key": "Uc",
+                "label": "Uc",
+                "unit": ""
+              },
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "PDR3_GP1_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "Uab",
+                "label": "Uab",
+                "unit": ""
+              },
+              {
+                "key": "Ubc",
+                "label": "Ubc",
+                "unit": ""
+              },
+              {
+                "key": "Uca",
+                "label": "Uca",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "PDR3_GP3_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "PDR3_LP1_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ua",
+                "label": "Ua",
+                "unit": ""
+              },
+              {
+                "key": "Ub",
+                "label": "Ub",
+                "unit": ""
+              },
+              {
+                "key": "Uc",
+                "label": "Uc",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "PDR4_T3_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "QE",
+                "label": "QE",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "PDR4_LP1_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ua",
+                "label": "Ua",
+                "unit": ""
+              },
+              {
+                "key": "Ub",
+                "label": "Ub",
+                "unit": ""
+              },
+              {
+                "key": "Uc",
+                "label": "Uc",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "PDR4_LP9_IED1",
+            "type": "IED",
+            "profile": "IED",
+            "keys": [
+              {
+                "key": "P",
+                "label": "P",
+                "unit": ""
+              },
+              {
+                "key": "Q",
+                "label": "Q",
+                "unit": ""
+              },
+              {
+                "key": "switch_state",
+                "label": "switch_state",
+                "unit": ""
+              },
+              {
+                "key": "Ua",
+                "label": "Ua",
+                "unit": ""
+              },
+              {
+                "key": "Ub",
+                "label": "Ub",
+                "unit": ""
+              },
+              {
+                "key": "Uc",
+                "label": "Uc",
+                "unit": ""
+              },
+              {
+                "key": "Ia",
+                "label": "Ia",
+                "unit": ""
+              },
+              {
+                "key": "Ib",
+                "label": "Ib",
+                "unit": ""
+              },
+              {
+                "key": "Ic",
+                "label": "Ic",
+                "unit": ""
+              },
+              {
+                "key": "CB",
+                "label": "CB",
+                "unit": ""
+              },
+              {
+                "key": "COM",
+                "label": "COM",
+                "unit": ""
+              }
+            ]
+          },
+          {
+            "name": "RY_GZ_ESS_PCS",
+            "type": "default",
+            "profile": "default",
+            "keys": [
+              {
+                "key": "AC_CHG_HIST",
+                "label": "累计充电量",
+                "unit": "kWh"
+              },
+              {
+                "key": "AC_DISCHG_HIST",
+                "label": "累计放电量",
+                "unit": "kWh"
+              }
+            ]
+          }
+        ],
+        "deviceTemplates": [
+          {
+            "name": "IED 三相监控",
+            "selector": {
+              "profiles": ["IED"],
+              "prefixes": []
+            },
+            "items": [
+              {
+                "template": "alarm.threshold",
+                "name": "功率越限告警",
+                "key": "P",
+                "condition": {
+                  "op": "gt",
+                  "value": 500
+                },
+                "severity": "WARNING",
+                "message": "有功功率越限:{value} kW",
+                "trigger": "edge"
+              },
+              {
+                "template": "expr.add",
+                "inputs": {
+                  "a": {
+                    "key": "P"
+                  },
+                  "b": {
+                    "key": "Q"
+                  }
+                },
+                "output": "pqSum"
+              }
+            ]
+          }
+        ],
+        "computations": [
+          {
+            "template": "aggregate.crossEntity",
+            "name": "全站总有功功率",
+            "selector": {
+              "profiles": ["IED"],
+              "prefixes": []
+            },
+            "key": "P",
+            "agg": "sum",
+            "asset": "RT_TOTAL_P_TEST",
+            "output": "totalP"
+          },
+          {
+            "template": "revenue.periodic",
+            "name": "润扬储能收益",
+            "charge": {
+              "device": "RY_GZ_ESS_PCS",
+              "key": "AC_CHG_HIST"
+            },
+            "discharge": {
+              "device": "RY_GZ_ESS_PCS",
+              "key": "AC_DISCHG_HIST"
+            },
+            "priceAsset": "JIZHAN_EELECTRICITY_PRICE_CONFIG",
+            "window": "5m",
+            "asset": "RT_REVENUE_TEST",
+            "output": "revenue5m"
+          },
+          {
+            "template": "window.cascade",
+            "device": "PDR1_LP1_IED1",
+            "keys": ["P"],
+            "aggs": ["avg", "max"]
+          },
+          {
+            "template": "expr.custom",
+            "device": "PDR1_LP1_IED1",
+            "output": "absQ",
+            "terms": [
+              {
+                "kind": "key",
+                "device": "PDR1_LP1_IED1",
+                "key": "Q",
+                "abs": true
+              },
+              {
+                "kind": "const",
+                "value": 0
+              }
+            ],
+            "ops": ["+"]
+          },
+          {
+            "template": "expr.add",
+            "device": "PDR1_LP1_IED1",
+            "output": "pqState",
+            "outputMode": "attr",
+            "inputs": {
+              "a": {
+                "device": "PDR1_LP1_IED1",
+                "key": "P"
+              },
+              "b": {
+                "device": "PDR1_LP1_IED1",
+                "key": "Q"
+              }
+            }
+          }
+        ],
+        "rollup": {
+          "chainName": "Site Rollups · xrs-mirror-test"
+        },
+        "layout": {
+          "pages": [
+            {
+              "id": "p1",
+              "title": "全站汇聚验证",
+              "template": "console",
+              "slots": {
+                "s1": {
+                  "kind": "agg",
+                  "device": "RT_TOTAL_P_TEST",
+                  "key": "totalP",
+                  "card": "stat",
+                  "title": "全站总有功"
+                },
+                "g1": {
+                  "kind": "agg",
+                  "device": "RT_TOTAL_P_TEST",
+                  "key": "totalP",
+                  "card": "line",
+                  "title": "全站总有功曲线"
+                },
+                "s2": {
+                  "kind": "agg",
+                  "device": "RT_REVENUE_TEST",
+                  "key": "revenue5mDaily",
+                  "card": "stat",
+                  "title": "日净收益(滚动24h)"
+                },
+                "g2": {
+                  "kind": "agg",
+                  "device": "RT_REVENUE_TEST",
+                  "key": "revenue5mCostDaily",
+                  "card": "line",
+                  "title": "日充电成本曲线"
+                },
+                "g3": {
+                  "kind": "agg",
+                  "device": "RT_REVENUE_TEST",
+                  "key": "revenue5mIncomeDaily",
+                  "card": "line",
+                  "title": "日放电收入曲线"
+                },
+                "g4": {
+                  "kind": "report",
+                  "device": "84a690c0-7381-11f1-8007-51b9f7714bbe",
+                  "key": "kzRevDay",
+                  "card": "bar",
+                  "title": "基站储能项目1 · 逐日收益(自然日)"
+                }
+              }
+            }
+          ],
+          "header": {
+            "title": "仙人山镜像验证站",
+            "subtitle": "Phase 3 · 全站汇聚",
+            "showClock": true,
+            "showDate": false
+          }
+        },
+        "display": []
+      }
+    }
+  }
+}

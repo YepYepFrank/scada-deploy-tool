@@ -1,7 +1,7 @@
 {
   "name": "@grid/tbsite-compiler",
-  "version": "0.0.1",
-  "description": "规则编译核心(从 publisher.js 抽 TS)+ CLI;tbsite_compile.py 冻结后的唯一编译器",
+  "version": "0.1.0",
+  "description": "规则编译核心(tbsite 配置 → 写入计划,纯函数)+ 写入器 + tbsite CLI;tbsite_compile.py 冻结后的唯一编译器",
   "type": "module",
   "types": "./src/index.ts",
   "exports": {
@@ -21,7 +21,9 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsup",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run",
+    "tbsite": "node bin/tbsite.mjs",
+    "regen:py-plans": "node scripts/regen-python-plans.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

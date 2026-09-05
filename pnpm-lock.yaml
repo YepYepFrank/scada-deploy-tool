@@ -47,6 +47,9 @@ importers:
       '@grid/tb-client':
         specifier: workspace:*
         version: link:../../packages/tb-client
+      '@grid/tbsite-compiler':
+        specifier: workspace:*
+        version: link:../../packages/compiler
       echarts:
         specifier: ^5.5.1
         version: 5.6.0
