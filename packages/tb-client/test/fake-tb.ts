@@ -46,6 +46,8 @@ export class FakeTb {
   attrs = new Map<string, Map<string, Point>>()
   alarms = new Map<string, Record<string, unknown>[]>()
   requests: string[] = []
+  /** 当前身份无权访问的实体 id(模拟 CUSTOMER_USER 看未分配设备):WS 订阅回 errorCode 2,REST 回 403 */
+  forbidden = new Set<string>()
   /** cmdId → {socket, entityId, keys, kind} */
   subs = new Map<number, { socket: FakeSocket; entityId: string; keys: string[]; kind: 'ts' | 'attr' }>()
   token = 'jwt-test'
@@ -97,6 +99,12 @@ export class FakeTb {
           .split(',')
           .filter(Boolean)
         const entityId = String(c.entityId)
+        if (this.forbidden.has(entityId)) {
+          // TB 实测(CE 4.3.1,2026-09-06 镜像):CUSTOMER_USER 订阅未分配给它的实体,回 errorCode 1「Failed to fetch data!」,
+          // 之后该 cmdId 再无数据
+          socket.serverPush({ subscriptionId: cmdId, errorCode: 1, errorMsg: 'Failed to fetch data!', data: null })
+          continue
+        }
         this.subs.set(cmdId, { socket, entityId, keys, kind })
         // TB 订阅即回当前最新值(每 key 一个点;不存在的 key 为 [[ts, null]])
         const data: Record<string, [number, unknown][]> = {}
@@ -166,6 +174,8 @@ export class FakeTb {
       })
     if (auth !== `Bearer ${this.token}`) return json({ message: 'Authentication failed' }, 401)
     let m: RegExpMatchArray | null
+    if ((m = u.pathname.match(/\/(DEVICE|ASSET)\/([^/]+)/)) && this.forbidden.has(m[2]!))
+      return json({ message: "You don't have permission to perform this operation!", errorCode: 20 }, 403)
     if ((m = u.pathname.match(/^\/api\/plugins\/telemetry\/(DEVICE|ASSET)\/([^/]+)\/values\/timeseries$/))) {
       const entityId = m[2]!
       const keys = (u.searchParams.get('keys') ?? '').split(',').filter(Boolean)

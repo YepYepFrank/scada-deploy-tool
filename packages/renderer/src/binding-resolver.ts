@@ -119,10 +119,15 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
             set(w.id, slot, null)
             try {
               track(
-                ds.subscribeTs(one.entity, [one.key], ups => {
-                  const u = ups.find(x => x.key === one.key)
-                  if (u) set(w.id, slot, shapeScalar(lastValue(u.points), spec?.valueType))
-                })
+                ds.subscribeTs(
+                  one.entity,
+                  [one.key],
+                  ups => {
+                    const u = ups.find(x => x.key === one.key)
+                    if (u) set(w.id, slot, shapeScalar(lastValue(u.points), spec?.valueType))
+                  },
+                  e => fail(w.id, slot, e)
+                )
               )
             } catch (e) {
               fail(w.id, slot, e)
@@ -133,10 +138,16 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
             set(w.id, slot, null)
             try {
               track(
-                ds.subscribeAttr(one.entity, one.scope, [one.key], ups => {
-                  const u = ups.find(x => x.key === one.key)
-                  if (u) set(w.id, slot, shapeScalar(u.value as TsPoint['value'], spec?.valueType))
-                })
+                ds.subscribeAttr(
+                  one.entity,
+                  one.scope,
+                  [one.key],
+                  ups => {
+                    const u = ups.find(x => x.key === one.key)
+                    if (u) set(w.id, slot, shapeScalar(u.value as TsPoint['value'], spec?.valueType))
+                  },
+                  e => fail(w.id, slot, e)
+                )
               )
             } catch (e) {
               fail(w.id, slot, e)
@@ -146,7 +157,14 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
           case 'alarm': {
             set(w.id, slot, [] as AlarmInfo[])
             try {
-              track(ds.subscribeAlarms(one.entity, one.types, alarms => set(w.id, slot, alarms)))
+              track(
+                ds.subscribeAlarms(
+                  one.entity,
+                  one.types,
+                  alarms => set(w.id, slot, alarms),
+                  e => fail(w.id, slot, e)
+                )
+              )
             } catch (e) {
               fail(w.id, slot, e)
             }
@@ -203,17 +221,22 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
           // 历史拉完再订阅追加,避免乱序
           try {
             track(
-              ds.subscribeTs(one.entity, [key], ups => {
-                const u = ups.find(x => x.key === key)
-                if (!u) return
-                // 追加时按 ts 去重:订阅首包的「最新值」可能与历史末点重复
-                const lastTs = buf.length ? buf[buf.length - 1]!.ts : -Infinity
-                const fresh = u.points.filter(pt => pt.ts > lastTs)
-                if (!fresh.length) return
-                buf.push(...fresh)
-                if (buf.length > maxPoints) buf = buf.slice(buf.length - maxPoints)
-                emit(buf.slice())
-              })
+              ds.subscribeTs(
+                one.entity,
+                [key],
+                ups => {
+                  const u = ups.find(x => x.key === key)
+                  if (!u) return
+                  // 追加时按 ts 去重:订阅首包的「最新值」可能与历史末点重复
+                  const lastTs = buf.length ? buf[buf.length - 1]!.ts : -Infinity
+                  const fresh = u.points.filter(pt => pt.ts > lastTs)
+                  if (!fresh.length) return
+                  buf.push(...fresh)
+                  if (buf.length > maxPoints) buf = buf.slice(buf.length - maxPoints)
+                  emit(buf.slice())
+                },
+                e => fail(w.id, slot, e)
+              )
             )
           } catch (e) {
             fail(w.id, slot, e)
@@ -236,10 +259,15 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
     if (one.mode === 'ts') {
       try {
         track(
-          ds.subscribeTs(one.entity, [one.key], ups => {
-            const u = ups.find(x => x.key === one.key)
-            if (u) append(u.points)
-          })
+          ds.subscribeTs(
+            one.entity,
+            [one.key],
+            ups => {
+              const u = ups.find(x => x.key === one.key)
+              if (u) append(u.points)
+            },
+            e => fail(w.id, slot, e)
+          )
         )
       } catch (e) {
         fail(w.id, slot, e)
@@ -249,10 +277,16 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
     if (one.mode === 'attr') {
       try {
         track(
-          ds.subscribeAttr(one.entity, one.scope, [one.key], ups => {
-            const u = ups.find(x => x.key === one.key)
-            if (u) append([{ ts: u.ts, value: u.value as TsPoint['value'] }])
-          })
+          ds.subscribeAttr(
+            one.entity,
+            one.scope,
+            [one.key],
+            ups => {
+              const u = ups.find(x => x.key === one.key)
+              if (u) append([{ ts: u.ts, value: u.value as TsPoint['value'] }])
+            },
+            e => fail(w.id, slot, e)
+          )
         )
       } catch (e) {
         fail(w.id, slot, e)

@@ -2,6 +2,11 @@
 
 版本按 SemVer;0.x 期间次版本号可含破坏性变更,会在条目里标「破坏」。契约(`schemaVersion`)的变更走 ADR,不随包版本隐式变化。
 
+## 未发布
+
+- `<ScadaPage>` 新增 `bindError(widgetId, slot, message)` 事件并 expose `bindErrors`:某个绑定解析 / 订阅失败时抛出,宿主可汇总提示(T3.6 预览的「N 个绑定在该 Customer 下不可见」用它)。
+- 绑定解析器把 `DataSource.subscribeTs / subscribeAttr / subscribeAlarms` 的可选 `onError`(契约 §4,2026-09-06 补充)接到组件错误态:CUSTOMER_USER 订阅未分配实体被 TB 拒绝时组件显示「不可用」而不是一直空着。没有 `onError` 通道的 DataSource 实现行为不变。
+
 ## 0.1.0 — 2026-09-05
 
 首个可接入版本(T2.4)。宿主用 `import { ScadaPage } from '@grid/scada-renderer'` + `import '@grid/scada-renderer/style.css'` 接入,见 README「接入示例」。

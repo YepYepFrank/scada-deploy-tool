@@ -151,6 +151,39 @@ export function describeDataSourceConformance(name: string, setup: () => Conform
       expect(h.tb.requests.at(-1)).toMatch(/agg=MAX/)
     })
 
+    it('无权访问的实体:subscribeTs / subscribeAttr 的 onError 各回调一次,其它订阅不受影响(T3.6 Customer 视角)', async () => {
+      const FORBIDDEN = { type: 'DEVICE', id: 'dev-secret', name: 'BS_1_CK' } as const
+      h.tb.forbidden.add(FORBIDDEN.id)
+      const errs: string[] = []
+      const okUpdates: TsUpdate[][] = []
+      const forbiddenUpdates: TsUpdate[][] = []
+      h.ds.subscribeTs(
+        FORBIDDEN,
+        ['P'],
+        u => forbiddenUpdates.push(u),
+        e => errs.push('ts:' + e.message)
+      )
+      h.ds.subscribeAttr(
+        FORBIDDEN,
+        'SERVER_SCOPE',
+        ['soh'],
+        () => {},
+        e => errs.push('attr:' + e.message)
+      )
+      h.ds.subscribeTs(DEV, ['P'], u => okUpdates.push(u))
+      await connect(h)
+      expect(errs).toHaveLength(2)
+      expect(errs[0]).toMatch(/^ts:.*(拒绝|Failed to fetch data)/)
+      expect(errs[1]).toMatch(/^attr:/)
+      expect(forbiddenUpdates).toEqual([])
+      expect(okUpdates).toHaveLength(1)
+      // 之后设备上报只到有权限的订阅;被拒的不会再次回调 onError
+      h.tb.pushTs(DEV.id, 'P', '12')
+      await flush()
+      expect(okUpdates).toHaveLength(2)
+      expect(errs).toHaveLength(2)
+    })
+
     it('subscribeAlarms:给活动告警全集,归一 originator;退订后停止轮询', async () => {
       h.tb.alarms.set(DEV.id, [
         {

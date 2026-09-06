@@ -20,6 +20,7 @@ import SlotBoard from './SlotBoard.vue'
 import WidgetPicker from './WidgetPicker.vue'
 import PropsForm from './PropsForm.vue'
 import BindingsPanel from './BindingsPanel.vue'
+import PreviewPane from './PreviewPane.vue'
 import { useEditorState } from './useEditorState'
 import { useMeta } from '../meta/useMeta'
 import { LAYER_TITLE, sortIssues, validateBindingsLayer, validateStatic, type PageIssue } from './validate'
@@ -193,6 +194,11 @@ function importFile(e: Event) {
 
 // ---------- 撤销 / 重做 + 快捷键 ----------
 function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && previewOpen.value) {
+    previewOpen.value = false
+    return
+  }
+  if (previewOpen.value) return
   if (!(e.ctrlKey || e.metaKey)) return
   if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
     e.preventDefault()
@@ -204,6 +210,17 @@ function onKey(e: KeyboardEvent) {
 }
 window.addEventListener('keydown', onKey)
 
+// ---------- 预览(T3.6):隐藏编辑壳,用编辑器已登录的租户连接 / 现场登录的 Customer 渲染 ----------
+const previewOpen = ref(false)
+const customerIdentity = computed(() => meta.identities.find(i => i.id === 'customer'))
+const previewTitle = computed(() =>
+  !meta.connected.value
+    ? '先在左栏连接 TB'
+    : meta.conn.authority !== 'TENANT_ADMIN'
+      ? `当前连接是 ${meta.conn.authority},预览会以此身份渲染`
+      : '用真数据渲染当前 JSON'
+)
+
 const toastMsg = ref('')
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 function toast(m: string) {
@@ -214,7 +231,17 @@ function toast(m: string) {
 </script>
 
 <template>
-  <div class="ed">
+  <PreviewPane
+    v-if="previewOpen"
+    :config="ed.config.value"
+    :base="meta.conn.base"
+    :tenant-token="meta.conn.token"
+    :tenant-user="meta.conn.user"
+    :customer-user="customerIdentity?.user"
+    :customer-pass="customerIdentity?.pass"
+    @close="previewOpen = false"
+  />
+  <div v-else class="ed">
     <aside class="ed-left">
       <h1>组态编辑器 <small>T3.2 · 模板与槽位</small></h1>
       <label class="ed-field">页面标题 <input v-model.lazy="title" /></label>
@@ -256,6 +283,16 @@ function toast(m: string) {
           重做 ({{ ed.state.futureCount }})
         </button>
         <button type="button" @click="ed.reset()">清空</button>
+        <button
+          type="button"
+          class="ed-preview"
+          :disabled="!meta.connected.value"
+          :title="previewTitle"
+          data-role="preview"
+          @click="previewOpen = true"
+        >
+          预览
+        </button>
         <span class="ed-hint"
           >点击槽位选择组件 · {{ template.name }} · {{ ed.config.value.widgets.length }} 个组件</span
         >

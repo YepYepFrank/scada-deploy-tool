@@ -99,19 +99,35 @@ export interface DataSource {
   /** 状态变化回调;返回取消函数。 */
   onStatus(cb: (status: ConnectionStatus) => void): Unsubscribe
 
-  /** 订阅实时遥测。首次回调应给出最新值(latest),之后按推送增量回调。 */
-  subscribeTs(entity: EntityRef, keys: string[], cb: (updates: TsUpdate[]) => void): Unsubscribe
+  /**
+   * 订阅实时遥测。首次回调应给出最新值(latest),之后按推送增量回调。
+   * `onError`(T3.6 补充,可选):订阅被 TB 拒绝时回调一次(典型:CUSTOMER_USER 订阅未分配给它的实体,
+   * WS 回 errorCode≠0「Failed to fetch data!」/ REST 403)。渲染器据此把对应组件置为错误态而不是一直空着;
+   * 没有这条通道的实现可以忽略该参数(只会「静默无数据」,T3.10 要求同事版必须给明确错误)。
+   */
+  subscribeTs(
+    entity: EntityRef,
+    keys: string[],
+    cb: (updates: TsUpdate[]) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe
 
-  /** 订阅属性。 */
+  /** 订阅属性。`onError` 同 subscribeTs。 */
   subscribeAttr(
     entity: EntityRef,
     scope: AttributeScope,
     keys: string[],
-    cb: (updates: AttrUpdate[]) => void
+    cb: (updates: AttrUpdate[]) => void,
+    onError?: (err: Error) => void
   ): Unsubscribe
 
-  /** 订阅告警;`types` 为空 / undefined 表示全部类型。回调给出当前活动告警全集。 */
-  subscribeAlarms(entity: EntityRef, types: string[] | undefined, cb: (alarms: AlarmInfo[]) => void): Unsubscribe
+  /** 订阅告警;`types` 为空 / undefined 表示全部类型。回调给出当前活动告警全集。`onError` 同 subscribeTs。 */
+  subscribeAlarms(
+    entity: EntityRef,
+    types: string[] | undefined,
+    cb: (alarms: AlarmInfo[]) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe
 
   /**
    * 查历史。`agg` 缺省时由数据层按窗口长度自适应(≤2h 原始点;2h–24h AVG/5min;24h–7d AVG/1h;>7d AVG/1d),

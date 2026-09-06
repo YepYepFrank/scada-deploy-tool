@@ -66,6 +66,8 @@ interface Sub {
   scope?: AttributeScope
   keys: string[]
   cb: (data: WsData) => void
+  /** TB 对这条订阅回 errorCode≠0(如无权访问实体)时回调一次 */
+  onError?: (err: Error) => void
 }
 
 export class LegacyDataSource implements DataSource {
@@ -113,13 +115,19 @@ export class LegacyDataSource implements DataSource {
 
   // ---------- 订阅 ----------
 
-  subscribeTs(entity: EntityRef, keys: string[], cb: (updates: TsUpdate[]) => void): Unsubscribe {
+  subscribeTs(
+    entity: EntityRef,
+    keys: string[],
+    cb: (updates: TsUpdate[]) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
     return this.addSub({
       cmdId: this.nextCmdId++,
       kind: 'ts',
       entity,
       keys,
       cb: data => cb(toTsUpdates(data, keys)),
+      onError,
     })
   }
 
@@ -127,7 +135,8 @@ export class LegacyDataSource implements DataSource {
     entity: EntityRef,
     scope: AttributeScope,
     keys: string[],
-    cb: (updates: AttrUpdate[]) => void
+    cb: (updates: AttrUpdate[]) => void,
+    onError?: (err: Error) => void
   ): Unsubscribe {
     return this.addSub({
       cmdId: this.nextCmdId++,
@@ -135,6 +144,7 @@ export class LegacyDataSource implements DataSource {
       entity,
       scope,
       keys,
+      onError,
       cb: data =>
         cb(
           Object.entries(data)
@@ -144,7 +154,12 @@ export class LegacyDataSource implements DataSource {
     })
   }
 
-  subscribeAlarms(entity: EntityRef, types: string[] | undefined, cb: (alarms: AlarmInfo[]) => void): Unsubscribe {
+  subscribeAlarms(
+    entity: EntityRef,
+    types: string[] | undefined,
+    cb: (alarms: AlarmInfo[]) => void,
+    onError?: (err: Error) => void
+  ): Unsubscribe {
     let timer: unknown = null
     let stopped = false
     const poll = async () => {
@@ -156,8 +171,14 @@ export class LegacyDataSource implements DataSource {
         let alarms = (page?.data ?? []).map(toAlarmInfo)
         if (types?.length) alarms = alarms.filter(a => types.includes(a.type))
         if (!stopped) cb(alarms)
-      } catch {
-        /* 轮询失败保留上次结果;连接状态由 WS 反映 */
+      } catch (e) {
+        /* 轮询失败保留上次结果;连接状态由 WS 反映。403(无权访问实体)通知一次,之后不再重试 */
+        const text = e instanceof Error ? e.message : String(e)
+        if (/HTTP 403/.test(text)) {
+          stopped = true
+          onError?.(new Error(`告警订阅被拒绝:${text}`))
+          return
+        }
       }
       if (!stopped) timer = this.setT(poll, this.opts.alarmPollMs ?? 10_000)
     }
@@ -329,7 +350,15 @@ export class LegacyDataSource implements DataSource {
         console.warn('[LegacyDataSource] TB:', msg.errorMsg, 'cmdId', msg.subscriptionId)
       if (msg.subscriptionId === undefined) return
       const sub = this.subs.get(msg.subscriptionId)
-      if (!sub || !msg.data) return
+      if (!sub) return
+      if (msg.errorCode) {
+        // TB 对这条订阅明确拒绝(CE 4.3.1 实测:CUSTOMER_USER 订阅未分配实体回 errorCode 1「Failed to fetch data!」);只通知一次
+        const onError = sub.onError
+        sub.onError = undefined
+        onError?.(new Error(`TB 订阅被拒绝(${msg.errorCode}):${msg.errorMsg ?? ''}`.trim()))
+        return
+      }
+      if (!msg.data) return
       sub.cb(msg.data)
     }
     ws.onclose = () => {

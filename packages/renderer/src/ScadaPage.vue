@@ -19,6 +19,8 @@ const props = withDefaults(defineProps<ScadaPageProps>(), { showStatus: false, d
 const emit = defineEmits<{
   (e: 'invalid', issues: { path: string; message: string }[]): void
   (e: 'status', status: ConnectionStatus): void
+  /** 某个绑定解析 / 订阅失败(含 DataSource 的 onError:无权访问实体等);组件已置错误态,宿主可汇总提示 */
+  (e: 'bindError', widgetId: string, slot: string, message: string): void
 }>()
 
 const injected = inject<DataSource | null>(DATA_SOURCE_KEY, null)
@@ -115,7 +117,9 @@ function setup() {
       ;(values[wid] ??= {})[slot] = v
     },
     onError: (wid, slot, err) => {
-      ;(bindErrors[wid] ??= {})[slot] = err instanceof Error ? err.message : String(err)
+      const message = err instanceof Error ? err.message : String(err)
+      ;(bindErrors[wid] ??= {})[slot] = message
+      emit('bindError', wid, slot, message)
     },
     slotSpec: (w, slot) => getWidget(w.type)?.bindingSlots.find(s => s.name === slot),
   })
@@ -195,7 +199,7 @@ onBeforeUnmount(() => {
   ro?.disconnect()
 })
 
-defineExpose({ issues, status, values })
+defineExpose({ issues, status, values, bindErrors })
 </script>
 
 <template>
