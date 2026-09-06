@@ -1,6 +1,6 @@
 {
   "name": "@grid/scada-renderer",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "组态渲染器 + 页面配置契约(schema 子路径导出)",
   "type": "module",
   "types": "./src/index.ts",

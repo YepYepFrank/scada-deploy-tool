@@ -172,7 +172,7 @@ const configs: Record<string, WidgetConfig[]> = {
     W.cbLight('w-s4', 's4'),
     W.line('w-g1', 'g1'),
     W.dual('w-g2', 'g2'),
-    W.alarms('w-g3', 'g3'),
+    W.cb('w-g3', 'g3'),
     W.tblDaily('w-g4', 'g4'),
   ],
   'monitor-3col': [
@@ -204,6 +204,14 @@ const config = computed<PageConfig>(() => ({
   title: '/dev 展示页',
   widgets: configs[template.value] ?? [],
 }))
+/** 覆盖统计(T2.4 完成标准:10 组件 × 3 模板):当前模板用到的组件类型(含模板 fixed 槽位)与三模板合计 */
+const typesOf = (id: string) =>
+  new Set([
+    ...(configs[id] ?? []).map(w => w.type),
+    ...(templates.find(t => t.id === id)?.slots.flatMap(s => (s.fixed ? [s.fixed.type] : [])) ?? []),
+  ])
+const usedTypes = computed(() => typesOf(template.value))
+const coveredAll = new Set(templates.flatMap(t => [...typesOf(t.id)]))
 
 // ---------- MockDataSource ----------
 const statusCbs = new Set<(s: ConnectionStatus) => void>()
@@ -466,9 +474,12 @@ const issues = ref<{ path: string; message: string }[]>([])
         >
       </section>
       <section>
-        <h2>组件({{ widgets.length }})</h2>
-        <ul>
-          <li v-for="w in widgets" :key="w.type">
+        <h2>
+          组件({{ widgets.length }})
+          <small class="dim">本模板 {{ usedTypes.size }} · 三模板合计 {{ coveredAll.size }}/{{ widgets.length }}</small>
+        </h2>
+        <ul class="dev-widgets">
+          <li v-for="w in widgets" :key="w.type" :class="{ used: usedTypes.has(w.type) }" :data-type="w.type">
             <code>{{ w.type }}</code> {{ w.name }}
             <span class="dim"
               >· {{ w.bindingSlots.map(s => s.name + ':' + s.valueType + (s.multiple ? '[]' : '')).join(', ') }}</span
@@ -582,6 +593,13 @@ const issues = ref<{ path: string; message: string }[]>([])
 }
 .dev-side code {
   color: #19b7ff;
+}
+.dev-widgets li.used::before {
+  content: '✓ ';
+  color: #6fe3a0;
+}
+.dev-widgets li:not(.used) {
+  opacity: 0.55;
 }
 .dev-side .dim {
   opacity: 0.55;
