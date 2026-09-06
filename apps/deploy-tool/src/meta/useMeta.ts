@@ -15,6 +15,15 @@ export const IDENTITIES = [
   },
 ].filter(i => i.user && i.pass) as { id: string; label: string; user: string; pass: string }[]
 
+/** 向导等外部壳已登录的会话:编辑器直接采用,不再让用户登录一次 */
+export interface EditorSession {
+  base: string
+  token: string
+  user: string
+  siteName: string
+  authority?: string
+}
+
 export function useMeta() {
   const conn = reactive({
     base: '/tbm',
@@ -61,6 +70,29 @@ export function useMeta() {
       conn.token = (
         (await api('/api/auth/login', { username: conn.user, password: conn.pass })) as { token: string }
       ).token
+    } catch (e) {
+      conn.msg = '失败:' + (e instanceof Error ? e.message : String(e))
+      tree.value = null
+      client.value = null
+      conn.busy = false
+      return
+    }
+    await loadTree()
+  }
+  /** 采用外部会话(向导第 1 步已登录):只拉元数据树,不登录 */
+  async function adopt(s: EditorSession) {
+    conn.base = s.base
+    conn.token = s.token
+    conn.user = s.user
+    conn.siteName = s.siteName
+    conn.authority = s.authority ?? ''
+    conn.pass = ''
+    await loadTree()
+  }
+  async function loadTree() {
+    conn.busy = true
+    conn.msg = '读取元数据…'
+    try {
       const c = new MetaClient(api)
       client.value = c
       const me = await c.me()
@@ -91,6 +123,7 @@ export function useMeta() {
     entityCount: computed(() => (tree.value ? countEntities(tree.value) : 0)),
     pickIdentity,
     connect,
+    adopt,
     refresh,
     api,
   }

@@ -26,6 +26,8 @@ const props = defineProps<{
   /** 校验 error 数,> 0 不许发布 */
   errorCount: number
   published?: PublishedRecord
+  /** 初始页面资产名;缺省 <站点>-<标题> */
+  pageName?: string
 }>()
 const emit = defineEmits<{
   published: [pageName: string, rec: PublishedRecord]
@@ -43,10 +45,11 @@ const STEP_TITLE: Record<string, string> = {
   assign: '⑥ 分配到 Customer',
 }
 
-const pageName = ref(pageNameOf(props.siteName, props.config))
+const derived = () => props.pageName || pageNameOf(props.siteName, props.config)
+const pageName = ref(derived())
 watch(
-  () => [props.siteName, props.config.title],
-  () => (pageName.value = pageNameOf(props.siteName, props.config))
+  () => [props.siteName, props.config.title, props.pageName],
+  () => (pageName.value = derived())
 )
 const busy = ref(false)
 const steps = ref<PageStepReport[]>([])

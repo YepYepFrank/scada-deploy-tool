@@ -10,12 +10,14 @@ import {
   ALARM_TRIGGERS,
   PRESETS,
 } from './templates.js'
-import { LAYOUT_TEMPLATES, STAT_SLOT_CARDS, GRID_SLOT_CARDS } from '../shared/layoutTemplates.js'
+import EditorApp from '../editor/EditorApp.vue'
+import PublishPanel from '../editor/PublishPanel.vue'
+import { listSitePages, readPageState } from '../publish/publishPage'
 import { publish, cleanup } from './publisher.js'
 import { kzStations } from '../api/tb.js'
 import KeyPicker from '../components/KeyPicker.vue'
 
-const STEPS = ['连接与站点', '设备与测点', '运算配置', '展示配置', '发布上线']
+const STEPS = ['连接与站点', '设备与测点', '运算配置', '组态编辑', '发布上线']
 const step = ref(0)
 
 /* 开屏加载页:固定 1.6s 品牌闪屏后淡出(纯观感,不阻塞任何逻辑) */
@@ -590,6 +592,7 @@ async function loadSite(name, advance = false) {
       return
     }
     hydrate(sc.value)
+    void loadSitePage(name)
     restoreMsg.value = `已载入站点「${name}」上次发布的配置(${sc.value.devices?.length || 0} 设备 · ${sc.value.computations?.length || 0} 运算)`
     if (advance) step.value = 1 // 手动载入后直接进入「设备与测点」
   } catch (e) {
@@ -624,31 +627,7 @@ function hydrate(cfg) {
   // 回填运算与组态布局
   computations.value = (cfg.computations || []).map(c => JSON.parse(JSON.stringify(c)))
   deviceTemplates.value = (cfg.deviceTemplates || []).map(t => JSON.parse(JSON.stringify(t)))
-  if (cfg.layout?.pages?.length) {
-    pages.value = cfg.layout.pages
-      .filter(p => LAYOUT_TEMPLATES[p.template])
-      .map(p => ({
-        id: p.id,
-        title: p.title || '页面',
-        template: p.template,
-        slots: JSON.parse(JSON.stringify(p.slots || {})),
-      }))
-    if (!pages.value.length) pages.value = [{ id: 'p1', title: '总览', template: 'console', slots: {} }]
-  } else if (cfg.layout?.template && LAYOUT_TEMPLATES[cfg.layout.template]) {
-    // 旧版单页配置 → 包装成一个页面
-    pages.value = [
-      {
-        id: 'p1',
-        title: '总览',
-        template: cfg.layout.template,
-        slots: JSON.parse(JSON.stringify(cfg.layout.slots || {})),
-      },
-    ]
-  } else {
-    pages.value = [{ id: 'p1', title: '总览', template: 'console', slots: {} }]
-  }
-  activePage.value = 0
-  Object.assign(header, { title: '', subtitle: '', showClock: true, showDate: false }, cfg.layout?.header || {})
+  // 页面组态不再在 siteConfig.layout 里(T3.7):由 loadSitePage 从 ScadaPage 资产读回编辑器
 }
 
 function claimDevice(d, v) {
@@ -1467,461 +1446,52 @@ function compDesc(c) {
   return `${c.device}.${c.key} 差值 @ ${c.window} → ${c.output}`
 }
 
-/* ── display ────────────────────────────────────────────── */
-const AGG_SUFFIX = { avg: 'Avg', min: 'Min', max: 'Max', sum: 'Sum' }
-const metricList = computed(() => {
-  const out = []
-  for (const k of claimedKeys.value) out.push({ device: k.device, key: k.key, from: '原始', kind: 'metric' })
-  for (const c of computations.value) {
-    const tpl = TEMPLATES[c.template]
-    if (tpl.kind === 'alarm') {
-      out.push({ device: c.device, key: c.name, from: '阈值告警', kind: 'alarm' })
-    } else if (tpl.kind === 'cf' || c.template === 'window.delta' || c.template === 'window.integrate') {
-      if (c.outputMode !== 'attr') out.push({ device: c.device, key: c.output, from: tpl.name, kind: 'metric' })
-    } else if (c.template === 'window.aggregate') {
-      for (const k of c.keys)
-        for (const a of c.aggs)
-          out.push({ device: c.device, key: `${k}${AGG_SUFFIX[a]}${c.window}`, from: tpl.name, kind: 'metric' })
-    } else if (c.template === 'window.cascade') {
-      for (const k of c.keys)
-        for (const a of c.aggs)
-          for (const lv of ['5m', '1h', '1d'])
-            out.push({ device: c.device, key: `${k}${AGG_SUFFIX[a]}${lv}`, from: '多级归档', kind: 'metric' })
-    } else if (c.template === 'aggregate.crossEntity') {
-      out.push({ device: c.asset, key: c.output, from: '全站汇聚', kind: 'agg' })
-    } else if (c.template === 'revenue.periodic') {
-      for (const suffix of ['', 'Income', 'Cost', 'Daily', 'IncomeDaily', 'CostDaily'])
-        out.push({ device: c.asset, key: c.output + suffix, from: '电价收益', kind: 'agg' })
-    }
-  }
-  // 设备模板展开出的输出(逐台)与告警
-  for (const t of deviceTemplates.value) {
-    const matched = tplMatched(t)
-    for (const item of t.items) {
-      if (item.template === 'alarm.threshold') {
-        out.push({ device: matched[0]?.name || '', key: item.name, from: `模板·${t.name}`, kind: 'alarm' })
-      } else if (item.template === 'window.aggregate') {
-        for (const d of matched)
-          for (const k of item.keys)
-            for (const a of item.aggs)
-              out.push({
-                device: d.name,
-                key: `${k}${AGG_SUFFIX[a]}${item.window}`,
-                from: `模板·${t.name}`,
-                kind: 'metric',
-              })
-      } else if (item.output && item.outputMode !== 'attr') {
-        for (const d of matched) out.push({ device: d.name, key: item.output, from: `模板·${t.name}`, kind: 'metric' })
-      }
-    }
-  }
-  // 自然日报表(kzserver 归档,只在生产镜像出现)
-  for (const st of reportStations.value)
-    out.push({
-      device: st.id,
-      key: 'kzRevDay',
-      kind: 'report',
-      station: st.labelName || st.entityName,
-      from: '自然日报表',
-      title: `${st.labelName || st.entityName} · 逐日收益`,
-    })
-  return out
-})
+/* ── 第 4 步的数据源清单(metricList)随旧组态编辑器一起删除(T3.7) ── */
 
-/* ── 组态:多页面(菜单栏)+ 布局模板与槽位 ── */
-const pages = ref([{ id: 'p1', title: '总览', template: 'console', slots: {} }])
-const activePage = ref(0)
-const curPage = computed(() => pages.value[activePage.value])
-const slots = computed(() => curPage.value.slots) // 当前页槽位
-
-let pageSeq = 1
-function addPage() {
-  pageSeq += 1
-  pages.value.push({ id: `p${Date.now()}`, title: `页面 ${pages.value.length + 1}`, template: 'console', slots: {} })
-  activePage.value = pages.value.length - 1
-}
-async function removePageAt(i) {
-  if (pages.value.length <= 1) return
-  const p = pages.value[i]
-  const slotCount = Object.keys(p.slots || {}).length
-  if (
-    !(await askConfirm({
-      title: '删除页面',
-      text:
-        slotCount > 0
-          ? `删除页面「${p.title}」?其中已配置的 ${slotCount} 个槽位将一并移除。`
-          : `删除页面「${p.title}」?`,
-      okLabel: '删除',
-      danger: true,
-    }))
-  )
-    return
-  pages.value.splice(i, 1)
-  if (activePage.value >= pages.value.length) activePage.value = pages.value.length - 1
-}
-const removePage = () => removePageAt(activePage.value)
-const header = reactive({ title: '', subtitle: '', showClock: true, showDate: false })
-
-const previewClock = ref('')
-const previewDate = ref('')
-setInterval(() => {
-  const now = new Date()
-  previewClock.value = now.toLocaleTimeString('zh-CN', { hour12: false })
-  previewDate.value = now.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    weekday: 'short',
-  })
-}, 1000)
-const curTpl = computed(() => LAYOUT_TEMPLATES[curPage.value.template])
-const CARD_CN = {
-  stat: '数字',
-  alarm: '告警状态',
-  gauge: '仪表盘',
-  line: '折线',
-  bar: '柱状',
-  map: '地图',
-  multi: '多序列',
-  combo: '双轴',
-  overview: '概览卡',
-  alarmlist: '告警列表',
-}
-const mockCardCn = s => CARD_CN[s.card] || s.card
-
-function switchTemplate(id) {
-  curPage.value.template = id
-  // 换模板时保留能对上的槽位,清掉多余的
-  const valid = new Set([...LAYOUT_TEMPLATES[id].stats, ...LAYOUT_TEMPLATES[id].grid.map(g => g.id)])
-  for (const k of Object.keys(slots.value)) if (!valid.has(k)) delete slots.value[k]
-}
-
-const slotModal = reactive({
-  open: false,
-  slotId: null,
-  zone: 'stat',
-  form: { source: '', card: 'stat', title: '', extra: [], max: 100 },
-})
-
-function slotZone(slotId) {
-  return curTpl.value.stats.includes(slotId) ? 'stat' : 'grid'
-}
-
-function openSlot(slotId) {
-  slotModal.slotId = slotId
-  slotModal.zone = slotZone(slotId)
-  const cur = slots.value[slotId]
-  slotModal.form = cur
-    ? {
-        source: cur.card === 'alarmlist' ? '' : `${cur.kind}||${cur.device}||${cur.key}`,
-        card: cur.card,
-        title: cur.title,
-        extra: (cur.extra || []).map(x => `${x.kind || 'metric'}||${x.device}||${x.key}`),
-        max: cur.max || 100,
-      }
-    : { source: '', card: slotModal.zone === 'stat' ? 'stat' : 'line', title: '', extra: [], max: 100 }
-  slotModal.open = true
-  loadSrcPreview()
-}
-
-/* 多序列/双轴/概览卡的附加测点 */
-const cardNeedsExtra = computed(() => ['multi', 'combo', 'overview'].includes(slotModal.form.card))
-// 附加测点只能选遥测类源(排除告警/报表分组)
-const keyExtraGroups = computed(() =>
-  slotPickerGroups.value.filter(g => !g.label.startsWith('⚠') && !g.label.startsWith('📊'))
+/* ── 组态(T3.7 起):新编辑器 EditorApp 嵌入第 4 步,页面存为 ScadaPage 资产,不再写 siteConfig.layout ── */
+const editorRef = ref(null)
+/** 向导第 1 步登录后的会话交给编辑器采用(不让用户再登录一次) */
+const editorSession = computed(() =>
+  conn.status === 'ok' && conn.token
+    ? { base: curEnv.value.base, token: conn.token, user: conn.username, siteName: site.name, authority: 'TENANT_ADMIN' }
+    : null
 )
-const extraLimit = computed(() => (slotModal.form.card === 'combo' ? 1 : 4))
-function addExtra() {
-  if (slotModal.form.extra.length < extraLimit.value) slotModal.form.extra.push('')
-}
-function delExtra(i) {
-  slotModal.form.extra.splice(i, 1)
-}
-
-/* ── 数据源实时预览:选中即拉取该测点最新值,无数据/非遥测源给出标识 ── */
-const srcPreview = reactive({ state: 'idle', value: null, ts: null, unit: '', note: '' })
-const previewAssetIds = {} // 资产名 → id(汇聚/收益输出挂在资产上;查过一次就缓存)
-let previewSeq = 0 // 快速连续切换数据源时,只认最后一次请求的结果
-async function loadSrcPreview() {
-  const seq = ++previewSeq
-  const src = sourceOptions.value.find(o => o.value === slotModal.form.source)
-  if (!src) {
-    srcPreview.state = 'idle'
-    return
-  }
-  if (src.kind === 'alarm') {
-    srcPreview.state = 'info'
-    srcPreview.note = '告警源:触发时显示在大屏告警区,无实时数值可预览'
-    return
-  }
-  if (src.kind === 'report') {
-    srcPreview.state = 'info'
-    srcPreview.note = '报表源:数据来自 kzserver 按日归档,非实时遥测'
-    return
-  }
-  srcPreview.state = 'loading'
+const pageState = computed(() => editorRef.value?.state ?? null)
+const pagePubOpen = ref(false)
+/** 载入站点时把 TB 上已发布的第一个页面读回编辑器(编辑器可能还没挂载,先记下等它出现) */
+const pendingPage = ref(null)
+async function loadSitePage(name) {
+  pendingPage.value = null
   try {
-    let entityType = 'DEVICE'
-    let id = devices.value.find(d => d.name === src.device)?.tbId
-    if (!id) {
-      entityType = 'ASSET'
-      if (!(src.device in previewAssetIds)) {
-        const page = await api(`/api/tenant/assets?pageSize=100&page=0&textSearch=${encodeURIComponent(src.device)}`)
-        previewAssetIds[src.device] = page.data.find(a => a.name === src.device)?.id.id || null
-      }
-      id = previewAssetIds[src.device]
-    }
-    if (seq !== previewSeq) return
-    if (!id) {
-      srcPreview.state = 'empty'
-      srcPreview.note = '目标资产尚未创建——首次发布后才会生成数据'
-      return
-    }
-    const r = await api(
-      `/api/plugins/telemetry/${entityType}/${id}/values/timeseries?keys=${encodeURIComponent(src.key)}`
-    )
-    if (seq !== previewSeq) return
-    // 注意:TB 对不存在的 key 也会返回 [{ts: now, value: null}],必须按无数据处理
-    const arr = r?.[src.key]
-    if (arr?.length && arr[0].value !== null && arr[0].value !== '') {
-      srcPreview.state = 'ok'
-      srcPreview.value = arr[0].value
-      srcPreview.ts = arr[0].ts
-      const dk = devices.value.find(d => d.name === src.device)?.keys.find(k => k.key === src.key)
-      srcPreview.unit = dk?.unit || keyDict.value[src.key]?.unit || ''
-    } else {
-      // 还没发布的即时派生运算:用当前实时输入现算预估值
-      const comp = findExprComp(src.device, src.key)
-      if (comp) {
-        const est = await estimateExpr(comp)
-        if (seq !== previewSeq) return
-        if (est !== null) {
-          srcPreview.state = 'est'
-          srcPreview.value = Math.round(est * 10000) / 10000
-          srcPreview.note = '预估值:按当前实时输入即时计算,发布后由平台正式生成'
-          return
-        }
-      }
-      srcPreview.state = 'empty'
-      srcPreview.note = '该测点暂无数据——声明的运算输出要发布后才开始生成;设备原始测点则说明设备未上报'
-    }
-  } catch (e) {
-    if (seq !== previewSeq) return
-    srcPreview.state = 'empty'
-    srcPreview.note = `实时值读取失败:${e.message}`
+    const pages = await listSitePages(api, name)
+    if (!pages.length) return
+    const p0 = pages[0]
+    const st = await readPageState(api, p0.assetId)
+    if (st.config) pendingPage.value = { page: p0, config: st.config }
+  } catch {
+    /* 没页面或读不到都不影响向导 */
   }
 }
-// 未发布的即时派生运算(expr.*):按当前实时输入现算一个预估值,让第 4 步立刻能看到数
-function findExprComp(device, key) {
-  const direct = computations.value.find(
-    c => c.device === device && c.output === key && c.template?.startsWith('expr.')
-  )
-  if (direct) return direct
-  for (const t of deviceTemplates.value)
-    for (const item of t.items || [])
-      if (item.output === key && item.template?.startsWith('expr.')) {
-        if (item.template === 'expr.custom')
-          return { ...item, device, terms: (item.terms || []).map(x => (x.kind === 'key' ? { ...x, device } : x)) }
-        return {
-          template: item.template,
-          device,
-          output: key,
-          inputs: Object.fromEntries(Object.entries(item.inputs || {}).map(([p, r]) => [p, { device, key: r.key }])),
-        }
-      }
-  return null
-}
-async function fetchLatestNum(devName, key) {
-  const id = devices.value.find(d => d.name === devName)?.tbId
-  if (!id) return null
-  const r = await api(`/api/plugins/telemetry/DEVICE/${id}/values/timeseries?keys=${encodeURIComponent(key)}`).catch(
-    () => null
-  )
-  const v = parseFloat(r?.[key]?.[0]?.value)
-  return Number.isNaN(v) ? null : v
-}
-async function estimateExpr(c) {
-  if (c.template === 'expr.add' || c.template === 'expr.subtract') {
-    const a = await fetchLatestNum(c.inputs.a.device, c.inputs.a.key)
-    const b = await fetchLatestNum(c.inputs.b.device, c.inputs.b.key)
-    if (a === null || b === null) return null
-    return c.template === 'expr.add' ? a + b : a - b
-  }
-  if (c.template === 'expr.custom') {
-    let acc = null
-    for (let i = 0; i < (c.terms || []).length; i++) {
-      const t = c.terms[i]
-      let v = t.kind === 'const' ? parseFloat(t.value) : await fetchLatestNum(t.device, t.key)
-      if (v === null || Number.isNaN(v)) return null
-      if (t.abs) v = Math.abs(v)
-      if (i === 0) acc = v
-      else {
-        const op = c.ops[i - 1]
-        acc = op === '+' ? acc + v : op === '-' ? acc - v : op === '*' ? acc * v : acc / v
-      }
-    }
-    return acc
-  }
-  return null
-}
-
-function previewAge() {
-  if (!srcPreview.ts) return ''
-  const s = Math.max(0, (Date.now() - srcPreview.ts) / 1000)
-  if (s < 60) return `${Math.round(s)} 秒前`
-  if (s < 3600) return `${Math.round(s / 60)} 分钟前`
-  if (s < 86400) return `${Math.round(s / 3600)} 小时前`
-  return new Date(srcPreview.ts).toLocaleString('zh-CN')
-}
-const previewStale = computed(
-  () =>
-    // 超过 10 分钟没新数据就提示可能离线
-    srcPreview.state === 'ok' && srcPreview.ts && Date.now() - srcPreview.ts > 10 * 60 * 1000
-)
-
-const sourceOptions = computed(() =>
-  metricList.value.map(m => {
-    if (m.kind === 'report')
-      return {
-        value: `${m.kind}||${m.device}||${m.key}`,
-        label: `📊 ${m.title}(${m.from})`,
-        kind: m.kind,
-        device: m.device,
-        key: m.key,
-        title: m.title,
-        station: m.station,
-      }
-    const cn = m.kind === 'alarm' ? '' : smartCn(m.key)
-    return {
-      value: `${m.kind}||${m.device}||${m.key}`,
-      label: `${m.kind === 'alarm' ? '⚠ ' : ''}${m.device} / ${m.key}${cn ? ' · ' + cn : ''}(${m.from})`,
-      kind: m.kind,
-      device: m.device,
-      key: m.key,
-      from: m.from,
-    }
+watch([editorRef, pendingPage], ([ed, pending]) => {
+  if (!ed || !pending) return
+  ed.setConfig(pending.config)
+  ed.setPageName(pending.page.name)
+  ed.recordPublished(pending.page.name, {
+    assetId: pending.page.assetId,
+    version: pending.page.version ?? 0,
+    at: Date.now(),
+    by: '(TB)',
   })
-)
-// 指标位(数字卡)不提供报表源——报表是曲线形态
-const zoneSourceOptions = computed(() =>
-  slotModal.zone === 'stat' ? sourceOptions.value.filter(o => o.kind !== 'report') : sourceOptions.value
-)
-
-// 数据源选择器分组:第 3 步声明的运算置顶(⭐ 默认展开),其余按 设备/资产/告警/报表 分组默认折叠
-const slotPickerGroups = computed(() => {
-  const strip = o => o.label.replace(`${o.device} / `, '')
-  const pinned = { label: '⭐ 本站声明的运算(第 3 步配置)', items: [], pinned: true }
-  const rest = []
-  const by = new Map()
-  const grp = label => {
-    if (!by.has(label)) {
-      const g = { label, items: [] }
-      by.set(label, g)
-      rest.push(g)
-    }
-    return by.get(label)
-  }
-  for (const o of zoneSourceOptions.value) {
-    if (o.kind === 'report') grp('📊 自然日报表(kzserver)').items.push({ value: o.value, label: o.label })
-    else if (o.kind === 'alarm') grp('⚠ 告警').items.push({ value: o.value, label: o.label })
-    else if (o.kind === 'agg') pinned.items.push({ value: o.value, label: `${o.device} / ${strip(o)}` })
-    else if (o.from !== '原始') pinned.items.push({ value: o.value, label: `${o.device} / ${strip(o)}` })
-    else grp(`📟 ${o.device}`).items.push({ value: o.value, label: strip(o) })
-  }
-  return pinned.items.length ? [pinned, ...rest] : rest
+  pendingPage.value = null
 })
-
-// 第 3 步各测点下拉:按设备分组
-const claimedKeyGroups = computed(() => {
-  const by = new Map()
-  for (const k of claimedKeys.value) {
-    if (!by.has(k.device)) by.set(k.device, [])
-    by.get(k.device).push(k)
-  }
-  return [...by.entries()].map(([device, items]) => ({ device, items }))
-})
-
-const slotCardOptions = computed(() => {
-  const src = sourceOptions.value.find(o => o.value === slotModal.form.source)
-  if (slotModal.zone === 'stat') {
-    return src?.kind === 'alarm'
-      ? STAT_SLOT_CARDS.filter(c => c.id === 'alarm')
-      : STAT_SLOT_CARDS.filter(c => c.id !== 'alarm')
-  }
-  return GRID_SLOT_CARDS
-})
-
-function bizLabel(device, key) {
-  const dev = devices.value.find(d => d.name === device)
-  const k = dev?.keys.find(x => x.key === key)
-  return k?.label || key
-}
-
-function onSourceChange() {
-  loadSrcPreview()
-  const src = sourceOptions.value.find(o => o.value === slotModal.form.source)
-  if (!src) return
-  if (src.kind === 'report') {
-    slotModal.form.card = 'bar'
-    slotModal.form.title = src.title
-    return
-  }
-  if (slotModal.zone === 'stat') slotModal.form.card = src.kind === 'alarm' ? 'alarm' : 'stat'
-  else if (/latitude|longitude/.test(src.key)) slotModal.form.card = 'map'
-  else if (/Avg|Min|Max|Used|Energy5m/.test(src.key)) slotModal.form.card = 'bar'
-  else slotModal.form.card = 'line'
-  slotModal.form.title =
-    src.kind === 'alarm'
-      ? src.key
-      : bizLabel(src.device, src.key) !== src.key
-        ? bizLabel(src.device, src.key)
-        : smartCn(src.key) || src.key
-}
-
-function saveSlot() {
-  if (slotModal.form.card === 'alarmlist') {
-    slots.value[slotModal.slotId] = {
-      kind: 'alarmlist',
-      device: '',
-      key: '',
-      card: 'alarmlist',
-      title: slotModal.form.title.trim() || '实时告警',
-    }
-    slotModal.open = false
-    return
-  }
-  const [kind, device, key] = slotModal.form.source.split('||')
-  const slot = { kind, device, key, card: slotModal.form.card, title: slotModal.form.title.trim() || key }
-  if (cardNeedsExtra.value) {
-    slot.extra = slotModal.form.extra
-      .filter(Boolean)
-      .slice(0, extraLimit.value)
-      .map(v => {
-        const [k2, d2, y2] = v.split('||')
-        return { kind: k2, device: d2, key: y2 }
-      })
-      .filter(x => x.device && x.key)
-  }
-  if (slotModal.form.card === 'gauge') slot.max = Number(slotModal.form.max) || 100
-  // 报表槽位记下站点中文名——大屏卡片副标题显示它而不是原始 UUID
-  const src = sourceOptions.value.find(o => o.value === slotModal.form.source)
-  if (src?.station) slot.deviceLabel = src.station
-  slots.value[slotModal.slotId] = slot
-  slotModal.open = false
-}
-
-async function clearSlot() {
-  if (
-    !(await askConfirm({
-      title: '清空槽位',
-      text: '清空该指标位的配置?',
-      okLabel: '清空',
-      danger: true,
-    }))
-  )
-    return
-  delete slots.value[slotModal.slotId]
-  slotModal.open = false
+function downloadProject() {
+  if (!editorRef.value) return
+  const blob = new Blob([editorRef.value.exportText(siteJson.value)], { type: 'application/json' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `${site.name}.scadaproj`
+  a.click()
+  URL.revokeObjectURL(a.href)
 }
 
 /* ── export ─────────────────────────────────────────────── */
@@ -1938,42 +1508,7 @@ const siteJson = computed(() => ({
   deviceTemplates: JSON.parse(JSON.stringify(deviceTemplates.value)),
   computations: computations.value,
   rollup: { chainName: rollupChainName.value },
-  layout: {
-    pages: JSON.parse(JSON.stringify(pages.value)),
-    header: {
-      title: header.title.trim(),
-      subtitle: header.subtitle.trim(),
-      showClock: header.showClock,
-      showDate: header.showDate,
-    },
-  },
-  // 兼容旧站点视图的扁平清单(汇总所有页面的槽位;未放入任何页面的告警默认走横幅)
-  display: (() => {
-    const allSlots = pages.value.flatMap(p => Object.values(p.slots))
-    return [
-      ...allSlots
-        .filter(s => s.card !== 'alarmlist')
-        .map(s => ({
-          device: s.device,
-          key: s.key,
-          kind: s.kind === 'alarm' ? 'alarm' : s.kind === 'report' ? 'report' : 'metric',
-          card: s.kind === 'alarm' ? 'badge' : s.card,
-        })),
-      // 多序列/双轴/概览卡的附加测点也进清单(大屏据此铺历史)
-      ...allSlots.flatMap(s =>
-        (s.extra || []).map(x => ({
-          device: x.device,
-          key: x.key,
-          kind: 'metric',
-          card: 'line',
-        }))
-      ),
-      ...computations.value
-        .filter(c => c.template === 'alarm.threshold')
-        .filter(c => !allSlots.some(s => s.kind === 'alarm' && s.key === c.name))
-        .map(c => ({ device: c.device, key: c.name, kind: 'alarm', card: 'banner' })),
-    ]
-  })(),
+  // T3.7 起不再有 layout / display:页面组态发布为 ScadaPage 资产(见第 4 / 5 步)
 }))
 const jsonText = computed(() => JSON.stringify(siteJson.value, null, 2))
 const copied = ref(false)
@@ -2132,7 +1667,7 @@ async function loadPubHistory() {
 function histSummary(h) {
   const c = h.cfg || {}
   const tpl = (c.deviceTemplates || []).reduce((n, t) => n + (t.items?.length || 0), 0)
-  return `${(c.devices || []).length} 设备 · ${(c.computations || []).length + tpl} 项运算 · ${(c.layout?.pages || []).length} 页面`
+  return `${(c.devices || []).length} 设备 · ${(c.computations || []).length + tpl} 项运算`
 }
 async function restoreVersion(i) {
   const h = pubHistory.list[i]
@@ -2551,244 +2086,15 @@ function openFrontend() {
       </div>
     </div>
 
-    <!-- 4 组态编辑 -->
+    <!-- 4 组态编辑(T3.7 起:新编辑器嵌入,页面存为 ScadaPage 资产,不再写 siteConfig.layout) -->
     <div v-show="step === 3" class="panel">
       <h2>组态编辑 — 把数据放进页面模板</h2>
       <p class="hint">
-        先选一个页面模板,再点击模板上的空位,为它指定数据源、展示形式和标题。这里只是示意成品结构,不拉实时数据;告警横幅区是模板自带的,触发时自动出现。
+        选模板、点槽位放组件、在右栏绑定设备与测点;「预览」用真数据渲染(可切 Customer
+        视角),「发布」把页面写进 ThingsBoard 的 ScadaPage 资产(第 5 步也能发)。已发布的页面在第 1 步载入站点时自动读回。
       </p>
-
-      <!-- 菜单栏(页面)管理 -->
-      <div class="page-mgr">
-        <div class="page-tabs">
-          <button
-            v-for="(p, i) in pages"
-            :key="p.id"
-            class="page-tab"
-            :class="{ on: activePage === i }"
-            @click="activePage = i"
-          >
-            {{ p.title }}
-            <span v-if="pages.length > 1" class="tab-x" title="删除此页面" @click.stop="removePageAt(i)">×</span>
-          </button>
-          <button class="page-tab add" @click="addPage">＋ 添加页面</button>
-        </div>
-        <div class="frow" style="margin: 10px 0 0">
-          <div class="field">
-            <label>当前页面(菜单)标题</label> <input type="text" v-model="curPage.title" style="min-width: 220px" />
-          </div>
-          <button class="btn ghost sm" :disabled="pages.length <= 1" @click="removePage" style="align-self: flex-end">
-            删除此页面
-          </button>
-        </div>
-      </div>
-
-      <div class="tpl-grid" style="grid-template-columns: repeat(2, 1fr)">
-        <template v-for="(t, id) in LAYOUT_TEMPLATES" :key="id">
-          <div
-            v-if="!t.legacy || curPage.template === id"
-            class="tpl-card"
-            :class="{ sel: curPage.template === id }"
-            @click="switchTemplate(id)"
-          >
-            <div class="t">{{ t.name }}</div>
-            <span class="k"
-              >{{ t.stats.length ? `${t.stats.length} 指标位 · ` : '' }}{{ t.grid.length }} 图表位{{
-                t.triple ? ' · 中央主视区预留' : ''
-              }}</span
-            >
-            <div class="d">{{ t.desc }}</div>
-          </div>
-        </template>
-      </div>
-
-      <!-- 页面标头 -->
-      <div class="frow" style="margin-bottom: 14px">
-        <div class="field">
-          <label>大屏标题</label>
-          <input type="text" v-model="header.title" :placeholder="site.label || 'GRID·OPS'" style="min-width: 240px" />
-        </div>
-        <div class="field">
-          <label>小标题</label>
-          <input type="text" v-model="header.subtitle" placeholder="如 一号厂区 · 能源监控" style="min-width: 260px" />
-        </div>
-        <div class="field">
-          <label>标头右侧</label>
-          <div class="checks" style="padding: 8px 0">
-            <label><input type="checkbox" v-model="header.showClock" />显示时间</label>
-            <label><input type="checkbox" v-model="header.showDate" />显示日期</label>
-          </div>
-        </div>
-      </div>
-
-      <!-- 模板示意画布 -->
-      <div class="mock">
-        <div class="mock-head">
-          <div style="display: flex; align-items: center; gap: 10px">
-            <img src="../assets/img/company-logo.png" alt="" style="height: 26px" />
-            <div style="border-left: 1px solid var(--line-1); padding-left: 10px">
-              <div class="mh-title">{{ header.title || site.label || '国网电瑞' }}</div>
-              <div class="mh-sub">国网电瑞 GWDR · {{ header.subtitle || '微电网监控平台' }}</div>
-            </div>
-          </div>
-          <div class="mh-right">
-            <span class="mh-pill">● LIVE</span>
-            <span v-if="header.showDate">{{ previewDate }}</span>
-            <span v-if="header.showClock">{{ previewClock }}</span>
-          </div>
-        </div>
-        <div v-if="pages.length > 1" class="mock-nav">
-          <span
-            v-for="(p, i) in pages"
-            :key="p.id"
-            class="mn-item"
-            :class="{ on: activePage === i }"
-            @click="activePage = i"
-            >{{ p.title }}</span
-          >
-        </div>
-        <div class="mock-banner">⚠ 告警横幅区(自动 — 有告警触发时出现在这里)</div>
-
-        <!-- 三栏监控屏示意 -->
-        <div v-if="curTpl.triple" class="mock-triple">
-          <div class="mt-col">
-            <div
-              v-for="sid in curTpl.triple.left"
-              :key="sid"
-              class="mslot"
-              :class="{ filled: slots[sid] }"
-              @click="openSlot(sid)"
-            >
-              <template v-if="slots[sid]">
-                <div class="ms-title">{{ slots[sid].title }}</div>
-                <div class="ms-src">
-                  {{ slots[sid].card === 'alarmlist' ? '全站告警' : slots[sid].device }} · {{ mockCardCn(slots[sid]) }}
-                </div>
-              </template>
-              <template v-else><span class="ms-empty">+ 面板</span></template>
-            </div>
-          </div>
-          <div class="mt-col mt-center">
-            <div class="mslot mt-reserve">
-              <span class="ms-empty">🗺 {{ curTpl.triple.reservedLabel }}</span>
-            </div>
-            <div
-              v-for="sid in curTpl.triple.center"
-              :key="sid"
-              class="mslot"
-              :class="{ filled: slots[sid] }"
-              @click="openSlot(sid)"
-            >
-              <template v-if="slots[sid]">
-                <div class="ms-title">{{ slots[sid].title }}</div>
-                <div class="ms-src">
-                  {{ slots[sid].card === 'alarmlist' ? '全站告警' : slots[sid].device }} · {{ mockCardCn(slots[sid]) }}
-                </div>
-              </template>
-              <template v-else><span class="ms-empty">+ 图表位</span></template>
-            </div>
-          </div>
-          <div class="mt-col">
-            <div
-              v-for="sid in curTpl.triple.right"
-              :key="sid"
-              class="mslot"
-              :class="{ filled: slots[sid] }"
-              @click="openSlot(sid)"
-            >
-              <template v-if="slots[sid]">
-                <div class="ms-title">{{ slots[sid].title }}</div>
-                <div class="ms-src">
-                  {{ slots[sid].card === 'alarmlist' ? '全站告警' : slots[sid].device }} · {{ mockCardCn(slots[sid]) }}
-                </div>
-              </template>
-              <template v-else><span class="ms-empty">+ 面板</span></template>
-            </div>
-          </div>
-        </div>
-
-        <div
-          v-if="!curTpl.triple"
-          class="mock-stats"
-          :style="{ gridTemplateColumns: `repeat(${curTpl.stats.length}, 1fr)` }"
-        >
-          <div
-            v-for="sid in curTpl.stats"
-            :key="sid"
-            class="mslot"
-            :class="{ filled: slots[sid] }"
-            @click="openSlot(sid)"
-          >
-            <template v-if="slots[sid]">
-              <div class="ms-title">{{ slots[sid].title }}</div>
-              <div class="ms-big" :class="{ al: slots[sid].card === 'alarm' }">
-                {{ slots[sid].card === 'alarm' ? '正常' : '88.8' }}
-              </div>
-              <div class="ms-src">{{ slots[sid].device }} · {{ slots[sid].key }}</div>
-            </template>
-            <template v-else><span class="ms-empty">+ 指标位</span></template>
-          </div>
-        </div>
-        <div v-if="!curTpl.triple" class="mock-grid">
-          <div
-            v-for="g in curTpl.grid"
-            :key="g.id"
-            class="mslot tall"
-            :class="{ filled: slots[g.id] }"
-            :style="{ gridColumn: `span ${g.span}` }"
-            @click="openSlot(g.id)"
-          >
-            <template v-if="slots[g.id]">
-              <div class="ms-title">{{ slots[g.id].title }}</div>
-              <svg v-if="slots[g.id].card === 'line'" class="ms-art" viewBox="0 0 120 36" preserveAspectRatio="none">
-                <polyline
-                  points="0,28 15,22 30,26 45,12 60,18 75,8 90,14 105,6 120,10"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                />
-              </svg>
-              <svg
-                v-else-if="slots[g.id].card === 'bar'"
-                class="ms-art"
-                viewBox="0 0 120 36"
-                preserveAspectRatio="none"
-              >
-                <rect x="6" y="18" width="10" height="18" fill="currentColor" />
-                <rect x="24" y="10" width="10" height="26" fill="currentColor" />
-                <rect x="42" y="22" width="10" height="14" fill="currentColor" />
-                <rect x="60" y="6" width="10" height="30" fill="currentColor" />
-                <rect x="78" y="14" width="10" height="22" fill="currentColor" />
-                <rect x="96" y="20" width="10" height="16" fill="currentColor" />
-              </svg>
-              <svg v-else class="ms-art" viewBox="0 0 120 36">
-                <path
-                  d="M0 12 H120 M0 24 H120 M30 0 V36 M60 0 V36 M90 0 V36"
-                  stroke="currentColor"
-                  stroke-width="0.6"
-                  opacity="0.4"
-                />
-                <circle cx="60" cy="18" r="5" fill="currentColor" />
-                <circle cx="60" cy="18" r="10" fill="none" stroke="currentColor" opacity="0.5" />
-              </svg>
-              <div class="ms-src">
-                {{ slots[g.id].card === 'alarmlist' ? '全站告警' : slots[g.id].device + ' · ' + slots[g.id].key }} ·
-                {{ mockCardCn(slots[g.id]) }}
-              </div>
-            </template>
-            <template v-else><span class="ms-empty">+ 图表位</span></template>
-          </div>
-        </div>
-      </div>
-      <p class="hint" style="margin-top: 10px">
-        已配置 {{ Object.keys(slots).length }} /
-        {{ curTpl.stats.length + curTpl.grid.length }} 个槽位——留空的槽位发布后不显示。
-      </p>
-      <div class="step-foot">
-        <span v-if="draftMsg" class="draft-msg">{{ draftMsg }}</span>
-        <button class="btn ghost sm" @click="saveDraft(false)">保存草稿</button>
-        <button class="btn" @click="saveDraft(true)">保存并进入发布 →</button>
-      </div>
+      <p v-if="conn.status !== 'ok'" class="err-msg">尚未连接 ThingsBoard——请先在第 1 步连接。</p>
+      <EditorApp v-else ref="editorRef" embedded :session="editorSession" />
     </div>
 
     <!-- 5 发布上线 -->
@@ -2799,6 +2105,42 @@ function openFrontend() {
         站点配置),完成后自动打开前端站点视图。出错的步骤会标红并显示原因,修正后重新发布即可(所有写入都是幂等的)。
       </p>
 
+      <div class="page-pub">
+        <h3>页面(ScadaPage 资产)</h3>
+        <template v-if="pageState">
+          <p class="hint" style="margin-bottom: 8px">
+            「{{ pageState.currentPageName }}」· {{ pageState.config.widgets.length }} 个组件 ·
+            {{ pageState.errorCount ? `校验有 ${pageState.errorCount} 个错误,先回第 4 步修` : '校验通过' }}
+            <span v-if="pageState.published[pageState.currentPageName]">
+              · 已发布 version {{ pageState.published[pageState.currentPageName].version }}
+            </span>
+          </p>
+          <div class="frow">
+            <button class="btn" :disabled="!!pageState.errorCount || !pageState.connected" @click="pagePubOpen = !pagePubOpen">
+              {{ pagePubOpen ? '收起页面发布' : '发布页面' }}
+            </button>
+            <button class="btn ghost" @click="editorRef?.openPreview()">预览页面</button>
+            <button class="btn ghost sm" @click="downloadProject">下载 {{ site.name }}.scadaproj</button>
+          </div>
+          <div v-if="pagePubOpen" class="page-pub-panel">
+            <PublishPanel
+              :config="pageState.config"
+              :site-name="site.name"
+              :user="conn.username"
+              :api="api"
+              :error-count="pageState.errorCount"
+              :page-name="pageState.currentPageName"
+              :published="pageState.published[pageState.currentPageName]"
+              @published="(n, r) => (editorRef.setPageName(n), editorRef.recordPublished(n, r))"
+              @restored="cfg => editorRef.setConfig(cfg)"
+              @close="pagePubOpen = false"
+            />
+          </div>
+        </template>
+        <p v-else class="hint">先到第 4 步打开组态编辑器。</p>
+      </div>
+
+      <h3>规则与运算(计算字段 / 规则链 / 站点配置)</h3>
       <div class="frow">
         <div class="field"><label>聚合规则链名称</label><input type="text" v-model="rollupChainName" /></div>
         <button class="btn" :disabled="pub.running" @click="doPublish(true)">
@@ -2861,88 +2203,6 @@ function openFrontend() {
         </div>
         <div class="json-box" style="max-height: 260px">{{ jsonText }}</div>
       </details>
-    </div>
-
-    <!-- slot editor modal -->
-    <div v-if="slotModal.open" class="modal-mask" @click.self="slotModal.open = false">
-      <div class="modal">
-        <h3>配置{{ slotModal.zone === 'stat' ? '指标位' : '图表位' }}</h3>
-        <p class="d">选择数据源后,展示形式与标题会自动预填,可再调整。</p>
-        <div v-if="slotModal.form.card !== 'alarmlist'" class="frow">
-          <div class="field" style="flex: 1; min-width: 0">
-            <label>数据源{{ cardNeedsExtra ? '(主测点)' : '' }}</label>
-            <KeyPicker
-              v-model="slotModal.form.source"
-              :groups="slotPickerGroups"
-              placeholder="选择要展示的测点…"
-              @change="onSourceChange"
-            />
-          </div>
-        </div>
-        <p v-else class="hint" style="margin-bottom: 10px">告警滚动列表展示全站活动告警,无需选择数据源。</p>
-        <template v-if="cardNeedsExtra">
-          <div v-for="(e, i) in slotModal.form.extra" :key="i" class="frow" style="margin-bottom: 8px">
-            <div class="field" style="flex: 1; min-width: 0">
-              <label>{{ slotModal.form.card === 'combo' ? '副轴测点' : `附加测点 ${i + 1}` }}</label>
-              <KeyPicker v-model="slotModal.form.extra[i]" :groups="keyExtraGroups" placeholder="选择测点…" />
-            </div>
-            <button class="btn ghost sm" style="align-self: flex-end" @click="delExtra(i)">移除</button>
-          </div>
-          <div class="frow" style="margin-bottom: 10px">
-            <button class="btn ghost sm" :disabled="slotModal.form.extra.length >= extraLimit" @click="addExtra">
-              ＋ {{ slotModal.form.card === 'combo' ? '设置副轴测点' : '添加测点' }}({{
-                slotModal.form.extra.length
-              }}/{{ extraLimit }})
-            </button>
-          </div>
-        </template>
-        <div v-if="slotModal.form.card === 'gauge'" class="frow" style="margin-bottom: 8px">
-          <div class="field">
-            <label>量程上限(仪表盘满刻度)</label>
-            <input type="text" v-model="slotModal.form.max" placeholder="100" style="min-width: 140px" />
-          </div>
-        </div>
-        <div v-if="srcPreview.state !== 'idle'" class="src-preview" :class="srcPreview.state">
-          <template v-if="srcPreview.state === 'loading'">⏳ 读取实时值…</template>
-          <template v-else-if="srcPreview.state === 'ok'">
-            <span class="spv-label">实时值</span>
-            <span class="spv">{{ srcPreview.value }}</span>
-            <span class="spu">{{ srcPreview.unit }}</span>
-            <span class="spt">{{ previewAge() }}</span>
-            <span v-if="previewStale" class="sps">⚠ 数据较旧,设备可能已停止上报</span>
-          </template>
-          <template v-else-if="srcPreview.state === 'est'">
-            <span class="spv-label">预估值</span>
-            <span class="spv">{{ srcPreview.value }}</span>
-            <span class="sps" style="color: var(--accent)">{{ srcPreview.note }}</span>
-          </template>
-          <template v-else-if="srcPreview.state === 'empty'">⚠ {{ srcPreview.note }}</template>
-          <template v-else-if="srcPreview.state === 'info'">ℹ {{ srcPreview.note }}</template>
-        </div>
-        <div class="frow">
-          <div class="field">
-            <label>展示形式</label>
-            <select v-model="slotModal.form.card">
-              <option v-for="c in slotCardOptions" :key="c.id" :value="c.id">{{ c.label }}</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>标题</label>
-            <input type="text" v-model="slotModal.form.title" placeholder="卡片标题" />
-          </div>
-        </div>
-        <div class="modal-foot">
-          <button v-if="slots[slotModal.slotId]" class="btn ghost" @click="clearSlot">清空槽位</button>
-          <button class="btn ghost" @click="slotModal.open = false">取消</button>
-          <button
-            class="btn"
-            :disabled="!slotModal.form.source && slotModal.form.card !== 'alarmlist'"
-            @click="saveSlot"
-          >
-            保存
-          </button>
-        </div>
-      </div>
     </div>
 
     <!-- template modal -->

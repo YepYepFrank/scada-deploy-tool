@@ -15,6 +15,6 @@ src/
   standalone/  独立单文件大屏薄壳:登录页 + 页面列表 + 标头/时钟 + <ScadaPage>(替代 siteview/)
 ```
 
-页面入口只有两个:`provisioner.html`(向导)与 `site.html`(大屏,T3.8 改为带登录的独立薄壳)。早期演示首页 `index.html` / `App.vue` 已在迁入时删除。
+页面入口:`provisioner.html`(向导:第 4 步嵌入 `EditorApp`,第 5 步页面发布 + 规则发布 + `.scadaproj` 下载,T3.7)、`editor.html`(独立组态编辑器,自带 TB 连接面板,联调用)、`site.html`(大屏,T3.8 改为带登录的独立薄壳)。早期演示首页 `index.html` / `App.vue` 已在迁入时删除。
 
 迁入时删除 / 精简:`api/tb.js` 的 `REPORT_AUTH / reportAuth / getCustomerDevices / PUBLIC_ID`、第 5 步「设为 Public」、`components/SlotCard.vue`(拆进渲染器)。

@@ -3,7 +3,7 @@
  * 组态编辑器(T3.2 起,独立页 editor.html;T3.7 发布器完成后接入向导第 4 步):
  * 左:模板卡片;中:槽位示意图(点槽位选组件);右:当前槽位、撤销 / 重做、校验结果、JSON。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import {
   getTemplate,
   listTemplates,
@@ -26,9 +26,16 @@ import { useProject } from '../project/useProject'
 import { ProjectParseError } from '../project/scadaproj'
 import { detectDrift, pageNameOf, readPageState, type DriftItem, type PublishedRecord } from '../publish/publishPage'
 import { useEditorState } from './useEditorState'
-import { useMeta } from '../meta/useMeta'
+import { useMeta, type EditorSession } from '../meta/useMeta'
+import { serializeProject } from '../project/scadaproj'
 import { LAYER_TITLE, sortIssues, validateBindingsLayer, validateStatic, type PageIssue } from './validate'
 import type { BindingFlag } from './binding-check'
+
+/**
+ * embedded:嵌进向导第 4 步——隐藏标题与 TB 连接面板,采用向导已登录的 session(T3.7 接入)。
+ * 独立页(editor.html)不传这两个 prop。
+ */
+const props = defineProps<{ embedded?: boolean; session?: EditorSession | null }>()
 
 registerBuiltins()
 const templates = listTemplates()
@@ -38,13 +45,23 @@ const initial: PageConfig = { schemaVersion: 1, template: templates[0]!.id, titl
 const ed = useEditorState(initial)
 // TB 连接 + 元数据树(绑定选择器用);凭据只在内存
 const meta = useMeta()
+watch(
+  () => props.session,
+  s => {
+    if (s?.token) void meta.adopt(s)
+  },
+  { immediate: true, deep: true }
+)
 
 // ---------- 项目文件 / 发布 / 漂移(T3.7) ----------
 const project = useProject({ getConfig: () => ed.config.value, setConfig: cfg => ed.commit(cfg), conn: meta.conn })
 const publishOpen = ref(false)
-const currentPageName = computed(() => pageNameOf(meta.conn.siteName, ed.config.value))
+/** 页面资产名:缺省 <站点>-<标题>;从 TB 读回的页面沿用它在 TB 上的名字(里程碑 A 那种自由命名的资产也能原地更新) */
+const pageNameOverride = ref<string | null>(null)
+const currentPageName = computed(() => pageNameOverride.value ?? pageNameOf(meta.conn.siteName, ed.config.value))
 const currentPublished = computed(() => project.published.value[currentPageName.value])
 function onPublished(name: string, rec: PublishedRecord) {
+  pageNameOverride.value = name
   project.recordPublished(name, rec)
   toast(`已发布「${name}」version ${rec.version}`)
 }
@@ -95,6 +112,7 @@ async function driftKeep(d: DriftItem) {
     if (st.config) {
       ed.commit(st.config as unknown as PageConfig)
       selected.value = null
+      pageNameOverride.value = d.pageName
       project.recordPublished(d.pageName, { assetId: d.assetId, version: d.remote ?? 0, at: Date.now(), by: '(TB)' })
       toast(`已以 TB 为准反向导入「${d.pageName}」version ${d.remote}`)
     }
@@ -297,6 +315,38 @@ function toast(m: string) {
   if (toastTimer) clearTimeout(toastTimer)
   toastTimer = setTimeout(() => (toastMsg.value = ''), 2600)
 }
+
+/** 给外部壳(向导)用的只读状态与少量操作 */
+const state = reactive({
+  config: computed(() => ed.config.value),
+  errorCount: computed(() => errorCount.value),
+  published: computed(() => project.published.value),
+  currentPageName: computed(() => currentPageName.value),
+  connected: computed(() => meta.connected.value),
+})
+defineExpose({
+  state,
+  setConfig(cfg: PageConfig) {
+    ed.commit(cfg)
+    selected.value = null
+  },
+  recordPublished: project.recordPublished,
+  /** 从 TB 读回的页面:沿用资产名,发布时原地更新而不是新建 */
+  setPageName(name: string | null) {
+    pageNameOverride.value = name
+  },
+  /** 导出 .scadaproj 文本;向导把 rules(tbsite 配置)一起塞进去 */
+  exportText(rules: unknown = null) {
+    return serializeProject({ ...project.current.value, rules })
+  },
+  importText: project.importText,
+  openPublish() {
+    publishOpen.value = true
+  },
+  openPreview() {
+    previewOpen.value = true
+  },
+})
 </script>
 
 <template>
@@ -310,7 +360,7 @@ function toast(m: string) {
     :customer-pass="customerIdentity?.pass"
     @close="previewOpen = false"
   />
-  <div v-else class="ed">
+  <div v-else class="ed" :class="{ 'ed-embedded': embedded }">
     <div v-if="publishOpen" class="ed-modal" data-role="publish-modal">
       <div class="ed-modal-box">
         <PublishPanel
@@ -319,6 +369,7 @@ function toast(m: string) {
           :user="meta.conn.user"
           :api="meta.api"
           :error-count="errorCount"
+          :page-name="currentPageName"
           :published="currentPublished"
           @published="onPublished"
           @restored="cfg => ed.commit(cfg)"
@@ -350,7 +401,7 @@ function toast(m: string) {
       </div>
     </div>
     <aside class="ed-left">
-      <h1>组态编辑器 <small>T3.2 · 模板与槽位</small></h1>
+      <h1 v-if="!embedded">组态编辑器 <small>T3.2 · 模板与槽位</small></h1>
       <label class="ed-field">页面标题 <input v-model.lazy="title" /></label>
       <h2>模板</h2>
       <TemplatePicker v-model="templateId" :templates="templates" />
@@ -367,8 +418,8 @@ function toast(m: string) {
         </div>
       </div>
 
-      <h2>ThingsBoard <span class="dim">绑定选择器的实体 / 测点来源</span></h2>
-      <div class="ed-conn">
+      <h2 v-if="!embedded">ThingsBoard <span class="dim">绑定选择器的实体 / 测点来源</span></h2>
+      <div v-if="!embedded" class="ed-conn">
         <label class="ed-field">地址 <input v-model="meta.conn.base" /></label>
         <label v-if="meta.identities.length > 1" class="ed-field"
           >身份预填
@@ -551,6 +602,12 @@ body {
   display: grid;
   grid-template-columns: 280px 1fr 340px;
   height: 100vh;
+}
+.ed.ed-embedded {
+  height: min(82vh, 900px);
+  border: 1px solid var(--ed-line, rgba(83, 196, 255, 0.2));
+  border-radius: 10px;
+  overflow: hidden;
 }
 .ed-left,
 .ed-right {
