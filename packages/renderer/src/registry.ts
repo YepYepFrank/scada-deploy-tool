@@ -11,6 +11,8 @@ export interface RegistryIssue {
   /** JSON Pointer 风格定位,如 /widgets/w-s1/bindings/value */
   path: string
   message: string
+  /** 稳定问题码,供上层(编辑器校验层)分层 / 去重;只对少数检查给出 */
+  code?: 'template-slot-required' | 'binding-slot-required'
 }
 
 const widgets = new Map<string, WidgetDefinition>()
@@ -91,7 +93,12 @@ export function validateAgainstRegistry(config: PageConfig): RegistryIssue[] {
   if (tpl) {
     for (const s of tpl.slots) {
       if (s.required && !config.widgets.some(w => w.slot === s.name))
-        issues.push({ level: 'error', path: '/widgets', message: `模板必填槽位 "${s.name}" 未配置组件` })
+        issues.push({
+          level: 'error',
+          path: '/widgets',
+          code: 'template-slot-required',
+          message: `模板必填槽位 "${s.name}" 未配置组件`,
+        })
     }
   }
   return issues
@@ -134,6 +141,7 @@ function validateBindings(w: WidgetConfig, def: WidgetDefinition, base: string):
       issues.push({
         level: 'error',
         path: `${base}/bindings`,
+        code: 'binding-slot-required',
         message: `组件 "${def.type}" 的必填绑定槽位 "${s.name}" 缺失`,
       })
   }

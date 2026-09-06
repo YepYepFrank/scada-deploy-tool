@@ -9,8 +9,6 @@ import {
   listTemplates,
   listWidgets,
   registerBuiltins,
-  validateAgainstRegistry,
-  validatePageConfig,
   type PageConfig,
   type TemplateDefinition,
   type TemplateSlotDefinition,
@@ -23,8 +21,8 @@ import WidgetPicker from './WidgetPicker.vue'
 import PropsForm from './PropsForm.vue'
 import BindingsPanel from './BindingsPanel.vue'
 import { useEditorState } from './useEditorState'
-import { validateProps } from './props-form'
 import { useMeta } from '../meta/useMeta'
+import { LAYER_TITLE, sortIssues, validateBindingsLayer, validateStatic, type PageIssue } from './validate'
 import type { BindingFlag } from './binding-check'
 
 registerBuiltins()
@@ -96,32 +94,67 @@ function onRemove() {
   pickerOpen.value = false
 }
 
-// ---------- 校验(schema + 注册表;T3.5 再加绑定存在性等层) ----------
-const issues = computed(() => {
+// ---------- 校验(T3.5 四层:同步层随配置即时算;绑定存在性层连上 TB 后防抖异步跑) ----------
+const staticIssues = computed(() => validateStatic(ed.config.value))
+const bindingIssues = ref<PageIssue[]>([])
+const bindingChecked = ref(false)
+const bindingBusy = ref(false)
+let bindingRun = 0
+let bindingTimer: ReturnType<typeof setTimeout> | undefined
+async function runBindingLayer() {
+  const run = ++bindingRun
   const cfg = ed.config.value
-  const sv = validatePageConfig(cfg)
-  const list: { level: string; path: string; message: string }[] = []
-  if (!sv.ok) list.push(...sv.issues.map(i => ({ level: 'error', path: i.path, message: i.message })))
-  list.push(...validateAgainstRegistry(cfg))
-  // 属性值校验(propsSchema:越界 / 类型 / 枚举),T3.5 会并入统一校验层
-  for (const w of cfg.widgets) {
-    const def = widgets.find(d => d.type === w.type)
-    if (!def) continue
-    for (const i of validateProps(def.propsSchema, w.props ?? {}))
-      list.push({ level: 'error', path: `/widgets/${w.id}/props/${i.path}`, message: i.message })
+  const m = { tree: meta.tree.value, client: meta.client.value }
+  if (!m.tree || !m.client) {
+    bindingIssues.value = []
+    bindingChecked.value = false
+    return
   }
-  // 当前组件绑定面板给出的类型提示(黄)
+  bindingBusy.value = true
+  try {
+    const list = await validateBindingsLayer(cfg, m)
+    if (run !== bindingRun) return
+    bindingIssues.value = list
+    bindingChecked.value = true
+  } finally {
+    if (run === bindingRun) bindingBusy.value = false
+  }
+}
+watch(
+  () => [ed.config.value, meta.client.value] as const,
+  () => {
+    clearTimeout(bindingTimer)
+    bindingTimer = setTimeout(runBindingLayer, 300)
+  },
+  { immediate: true }
+)
+const issues = computed(() => {
+  const list: PageIssue[] = [...staticIssues.value, ...bindingIssues.value]
+  // 当前组件绑定面板给出的类型提示(黄,来自最近值类型),校验层没有这条
   if (selectedWidget.value)
     for (const [slot, f] of Object.entries(bindingFlags.value))
       if (f?.level === 'warning')
         list.push({
           level: 'warning',
+          layer: 'binding',
           path: `/widgets/${selectedWidget.value.id}/bindings/${slot}`,
+          widgetId: selectedWidget.value.id,
+          slot,
           message: f.message,
         })
-  return list
+  return sortIssues(list)
 })
 const errorCount = computed(() => issues.value.filter(i => i.level === 'error').length)
+const warningCount = computed(() => issues.value.length - errorCount.value)
+/** 点问题行 → 选中对应组件所在槽位(模板槽位问题直接选该槽位) */
+function gotoIssue(i: PageIssue) {
+  const w = i.widgetId ? ed.config.value.widgets.find(x => x.id === i.widgetId) : undefined
+  const slot = w?.slot ?? (i.layer === 'template' && !i.widgetId ? i.slot : undefined)
+  if (slot && template.value.slots.some(s => s.name === slot)) {
+    selected.value = slot
+    pickerOpen.value = false
+  }
+}
 
 // ---------- 标题 / JSON ----------
 const title = computed({
@@ -226,8 +259,8 @@ function toast(m: string) {
         <span class="ed-hint"
           >点击槽位选择组件 · {{ template.name }} · {{ ed.config.value.widgets.length }} 个组件</span
         >
-        <span class="ed-issues" :class="{ bad: errorCount }">{{
-          errorCount ? `${errorCount} 个错误` : '校验通过'
+        <span class="ed-issues" :class="{ bad: errorCount, warn: !errorCount && warningCount }">{{
+          errorCount ? `${errorCount} 个错误,不可发布` : warningCount ? `${warningCount} 个提示` : '校验通过'
         }}</span>
       </div>
       <SlotBoard :config="ed.config.value" :template="template" :selected="selected" @select="onSelect" />
@@ -278,13 +311,28 @@ function toast(m: string) {
         />
       </template>
 
-      <h2>校验</h2>
+      <h2>
+        校验
+        <span class="dim ed-vstate">{{
+          bindingBusy ? '正在核对绑定…' : bindingChecked ? '含绑定存在性' : '未连接 TB,绑定存在性未查'
+        }}</span>
+      </h2>
       <ul v-if="issues.length" class="ed-issue-list">
-        <li v-for="(i, k) in issues" :key="k" :class="i.level">
-          <code>{{ i.path }}</code> {{ i.message }}
+        <li
+          v-for="(i, k) in issues"
+          :key="k"
+          :class="[i.level, { link: !!i.widgetId || (i.layer === 'template' && !!i.slot) }]"
+          :data-layer="i.layer"
+          :title="i.path"
+          @click="gotoIssue(i)"
+        >
+          <span class="ed-layer">{{ LAYER_TITLE[i.layer] }}</span>
+          <code v-if="i.widgetId">{{ i.widgetId }}{{ i.slot ? '/' + i.slot : '' }}</code>
+          <code v-else-if="i.slot">槽位 {{ i.slot }}</code>
+          {{ i.message }}
         </li>
       </ul>
-      <div v-else class="dim">schema 与注册表校验通过</div>
+      <div v-else class="dim">{{ bindingChecked ? '四层校验通过' : '形状 / 注册表 / 模板 / 属性校验通过' }}</div>
 
       <h2>
         JSON
@@ -401,6 +449,30 @@ body {
 }
 .ed-issues.bad {
   color: #ff8a8a;
+}
+.ed-issues.warn {
+  color: #ffd27a;
+}
+.ed-vstate {
+  font-weight: 400;
+  font-size: 11px;
+  margin-left: 6px;
+}
+.ed-layer {
+  display: inline-block;
+  min-width: 2.5em;
+  margin-right: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 0.85;
+}
+.ed-issue-list li.link {
+  cursor: pointer;
+}
+.ed-issue-list li.link:hover {
+  text-decoration: underline;
 }
 .ed-field {
   display: block;
