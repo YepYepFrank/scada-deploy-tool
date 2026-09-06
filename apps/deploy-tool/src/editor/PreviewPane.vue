@@ -11,6 +11,8 @@ import { ScadaPage, type PageConfig } from '@grid/scada-renderer'
 import { LegacyDataSource, type DataSource } from '@grid/tb-client'
 
 type Source = DataSource & { dispose?(): void }
+/** 缺省数据源工厂:LegacyDataSource(测试通过 makeSource 注入假实现) */
+const defaultMake = (base: string, getToken: () => string): Source => new LegacyDataSource({ baseUrl: base, getToken })
 
 const props = withDefaults(
   defineProps<{
@@ -23,7 +25,7 @@ const props = withDefaults(
     customerUser?: string
     customerPass?: string
     /** 测试注入:按 token 造数据源;缺省 LegacyDataSource */
-    makeSource?: (_base: string, _getToken: () => string) => Source
+    makeSource?: typeof defaultMake
     /** 测试注入:登录请求 */
     fetchImpl?: typeof fetch
   }>(),
@@ -85,8 +87,7 @@ const widgetLabel = (id: string) => {
 const whose = computed(() => (view.value === 'customer' ? `Customer「${cust.user}」` : `租户「${props.tenantUser}」`))
 
 // ---------- 数据源:视角或 token 变了就整个换掉(ScadaPage 用 key 重建,订阅全部重来) ----------
-const make = (base: string, getToken: () => string): Source =>
-  props.makeSource ? props.makeSource(base, getToken) : new LegacyDataSource({ baseUrl: base, getToken })
+const make = (base: string, getToken: () => string): Source => (props.makeSource ?? defaultMake)(base, getToken)
 const source = shallowRef<Source | null>(null)
 const sourceKey = ref(0)
 const activeToken = computed(() => (view.value === 'tenant' ? props.tenantToken : cust.token))
