@@ -21,6 +21,7 @@ import {
 import type { EntityRef } from '@grid/tb-client'
 import type { KeyInfo, MetaNode } from '../meta/MetaNode'
 import { validateProps } from './props-form'
+import { isComplete } from './binding-check'
 
 export type IssueLayer = 'schema' | 'registry' | 'props' | 'binding' | 'template' | 'actions'
 
@@ -92,6 +93,56 @@ const bindingsOf = (w: WidgetConfig): Array<{ slot: string; index: number | null
   return out
 }
 
+/** 各 mode 自己的字段:折叠 oneOf 分支错误时只保留与所选 mode 相关的「缺字段」提示 */
+const MODE_FIELDS: Record<string, string[]> = {
+  ts: ['entity', 'key'],
+  attr: ['entity', 'scope', 'key'],
+  'ts-history': ['entity', 'keys', 'window', 'agg', 'maxPoints'],
+  alarm: ['entity', 'types'],
+  const: ['value'],
+  ext: ['source', 'window', 'interval', 'params'],
+}
+
+/** 把 Ajv 对一条绑定(oneOf 联合)报的一串错误折叠成一条,只留和所选 mode 有关、能指导修改的信息 */
+function collapseBindingIssue(
+  path: string,
+  at: ReturnType<typeof locate>,
+  list: { sub: string; message: string; keyword: string }[],
+  cfg: PageConfig | null
+): PageIssue {
+  // 找到这条绑定对象,看它声明的 mode
+  let mode: string | undefined
+  const m = /^\/widgets\/([^/]+)\/bindings\/([^/]+)(?:\/(\d+))?$/.exec(path)
+  if (m && cfg) {
+    const w = cfg.widgets.find(x => x.id === m[1])
+    const b = w?.bindings?.[m[2]!]
+    const one = m[3] !== undefined ? (Array.isArray(b) ? b[Number(m[3])] : undefined) : Array.isArray(b) ? undefined : b
+    mode = (one as { mode?: string } | undefined)?.mode
+  }
+  const fields = mode ? MODE_FIELDS[mode] : undefined
+  const msgs = new Set<string>()
+  for (const i of list) {
+    if (i.keyword === 'oneOf' || i.keyword === 'anyOf' || i.keyword === 'additionalProperties') continue
+    if (i.keyword === 'required') {
+      const f = /property '([^']+)'/.exec(i.message)?.[1]
+      if (f && fields && fields.includes(f)) msgs.add(`缺 ${f}`)
+      continue
+    }
+    // 只留子路径上的具体错误(如 /key 太短、/entity/id 为空);绑定对象本身那一层的「must be array」之类是联合分支噪音
+    const top = i.sub.split('/')[1]
+    if (!top) continue
+    if (!fields || fields.includes(top)) msgs.add(`${i.sub} ${i.message}`)
+  }
+  const message = !mode
+    ? '绑定缺少 mode'
+    : !fields
+      ? `mode「${mode}」不是六种绑定之一`
+      : msgs.size
+        ? `「${mode}」绑定未填完整:${[...msgs].join(';')}`
+        : `「${mode}」绑定形状不合法`
+  return { level: 'error', layer: 'schema', ...at, path, message }
+}
+
 // ---------- 同步层:① schema、registry、props、③ template、④ actions ----------
 
 /** 不需要 TB 连接的全部层。输入可以是任意 JSON(schema 不过时其余层跳过)。 */
@@ -101,6 +152,11 @@ export function validateStatic(input: unknown): PageIssue[] {
   const shaped = isPageConfig(input) ? (input as PageConfig) : null
   // actions 下的形状问题归到第 ④ 层;Action 是 oneOf 联合,Ajv allErrors 对一个坏 action 会报一串,按 action 折叠成一条
   const actionShape = new Map<string, { at: ReturnType<typeof locate>; slot: string; msgs: Set<string> }>()
+  // Binding 同样是六种 mode 的 oneOf 联合:一条没填完的 ts 绑定会冒出 20 多条分支错误,按绑定折叠成一条
+  const bindingRaw = new Map<
+    string,
+    { at: ReturnType<typeof locate>; list: { sub: string; message: string; keyword: string }[] }
+  >()
   if (!sv.ok) {
     for (const i of sv.issues) {
       const loc = locate(i.path, shaped)
@@ -111,8 +167,21 @@ export function validateStatic(input: unknown): PageIssue[] {
         actionShape.set(am[1]!, g)
         continue
       }
+      const bm = /^(\/widgets\/[^/]+\/bindings\/[^/]+(?:\/\d+)?)/.exec(loc.path)
+      if (bm) {
+        const g = bindingRaw.get(bm[1]!) ?? { at: { ...loc, path: bm[1]! }, list: [] }
+        g.list.push({ sub: loc.path.slice(bm[1]!.length), message: i.message, keyword: i.keyword })
+        bindingRaw.set(bm[1]!, g)
+        continue
+      }
       issues.push({ level: 'error', layer: 'schema', ...loc, message: i.message })
     }
+  }
+  // 多序列槽位:数组本身那一层(bindings 值是「单个 | 数组」的 anyOf)也会挂一串,若已有更具体的 /<i> 分组就只报那一条
+  const bindingPaths = [...bindingRaw.keys()]
+  for (const [path, g] of bindingRaw) {
+    if (bindingPaths.some(k => k !== path && k.startsWith(path + '/'))) continue
+    issues.push(collapseBindingIssue(path, g.at, g.list, shaped))
   }
   if (!shaped) {
     for (const g of actionShape.values())
@@ -334,6 +403,8 @@ export async function validateBindingsLayer(cfg: PageConfig, meta: MetaLookup): 
   for (const w of cfg.widgets) {
     for (const { slot, index: i, b } of bindingsOf(w)) {
       if (b.mode === 'const' || b.mode === 'ext') continue
+      // 没填完的绑定由 schema 层报「未填完整」,这里不再重复报「实体(空)不存在」
+      if (!isComplete(b)) continue
       const at = {
         path: `/widgets/${w.id}/bindings/${slot}${i === null ? '' : `/${i}`}`,
         widgetId: w.id,

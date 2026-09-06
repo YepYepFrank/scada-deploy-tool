@@ -64,6 +64,31 @@ describe('校验层', () => {
     expect(s[0]!.path.startsWith('/widgets/w-s1/bindings/value')).toBe(true)
   })
 
+  it('① schema:没填完的 ts 绑定(oneOf 联合冒出 20 多条分支错误)折叠成一条,只提示本 mode 缺的字段;② 层不重复报', async () => {
+    const cfg = good()
+    cfg.widgets[1]!.bindings.value = { mode: 'ts', entity: { type: 'DEVICE', id: '', name: '' }, key: '' }
+    const s = only(validateStatic(cfg), 'schema')
+    expect(s).toHaveLength(1)
+    expect([s[0]!.widgetId, s[0]!.slot, s[0]!.path]).toEqual(['w-s1', 'value', '/widgets/w-s1/bindings/value'])
+    expect(s[0]!.message).toMatch(/^「ts」绑定未填完整:/)
+    expect(s[0]!.message).toMatch(/key/)
+    expect(s[0]!.message).not.toMatch(/keys|window|scope|source/)
+    expect(await validateBindingsLayer(cfg, meta)).toEqual([])
+    // 多序列槽位里的第 2 条没填完:路径带下标
+    cfg.widgets[1]!.bindings.value = { mode: 'ts', entity: SSP, key: 'Q' }
+    cfg.widgets[0]!.bindings.series = [
+      { mode: 'ts-history', entity: SSP, keys: ['P'], window: '24h' },
+      { mode: 'ts-history', entity: { type: 'DEVICE', id: '', name: '' }, keys: [], window: '24h' },
+    ]
+    const s2 = only(validateStatic(cfg), 'schema')
+    expect(s2.map(i => [i.path, i.slot])).toEqual([['/widgets/w-g1/bindings/series/1', 'series']])
+    expect(s2[0]!.message).toMatch(/^「ts-history」绑定未填完整:/)
+    // mode 不是六种之一
+    cfg.widgets[0]!.bindings.series = [{ mode: 'ts-history', entity: SSP, keys: ['P'], window: '24h' }]
+    ;(cfg.widgets[1]!.bindings as Record<string, unknown>).value = { mode: 'bogus' }
+    expect(only(validateStatic(cfg), 'schema').map(i => i.message)).toEqual(['mode「bogus」不是六种绑定之一'])
+  })
+
   it('② 绑定:实体不存在 → error;遥测 key 不存在 → error;calc_ key 不存在 → warning;都定位到槽位', async () => {
     const cfg = good()
     cfg.widgets[1]!.bindings.value = { mode: 'ts', entity: { type: 'DEVICE', id: 'x', name: 'GHOST' }, key: 'P' }
