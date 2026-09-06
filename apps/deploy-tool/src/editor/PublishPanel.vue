@@ -46,15 +46,15 @@ const STEP_TITLE: Record<string, string> = {
 }
 
 const derived = () => props.pageName || pageNameOf(props.siteName, props.config)
-const pageName = ref(derived())
+const assetName = ref(derived())
 watch(
   () => [props.siteName, props.config.title, props.pageName],
-  () => (pageName.value = derived())
+  () => (assetName.value = derived())
 )
 const busy = ref(false)
 const steps = ref<PageStepReport[]>([])
 const result = ref<PublishPageResult | null>(null)
-const canPublish = computed(() => !busy.value && !!props.siteName && props.errorCount === 0 && !!pageName.value.trim())
+const canPublish = computed(() => !busy.value && !!props.siteName && props.errorCount === 0 && !!assetName.value.trim())
 const blockReason = computed(() =>
   !props.siteName ? '先在左栏填站点名(站点资产名)' : props.errorCount ? `校验有 ${props.errorCount} 个错误` : ''
 )
@@ -69,9 +69,9 @@ async function loadRemote() {
   remoteMsg.value = '读取中…'
   try {
     const pages = await listSitePages(props.api, props.siteName)
-    const p = pages.find(x => x.name === pageName.value)
+    const p = pages.find(x => x.name === assetName.value)
     if (!p) {
-      remoteMsg.value = `TB 上还没有「${pageName.value}」,发布会新建`
+      remoteMsg.value = `TB 上还没有「${assetName.value}」,发布会新建`
       return
     }
     remote.value = { assetId: p.assetId, version: p.version }
@@ -82,7 +82,7 @@ async function loadRemote() {
   }
 }
 onMounted(loadRemote)
-watch(pageName, loadRemote)
+watch(assetName, loadRemote)
 
 // ---------- 发布 / 恢复 ----------
 async function run(config: PageConfig, label: string) {
@@ -92,7 +92,7 @@ async function run(config: PageConfig, label: string) {
   try {
     const r = await publishPage(config as never, props.api, {
       siteName: props.siteName,
-      pageName: pageName.value,
+      pageName: assetName.value,
       publishedBy: props.user,
       report: s => steps.value.push(s),
     })
@@ -131,7 +131,7 @@ const mark = (s: PageStepReport['status']) => (s === 'ok' ? '✓' : s === 'err' 
     </div>
     <label class="pp-field">
       页面资产名
-      <input v-model="pageName" data-role="page-name" :disabled="busy" />
+      <input v-model="assetName" data-role="page-name" :disabled="busy" />
     </label>
     <div class="dim" data-role="remote">{{ remoteMsg }}</div>
     <div v-if="published" class="dim" data-role="local">
