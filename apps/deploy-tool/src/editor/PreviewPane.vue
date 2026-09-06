@@ -23,7 +23,7 @@ const props = withDefaults(
     customerUser?: string
     customerPass?: string
     /** 测试注入:按 token 造数据源;缺省 LegacyDataSource */
-    makeSource?: (base: string, getToken: () => string) => Source
+    makeSource?: (_base: string, _getToken: () => string) => Source
     /** 测试注入:登录请求 */
     fetchImpl?: typeof fetch
   }>(),
@@ -41,7 +41,7 @@ const cust = reactive({
   msg: '',
 })
 
-const doFetch = (input: string, init?: RequestInit) => (props.fetchImpl ?? fetch)(input, init)
+const doFetch = (input: string, init?: Parameters<typeof fetch>[1]) => (props.fetchImpl ?? fetch)(input, init)
 async function loginCustomer() {
   cust.busy = true
   cust.msg = '登录中…'
