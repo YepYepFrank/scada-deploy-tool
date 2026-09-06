@@ -7,7 +7,7 @@
 | 项 | 位置 |
 |---|---|
 | 页面配置 | `docs/联调记录/milestone-A.pageconfig.json`(`overview-a`,9 个组件 / 8 种类型:alarm-list、number-card、gauge、status-light、line、dual-axis、table、overview-card) |
-| 写入脚本(临时,T3.7 后删) | `packages/compiler/scripts/put-pageconfig.mjs`:本地 schema + 注册表校验 → 建 / 更新 `ScadaPage` 资产 → 写 `pageConfig` / `pageConfigHistory` → 站点 `Contains` 关系 → 分给 Customer |
+| 写入脚本 | 原临时脚本 `put-pageconfig.mjs` 已于 T3.7(2026-09-06)删除;同样的六步现在是 `publishPage`(`packages/compiler/src/page/publish-page.ts`),CLI `pnpm tbsite page <页面.json> --site <站点>`,编辑器工具栏「发布」 |
 | 镜像上的资产 | `ScadaPage`「仙人山服务区 · 总览」`7c739b90-a938-11f1-8b57-bb087795a11f`,`additionalInfo.managedBy = deploy-tool`,`version = 2`(第二次写入验证幂等:历史 1 版);由 `xrs-mirror-test` `Contains`;分配给客户「仙人山服务区」 |
 | 我方渲染 | `packages/renderer` `/dev` 页「镜像真数据」面板 → 用 CUSTOMER_USER 登录 → 选「页面(ScadaPage 资产)」→ 原样渲染 |
 

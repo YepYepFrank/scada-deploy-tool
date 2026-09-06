@@ -6,10 +6,12 @@
 
 ```
 src/
-  editor/      TemplatePicker.vue  SlotBoard.vue  PropsForm.vue  BindingRow.vue  validate.ts  useEditorState.ts
-  meta/        MetaNode.ts(实体树,虚拟滚动)
-  migrate/     siteConfigToPageConfig.ts
-  publish/     publishPage.ts  resolveEntities.ts(ADR-002)  drift.ts  scadaproj.ts
+  editor/      EditorApp.vue  TemplatePicker.vue  SlotBoard.vue  WidgetPicker.vue  PropsForm.vue  BindingRow.vue
+               BindingsPanel.vue  EntityTree.vue  PreviewPane.vue(T3.6)  PublishPanel.vue(T3.7)  validate.ts  useEditorState.ts
+  meta/        MetaNode.ts(实体树,Contains 递归,虚拟滚动)  useMeta.ts(连接与元数据状态)
+  migrate/     siteConfigToPageConfig.ts(转发到 compiler)
+  publish/     publishPage.ts(转发到 compiler 的 page/publish-page.ts:六步发布 + 逆序回滚 + 漂移检测)
+  project/     scadaproj.ts(.scadaproj 序列化 / 解析)  useProject.ts(导出 / 导入 / 已发布记录)
   standalone/  独立单文件大屏薄壳:登录页 + 页面列表 + 标头/时钟 + <ScadaPage>(替代 siteview/)
 ```
 

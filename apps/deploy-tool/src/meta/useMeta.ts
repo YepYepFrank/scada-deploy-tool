@@ -30,14 +30,15 @@ export function useMeta() {
   const tree = shallowRef<MetaNode | null>(null)
   const client = shallowRef<MetaClient | null>(null)
 
-  const api = async (url: string, data?: unknown) => {
+  /** 与编译器 TbApi 同签名:(url, data?, method?);data 为 undefined/null 不发 body */
+  const api = async (url: string, data?: unknown, method?: 'GET' | 'POST' | 'DELETE') => {
     const r = await fetch(conn.base + url, {
-      method: data ? 'POST' : 'GET',
+      method: method ?? (data !== undefined && data !== null ? 'POST' : 'GET'),
       headers: {
         'Content-Type': 'application/json',
         ...(conn.token ? { 'X-Authorization': `Bearer ${conn.token}` } : {}),
       },
-      body: data ? JSON.stringify(data) : undefined,
+      body: data !== undefined && data !== null ? JSON.stringify(data) : undefined,
     })
     if (!r.ok) throw new Error(`${url.split('?')[0]} → HTTP ${r.status}`)
     const t = await r.text()

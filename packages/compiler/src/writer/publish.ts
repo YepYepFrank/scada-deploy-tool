@@ -13,7 +13,6 @@ import {
   ensureAsset,
   ensureChain,
   listCfs,
-  makePublic,
   type PublishFailure,
   type Reporter,
   type RetryScope,
@@ -27,8 +26,6 @@ export interface PublishOptions {
   retry?: RetryScope | null
   /** 分层汇聚时等分组遥测落库的毫秒数(测试可设 0) */
   layeredSettleMs?: number
-  /** 站点资产 / 汇聚资产是否设为公开(现网默认公开;T3.8 后改为分给 Customer) */
-  makePublic?: boolean
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -67,7 +64,7 @@ export async function publish(
   report: Reporter,
   opts: PublishOptions = {}
 ): Promise<PublishFailure[]> {
-  const { publishedBy = '', retry = null, layeredSettleMs = 3000, makePublic: pub = true } = opts
+  const { publishedBy = '', retry = null, layeredSettleMs = 3000 } = opts
   const failures: PublishFailure[] = []
   const stepOn = (id: RetryScope['steps'][number]) => !retry || retry.steps.includes(id)
   const fail = (step: PublishFailure['step'], e: unknown, extra: Partial<PublishFailure> = {}) => {
@@ -158,7 +155,6 @@ export async function publish(
         try {
           const members = resolveAggMembers(cfg, c)
           const { id: aid } = await ensureAsset(api, c.asset as string, AGG_ASSET_TYPE)
-          if (pub) await makePublic(api, 'asset', aid)
           for (const m of members)
             await api('/api/relation', {
               from: { entityType: 'ASSET', id: aid },
@@ -210,7 +206,6 @@ export async function publish(
         const assetIds: Record<string, string> = {}
         for (const c of revs) {
           const { id } = await ensureAsset(api, c.asset as string, AGG_ASSET_TYPE)
-          if (pub) await makePublic(api, 'asset', id)
           assetIds[c.asset as string] = id
         }
         const { id, created } = await ensureChain(api, names.revenue)
@@ -292,8 +287,8 @@ export async function publish(
       siteConfig: original,
       siteConfigHistory: history,
     })
-    if (pub) await makePublic(api, 'asset', id)
-    report('asset', 'ok', `资产 ${cfg.site.name} · ${pub ? '已公开' : '未公开'} · 历史 ${history.length} 版`)
+    // 不再「设为 Public」(T3.7 移除):页面资产由 publishPage 分给站点所属 Customer,站点资产按 T3.8 处理
+    report('asset', 'ok', `资产 ${cfg.site.name} · 历史 ${history.length} 版`)
   } catch (e) {
     fail('asset', e)
   }

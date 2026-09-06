@@ -110,7 +110,7 @@ describe.skipIf(!hasCreds)(`规则链路径(live @ ${TB_BASE})`, () => {
   it('publish:CF 数量、规则链名 / 节点数、Root 转发、站点资产与计划一致', async () => {
     const plan = compile(cfg, { devices: devIds })
     expect(plan.validation.errors).toEqual([])
-    const failures = await publish(cfg, devIds, api, report, { publishedBy: 'live-test', makePublic: false })
+    const failures = await publish(cfg, devIds, api, report, { publishedBy: 'live-test' })
     expect(failures).toEqual([])
     expect(log.filter(l => l.includes(':err'))).toEqual([])
 
@@ -144,7 +144,7 @@ describe.skipIf(!hasCreds)(`规则链路径(live @ ${TB_BASE})`, () => {
   it('再 publish:幂等——CF / 规则链 id 不变、数量不变,历史 +1', async () => {
     const before = await snapshotSite(api, cfg.site.name, devIds)
     log.length = 0
-    const failures = await publish(cfg, devIds, api, report, { publishedBy: 'live-test-2', makePublic: false })
+    const failures = await publish(cfg, devIds, api, report, { publishedBy: 'live-test-2' })
     expect(failures).toEqual([])
     const after = await snapshotSite(api, cfg.site.name, devIds)
     expect(after).toEqual(before)

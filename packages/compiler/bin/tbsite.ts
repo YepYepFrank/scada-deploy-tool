@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tbsite CLI:validate | plan | publish | cleanup
+// tbsite CLI:validate | plan | publish | cleanup | page | pages
 // 凭据只从环境变量 / --env-file 读(默认 TB_USER / TB_PASSWORD),不接受命令行明文,不写日志。
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -8,7 +8,10 @@ import {
   compile,
   ConfigError,
   expandConfig,
+  listSitePages,
   publish,
+  publishPage,
+  type PagePayload,
   resolveDeviceIds,
   summarizePlan,
   validateConfig,
@@ -19,8 +22,10 @@ import type { StepId, StepStatus, TbApi } from '../src/writer/api'
 const USAGE = `用法:
   tbsite validate <站点.tbsite.json>
   tbsite plan     <站点.tbsite.json> [--json] [--out 计划.json] [--ids ids.json]
-  tbsite publish  <站点.tbsite.json> [连接参数] [--by 操作者] [--no-public]
+  tbsite publish  <站点.tbsite.json> [连接参数] [--by 操作者]
   tbsite cleanup  <站点.tbsite.json> [连接参数]
+  tbsite page     <页面.pageconfig.json> --site <站点资产名> [--name 页面资产名] [--by 操作者] [连接参数]
+  tbsite pages    --site <站点资产名> [连接参数]        列出站点下的 ScadaPage 资产与 version
 
 连接参数(都可以省略,默认从环境变量取):
   --base URL           TB 地址,默认 $TB_BASE,再默认镜像 http://192.168.20.61:8080
@@ -159,7 +164,6 @@ async function main(argv: string[]) {
     }
     const failures = await publish(cfg, devIds, api, report, {
       publishedBy: typeof flags.by === 'string' ? flags.by : user,
-      makePublic: !flags['no-public'],
     })
     if (failures.length) {
       console.log(`\n${failures.length} 项失败:`)
@@ -168,6 +172,39 @@ async function main(argv: string[]) {
       return 1
     }
     console.log('\n完成:运算、汇聚、规则链与站点资产已就绪。')
+    return 0
+  }
+  if (cmd === 'page' || cmd === 'pages') {
+    const siteName = typeof flags.site === 'string' ? flags.site : ''
+    if (!siteName) throw new Error('缺少 --site <站点资产名>')
+    const { api, user, base } = await connect(flags)
+    console.log(`✓ 已登录 ${base}(${user})`)
+    if (cmd === 'pages') {
+      const pages = await listSitePages(api, siteName)
+      if (!pages.length) console.log(`站点「${siteName}」下没有 ScadaPage 资产`)
+      for (const p of pages) console.log(`  ${p.name}  version ${p.version ?? '-'}  ${p.assetId}  ${p.label ?? ''}`)
+      return 0
+    }
+    if (!file) throw new Error('缺少页面配置文件路径')
+    const page = JSON.parse(readFileSync(resolve(file), 'utf8')) as PagePayload
+    const r = await publishPage(page, api, {
+      siteName,
+      pageName: typeof flags.name === 'string' ? flags.name : undefined,
+      publishedBy: typeof flags.by === 'string' ? flags.by : user,
+      report: x =>
+        console.log(
+          `  ${x.status === 'ok' ? '✓' : x.status === 'err' ? '✗' : x.status === 'rollback' ? '↩' : '…'} ${x.step.padEnd(8)} ${x.detail || ''}`
+        ),
+    })
+    if (!r.ok) {
+      console.log(`\n✗ 发布失败于 ${r.failedStep}:${r.error}`)
+      for (const u of r.unresolved) console.log(`  - ${u.type} ${u.name} @ ${u.at.join(', ')}`)
+      if (r.rolledBack.length) console.log(`  已回滚:${r.rolledBack.join(' → ')}`)
+      return 1
+    }
+    console.log(
+      `\n完成:ScadaPage「${r.pageName}」version ${r.version} · 历史 ${r.historyLength} 版 · 资产 ${r.assetId}`
+    )
     return 0
   }
   console.error(`未知命令 ${cmd}\n\n${USAGE}`)

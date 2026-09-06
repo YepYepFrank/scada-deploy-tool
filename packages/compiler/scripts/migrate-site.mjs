@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // T3.1 辅助脚本:把镜像上某站点资产的 siteConfig(或本地 tbsite.json)迁成 PageConfig 文件 + 迁移报告。
-// 实体名 → id 在 TB 上解析(设备按名、资产按名);不写 TB。之后用 put-pageconfig.mjs 把页面写进 ScadaPage 资产。
+// 实体名 → id 在 TB 上解析(设备按名、资产按名);不写 TB。之后用 `pnpm tbsite page <页面.json> --site <站点>`(或编辑器「发布」)把页面写进 ScadaPage 资产。
 // 用法:node packages/compiler/scripts/migrate-site.mjs <站点名 | 文件.tbsite.json> --out <目录>
 // 凭据只从 dev/.env.local 读(TB_BASE / TB_USER / TB_PASSWORD)。先 pnpm -F @grid/tbsite-compiler build。
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'

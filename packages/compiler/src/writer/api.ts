@@ -67,6 +67,3 @@ export const listCfs = async (api: TbApi, entityType: 'DEVICE' | 'ASSET', id: st
     id: { id: string }
     name: string
   }[]
-
-export const makePublic = (api: TbApi, entityType: 'asset' | 'device', id: string) =>
-  api(`/api/customer/public/${entityType}/${id}`, {})

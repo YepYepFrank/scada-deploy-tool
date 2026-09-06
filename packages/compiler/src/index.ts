@@ -39,6 +39,30 @@ export {
 export { publish, wireRootChain, type PublishOptions } from './writer/publish'
 export { cleanup } from './writer/cleanup'
 export {
+  publishPage,
+  resolvePageEntities,
+  collectEntityRefs,
+  lookupEntityId,
+  readPageState,
+  listSitePages,
+  detectDrift,
+  pageNameOf,
+  SCADA_PAGE_TYPE,
+  MANAGED_BY,
+  HISTORY_MAX,
+  NULL_UUID,
+  type EntityRefLike,
+  type PagePayload,
+  type HistoryEntry,
+  type PageStep,
+  type PageStepReport,
+  type UnresolvedRef,
+  type PublishPageOptions,
+  type PublishPageResult,
+  type PublishedRecord,
+  type DriftItem,
+} from './page/publish-page'
+export {
   migrateSiteConfig,
   legacyHistoryWindow,
   type LegacySiteConfig,

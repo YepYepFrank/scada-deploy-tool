@@ -163,11 +163,11 @@ describe('publish(写入器)', () => {
     const root = tb.metadata[tb.chains[0]!.id.id]!
     expect(root.nodes.map(n => n.name)).toEqual(['Message Type Switch', `site alarms flow · ${cfg.site.name}`])
     expect(root.connections).toHaveLength(1)
-    // 站点资产:配置存为属性、公开、历史为空
+    // 站点资产:配置存为属性、历史为空;不再设为 Public(T3.7)
     const site = tb.assets.find(a => a.name === cfg.site.name && a.type === 'tbsite')!
     expect(tb.attrs[site.id.id]!.siteConfig).toEqual(cfg)
     expect(tb.attrs[site.id.id]!.siteConfigHistory).toEqual([])
-    expect(tb.publicIds.has(site.id.id)).toBe(true)
+    expect(tb.publicIds.size).toBe(0)
 
     const r2 = collect()
     const f2 = await publish(cfg, devIds, tb.api, r2.report, { publishedBy: 'tester', layeredSettleMs: 0 })
@@ -208,17 +208,6 @@ describe('publish(写入器)', () => {
     await expect(publish(cfg, {}, tb.api, r.report)).rejects.toThrow('在 TB 中不存在')
     expect(r.log.at(-1)).toMatch(/^devices:err/)
     await expect(publish({ ...cfg, devices: [] }, {}, tb.api, r.report)).rejects.toThrow('校验失败')
-  })
-
-  it('makePublic:false 时不调用公开接口', async () => {
-    const cfg = fixture('xrs-mirror-test.tbsite.json')
-    const tb = fakeTb(cfg.devices.map(d => d.name))
-    const { devIds } = await resolveDeviceIds(
-      tb.api,
-      cfg.devices.map(d => d.name)
-    )
-    await publish(cfg, devIds, tb.api, () => {}, { makePublic: false, layeredSettleMs: 0 })
-    expect(tb.publicIds.size).toBe(0)
   })
 })
 

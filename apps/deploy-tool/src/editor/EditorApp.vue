@@ -21,6 +21,10 @@ import WidgetPicker from './WidgetPicker.vue'
 import PropsForm from './PropsForm.vue'
 import BindingsPanel from './BindingsPanel.vue'
 import PreviewPane from './PreviewPane.vue'
+import PublishPanel from './PublishPanel.vue'
+import { useProject } from '../project/useProject'
+import { ProjectParseError } from '../project/scadaproj'
+import { detectDrift, pageNameOf, readPageState, type DriftItem, type PublishedRecord } from '../publish/publishPage'
 import { useEditorState } from './useEditorState'
 import { useMeta } from '../meta/useMeta'
 import { LAYER_TITLE, sortIssues, validateBindingsLayer, validateStatic, type PageIssue } from './validate'
@@ -34,6 +38,71 @@ const initial: PageConfig = { schemaVersion: 1, template: templates[0]!.id, titl
 const ed = useEditorState(initial)
 // TB 连接 + 元数据树(绑定选择器用);凭据只在内存
 const meta = useMeta()
+
+// ---------- 项目文件 / 发布 / 漂移(T3.7) ----------
+const project = useProject({ getConfig: () => ed.config.value, setConfig: cfg => ed.commit(cfg), conn: meta.conn })
+const publishOpen = ref(false)
+const currentPageName = computed(() => pageNameOf(meta.conn.siteName, ed.config.value))
+const currentPublished = computed(() => project.published.value[currentPageName.value])
+function onPublished(name: string, rec: PublishedRecord) {
+  project.recordPublished(name, rec)
+  toast(`已发布「${name}」version ${rec.version}`)
+}
+async function importProject(e: Event) {
+  const input = e.target as HTMLInputElement
+  const f = input.files?.[0]
+  input.value = ''
+  if (!f) return
+  try {
+    const p = project.importText(await f.text(), f.name)
+    selected.value = null
+    toast(
+      `已导入 ${f.name}:站点 ${p.siteName || '(空)'} · ${p.pages.length} 页 · 已发布记录 ${Object.keys(p.published).length} 条`
+    )
+    if (meta.connected.value) void checkDrift()
+  } catch (err) {
+    toast(err instanceof ProjectParseError ? `${err.message}:${err.issues[0] ?? ''}` : String(err))
+  }
+}
+/** 漂移:项目文件记录的已发布 version 与 TB 上资产 additionalInfo.version 不一致(架构 §10「变更单向」) */
+const drift = ref<DriftItem[]>([])
+async function checkDrift() {
+  if (!meta.connected.value || !meta.conn.siteName || !Object.keys(project.published.value).length) return
+  try {
+    drift.value = await detectDrift(meta.api, meta.conn.siteName, project.published.value)
+  } catch (err) {
+    toast('漂移检测失败:' + (err instanceof Error ? err.message : String(err)))
+  }
+}
+// 每次连接 / 重新连接都重建元数据树(shallowRef 换引用),以它为信号跑漂移检测
+watch(
+  () => meta.tree.value,
+  t => {
+    if (t) void checkDrift()
+  }
+)
+const dropDrift = (d: DriftItem) => (drift.value = drift.value.filter(x => x !== d))
+/** 覆盖:以本地为准 → 打开发布面板重发 */
+function driftOverride(d: DriftItem) {
+  dropDrift(d)
+  publishOpen.value = true
+}
+/** 保留:以 TB 为准 → 把 TB 上的当前版反向导入编辑器,项目记录对齐到远端 version */
+async function driftKeep(d: DriftItem) {
+  if (!d.assetId) return dropDrift(d)
+  try {
+    const st = await readPageState(meta.api, d.assetId)
+    if (st.config) {
+      ed.commit(st.config as unknown as PageConfig)
+      selected.value = null
+      project.recordPublished(d.pageName, { assetId: d.assetId, version: d.remote ?? 0, at: Date.now(), by: '(TB)' })
+      toast(`已以 TB 为准反向导入「${d.pageName}」version ${d.remote}`)
+    }
+  } catch (err) {
+    toast('读取 TB 上的页面失败:' + (err instanceof Error ? err.message : String(err)))
+  }
+  dropDrift(d)
+}
 const bindingFlags = ref<Record<string, BindingFlag | null>>({})
 function onBindings(next: WidgetConfig['bindings']) {
   const w = selectedWidget.value
@@ -242,11 +311,61 @@ function toast(m: string) {
     @close="previewOpen = false"
   />
   <div v-else class="ed">
+    <div v-if="publishOpen" class="ed-modal" data-role="publish-modal">
+      <div class="ed-modal-box">
+        <PublishPanel
+          :config="ed.config.value"
+          :site-name="meta.conn.siteName"
+          :user="meta.conn.user"
+          :api="meta.api"
+          :error-count="errorCount"
+          :published="currentPublished"
+          @published="onPublished"
+          @restored="cfg => ed.commit(cfg)"
+          @close="publishOpen = false"
+        />
+      </div>
+    </div>
+    <div v-if="drift.length" class="ed-modal" data-role="drift-modal">
+      <div class="ed-modal-box">
+        <b>发布版本与 ThingsBoard 不一致</b>
+        <p class="dim">
+          项目文件记录的已发布 version 与 TB 上资产的 version 不同,说明有人在 TB 上直接改过,或这份项目文件不是最新。
+        </p>
+        <div v-for="d in drift" :key="d.pageName" class="ed-drift" :data-page="d.pageName">
+          <div>
+            <code>{{ d.pageName }}</code> 本地 version {{ d.local }} · TB 上
+            {{ d.remote === null ? '资产已不存在' : `version ${d.remote}` }}
+          </div>
+          <div class="ed-drift-btns">
+            <button type="button" data-role="drift-override" @click="driftOverride(d)">
+              覆盖(以本地为准,重新发布)
+            </button>
+            <button type="button" :disabled="d.remote === null" data-role="drift-keep" @click="driftKeep(d)">
+              保留(以 TB 为准,反向导入)
+            </button>
+            <button type="button" data-role="drift-cancel" @click="dropDrift(d)">取消</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <aside class="ed-left">
       <h1>组态编辑器 <small>T3.2 · 模板与槽位</small></h1>
       <label class="ed-field">页面标题 <input v-model.lazy="title" /></label>
       <h2>模板</h2>
       <TemplatePicker v-model="templateId" :templates="templates" />
+
+      <h2>项目文件 <span class="dim">.scadaproj · 页面的「源码」</span></h2>
+      <div class="ed-proj">
+        <button type="button" class="ed-mini" data-role="proj-export" @click="project.exportFile()">导出</button>
+        <label class="ed-mini ed-file"
+          >导入<input type="file" accept=".scadaproj,application/json" data-role="proj-import" @change="importProject"
+        /></label>
+        <span class="dim">{{ project.fileName.value || '未保存' }}</span>
+        <div v-if="currentPublished" class="dim" data-role="proj-published">
+          「{{ currentPageName }}」已发布 version {{ currentPublished.version }} · {{ currentPublished.by }}
+        </div>
+      </div>
 
       <h2>ThingsBoard <span class="dim">绑定选择器的实体 / 测点来源</span></h2>
       <div class="ed-conn">
@@ -292,6 +411,22 @@ function toast(m: string) {
           @click="previewOpen = true"
         >
           预览
+        </button>
+        <button
+          type="button"
+          class="ed-publish"
+          :disabled="!meta.connected.value || errorCount > 0"
+          :title="
+            !meta.connected.value
+              ? '先在左栏连接 TB'
+              : errorCount
+                ? `校验有 ${errorCount} 个错误`
+                : '发布到 ScadaPage 资产'
+          "
+          data-role="publish-open"
+          @click="publishOpen = true"
+        >
+          发布
         </button>
         <span class="ed-hint"
           >点击槽位选择组件 · {{ template.name }} · {{ ed.config.value.widgets.length }} 个组件</span
@@ -596,6 +731,59 @@ body {
   gap: 8px;
   align-items: center;
   margin-top: 6px;
+}
+.ed-proj {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.ed-proj > div {
+  flex-basis: 100%;
+}
+.ed-publish {
+  background: #1f6feb;
+  color: #fff;
+}
+.ed-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(3, 10, 24, 0.7);
+  display: grid;
+  place-items: center;
+}
+.ed-modal-box {
+  width: min(720px, 92vw);
+  max-height: 88vh;
+  overflow: auto;
+  background: var(--ed-bg-0, #061127);
+  border: 1px solid var(--ed-line, rgba(83, 196, 255, 0.25));
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.ed-modal-box button {
+  background: var(--ed-bg-1, #0b1a33);
+  border: 1px solid var(--ed-line, rgba(83, 196, 255, 0.2));
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.ed-drift {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--ed-line, rgba(83, 196, 255, 0.15));
+}
+.ed-drift-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .ed-toast {
   position: absolute;

@@ -25,7 +25,7 @@ src/
 bin/tbsite.ts           CLI(tsup 打到 dist/bin,bin/tbsite.mjs 是启动壳)
 scripts/regen-python-plans.mjs   用冻结的 Python 版重生成 parity 快照(本机需 python)
 scripts/migrate-site.mjs         从镜像取站点 siteConfig → 解析实体 id → 落 PageConfig 文件 + 迁移报告
-scripts/put-pageconfig.mjs       里程碑 A 临时:PageConfig → ScadaPage 资产(T3.7 后删)
+src/page/publish-page.ts         页面发布器(T3.7):PageConfig → ScadaPage 资产,六步 + 逆序回滚;CLI `tbsite page / pages`
 test/
   parity.test.ts        TS 版 vs Python 版写入计划(快照 fixtures/*.plan.py.json 已入库,CI 不需要 Python)
   core.test.ts          校验 / 展开 / CF / 汇聚分层 / 聚合链 / 告警链 / compile
@@ -60,7 +60,8 @@ pnpm tbsite cleanup sites/xx.tbsite.json
 
 - `sum` 窗口聚合原来漏了后缀(会写出 `keyundefined`),现在 `spec.sfx.sum = 'Sum<窗口>'`,取数键也包含 sum 项(与 Python 版一致)。
 - 校验失败抛 `ConfigError`(带 `errors` 数组),不再是裸 `Error('校验失败')`。
-- 新增 `makePublic` 选项(默认 true,保持现网行为);T3.8 改为分给 Customer 后关掉。
+- 「设为 Public」步骤已移除(T3.7,2026-09-06):站点 / 汇聚资产不再公开;页面资产由 `publishPage` 分给站点所属 Customer。
+- 页面发布器 `src/page/publish-page.ts`(T3.7):`publishPage(page, api, { siteName, pageName?, publishedBy })` 六步(按名称解析实体 → 查找 / 创建 ScadaPage 资产 → 历史入栈 → 写属性与 version → Contains 关系 → 分给 Customer),任一步失败逆序回滚;`listSitePages` / `readPageState` / `detectDrift`。CLI:`tbsite page <页面.json> --site <站点>`、`tbsite pages --site <站点>`。
 
 ## Python 版已知差异(parity 测试里显式改写)
 
