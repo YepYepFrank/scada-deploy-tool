@@ -569,24 +569,6 @@ body {
   }
 }
 
-/* leaflet dark adjustments */
-.leaflet-container {
-  background: var(--bg-0);
-  font-family: var(--font-body);
-}
-.leaflet-control-attribution {
-  background: rgba(16, 17, 20, 0.7) !important;
-  color: var(--ink-2) !important;
-}
-.leaflet-control-attribution a {
-  color: var(--ink-1) !important;
-}
-.leaflet-bar a {
-  background: var(--bg-2) !important;
-  color: var(--ink-0) !important;
-  border-color: var(--line-0) !important;
-}
-
 /* radar ping around the vehicle marker */
 .veh-ping {
   position: relative;

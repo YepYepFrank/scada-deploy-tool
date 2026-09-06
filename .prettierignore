@@ -9,9 +9,6 @@ pnpm-lock.yaml
 apps/deploy-tool/*.html
 apps/deploy-tool/vite*.js
 apps/deploy-tool/src/provisioner/
-apps/deploy-tool/src/siteview/
 apps/deploy-tool/src/components/
-apps/deploy-tool/src/composables/
 apps/deploy-tool/src/api/
-apps/deploy-tool/src/shared/
 apps/deploy-tool/src/style.css

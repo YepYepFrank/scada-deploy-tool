@@ -46,8 +46,10 @@ export class FakeTb {
   attrs = new Map<string, Map<string, Point>>()
   alarms = new Map<string, Record<string, unknown>[]>()
   requests: string[] = []
-  /** 当前身份无权访问的实体 id(模拟 CUSTOMER_USER 看未分配设备):WS 订阅回 errorCode 2,REST 回 403 */
+  /** 当前身份无权访问的实体 id(模拟 CUSTOMER_USER 看未分配设备):WS 订阅回 errorCode 1,REST 回 403 */
   forbidden = new Set<string>()
+  /** kz 收益趋势:stationId → 本月逐日 / 本年逐月行 */
+  kz = new Map<string, { day: Record<string, unknown>[]; month: Record<string, unknown>[] }>()
   /** cmdId → {socket, entityId, keys, kind} */
   subs = new Map<number, { socket: FakeSocket; entityId: string; keys: string[]; kind: 'ts' | 'attr' }>()
   token = 'jwt-test'
@@ -173,6 +175,13 @@ export class FakeTb {
         headers: { 'Content-Type': 'application/json' },
       })
     if (auth !== `Bearer ${this.token}`) return json({ message: 'Authentication failed' }, 401)
+    // kz 归档(ADR-004):queryType 2 本月逐日 / 3 本年逐月,body { queryType, stationId }
+    if (u.pathname.endsWith('/kzserver/biz/power/stationRevenueTrend')) {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { queryType: number; stationId: string }
+      const st = this.kz.get(body.stationId)
+      if (!st) return json({ code: 500, msg: '站点不存在' })
+      return json({ code: 200, data: body.queryType === 3 ? st.month : st.day })
+    }
     let m: RegExpMatchArray | null
     if ((m = u.pathname.match(/\/(DEVICE|ASSET)\/([^/]+)/)) && this.forbidden.has(m[2]!))
       return json({ message: "You don't have permission to perform this operation!", errorCode: 20 }, 403)

@@ -1,0 +1,193 @@
+/* 独立大屏薄壳(T3.8):只管登录 / 列表 / 标头,页面本体由渲染器主题负责 */
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: #061127;
+  color: #e6f1ff;
+  font:
+    14px/1.5 'IBM Plex Sans',
+    'PingFang SC',
+    'Microsoft YaHei',
+    system-ui,
+    sans-serif;
+}
+.sa {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.sa-brand {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-size: 18px;
+}
+.sa-brand small {
+  font-weight: 400;
+  font-size: 12px;
+  opacity: 0.6;
+  margin-left: 6px;
+}
+.sa-dim {
+  opacity: 0.6;
+  font-size: 12px;
+}
+.sa-msg {
+  color: #ffd27a;
+  min-height: 1.4em;
+  font-size: 13px;
+}
+
+/* 登录 */
+.sa-login {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(1200px 600px at 50% -10%, rgba(25, 183, 255, 0.18), transparent 60%), #061127;
+}
+.sa-card {
+  width: min(380px, 92vw);
+  display: grid;
+  gap: 12px;
+  padding: 26px 28px;
+  border: 1px solid rgba(83, 196, 255, 0.25);
+  border-radius: 12px;
+  background: rgba(11, 26, 51, 0.9);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+.sa-card label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+.sa-card input {
+  background: #0b1a33;
+  border: 1px solid rgba(83, 196, 255, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: inherit;
+  font: inherit;
+}
+.sa-card button {
+  background: #1f6feb;
+  border: 0;
+  border-radius: 6px;
+  padding: 9px;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.sa-card button:disabled {
+  opacity: 0.5;
+}
+
+/* 标头 */
+.sa-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 52px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(83, 196, 255, 0.2);
+  background: rgba(6, 17, 39, 0.95);
+  flex: none;
+}
+.sa-menu {
+  display: flex;
+  gap: 4px;
+  overflow: auto;
+}
+.sa-menu button,
+.sa-mini {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sa-menu button.on {
+  border-color: rgba(83, 196, 255, 0.4);
+  background: rgba(25, 183, 255, 0.12);
+}
+.sa-mini {
+  border-color: rgba(83, 196, 255, 0.25);
+  font-size: 12px;
+}
+.sa-clock {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+.sa-status {
+  font-size: 12px;
+}
+.sa-status[data-status='live'] {
+  color: #6fe3a0;
+}
+.sa-status[data-status='offline'] {
+  color: #ff8a8a;
+}
+.sa-denied {
+  font-size: 12px;
+  color: #ffd27a;
+}
+
+/* 列表 */
+.sa-list main {
+  padding: 20px 24px;
+}
+.sa-pages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.sa-page {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  border: 1px solid rgba(83, 196, 255, 0.25);
+  border-radius: 10px;
+  background: #0b1a33;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.sa-page:hover {
+  border-color: rgba(83, 196, 255, 0.6);
+}
+
+/* 页面 */
+.sa-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.sa-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.sa-stage > .sr-page {
+  height: 100%;
+}
+.sa-error {
+  margin: 24px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 138, 138, 0.5);
+  border-radius: 8px;
+  background: rgba(255, 138, 138, 0.08);
+  color: #ff8a8a;
+}
+.sa-center {
+  display: grid;
+  place-items: center;
+  height: 100%;
+}

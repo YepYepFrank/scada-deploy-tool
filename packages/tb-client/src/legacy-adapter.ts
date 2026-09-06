@@ -14,6 +14,8 @@ import type {
   ConnectionStatus,
   DataSource,
   EntityRef,
+  ExtQuery,
+  ExtResult,
   TsPoint,
   TsUpdate,
   Unsubscribe,
@@ -27,6 +29,11 @@ export interface LegacyDataSourceOptions {
   getToken: () => string | Promise<string>
   /** WS 地址;缺省由 baseUrl(或当前页面 origin)推出 */
   wsUrl?: string
+  /**
+   * kz 归档服务地址(ADR-004 路线 A,`mode: 'ext'`),如 '/kz'(同源反代)或 'http://host:8099';结尾不带 /。
+   * 不给则 `ext()` 抛「kz 未配置」,渲染器把对应组件置为错误态。kz 用同一个 TB token 鉴权。
+   */
+  kzBaseUrl?: string
   /** 告警轮询周期,毫秒(默认 10 秒) */
   alarmPollMs?: number
   /** 断线重连间隔,毫秒(默认 3 秒) */
@@ -217,6 +224,49 @@ export class LegacyDataSource implements DataSource {
     for (const k of keys)
       out[k] = (raw?.[k] ?? []).map(p => ({ ts: p.ts, value: normalizeValue(p.value) })).sort((a, b) => a.ts - b.ts)
     return out
+  }
+
+  /**
+   * 外部源(一期只有 kz 收益趋势)。服务端语义(反编译确认):queryType=2 本月逐日、3 本年逐月,
+   * 日期范围由服务端时钟决定,不支持任意区间;本月没归档时自动降级为逐月(meta.mode 标明)。
+   * 返回序列 inc(放电收益)/ cost(充电成本)/ net(净收益);params.metric 指定则只返回那一条。
+   */
+  async ext(query: ExtQuery): Promise<ExtResult> {
+    if (query.source !== 'kz') throw new Error(`不支持的外部源「${query.source}」(一期只有 kz)`)
+    const kz = this.opts.kzBaseUrl
+    if (!kz) throw new Error('kz 未配置:LegacyDataSource.kzBaseUrl(大屏 ?kz=)为空')
+    const stationId = query.params?.stationId
+    if (!stationId) throw new Error('ext(kz) 缺 params.stationId')
+    const token = await this.opts.getToken()
+    type Row = { statDate: string; dischargeIncome?: unknown; chargeCost?: unknown; netProfit?: unknown }
+    const fetchRows = async (queryType: 2 | 3): Promise<Row[]> => {
+      const r = await this.fetchImpl(`${kz}/kzserver/biz/power/stationRevenueTrend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ queryType, stationId }),
+      })
+      if (!r.ok) throw new Error(`kz → HTTP ${r.status}`)
+      const j = (await r.json()) as { code?: number; msg?: string; data?: Row[] }
+      if (j.code !== 200) throw new Error(j.msg || 'kz 报表查询失败')
+      return j.data ?? []
+    }
+    let mode: 'day' | 'month' = query.interval === '1M' || query.interval === '1y' ? 'month' : 'day'
+    let rows = await fetchRows(mode === 'month' ? 3 : 2)
+    if (!rows.length && mode === 'day') {
+      rows = await fetchRows(3)
+      mode = 'month'
+    }
+    const ts = (d: string) => new Date((d.length === 7 ? `${d}-01` : d) + 'T00:00:00+08:00').getTime()
+    const num = (v: unknown) => (v === null || v === undefined || v === '' ? null : Number(v))
+    const pick = (f: keyof Row): TsPoint[] => rows.map(r => ({ ts: ts(String(r.statDate)), value: num(r[f]) }))
+    const all: Record<string, TsPoint[]> = {
+      inc: pick('dischargeIncome'),
+      cost: pick('chargeCost'),
+      net: pick('netProfit'),
+    }
+    const metric = query.params?.metric
+    const series = typeof metric === 'string' && all[metric] ? { [metric]: all[metric]! } : all
+    return { series, meta: { mode, rows: rows.length } }
   }
 
   async getLatest(entity: EntityRef, keys: string[]): Promise<Record<string, TsPoint | null>> {

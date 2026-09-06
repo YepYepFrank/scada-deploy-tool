@@ -14,7 +14,6 @@ import EditorApp from '../editor/EditorApp.vue'
 import PublishPanel from '../editor/PublishPanel.vue'
 import { listSitePages, readPageState } from '../publish/publishPage'
 import { publish, cleanup } from './publisher.js'
-import { kzStations } from '../api/tb.js'
 import KeyPicker from '../components/KeyPicker.vue'
 
 const STEPS = ['连接与站点', '设备与测点', '运算配置', '组态编辑', '发布上线']
@@ -208,10 +207,8 @@ function switchEnv() {
   loadSavedLogin()
 }
 const site = reactive({ name: 'demo-site', label: 'GRID·OPS 演示站' })
-const pubCustomerId = ref('') // 自定义项目的 Public 客户 id(连接时获取,传给大屏)
 const devices = ref([]) // { name, tbId, open, claimed, keys: [{key,label,unit,claimed,latest,cn}] }
 const keyDict = ref({}) // 测点中文字典 key → {name, unit, type}(来自生产平台的测量点定义)
-const reportStations = ref([]) // kzserver 站点清单(自然日报表数据源;仅生产镜像)
 
 // 设备类型的中文说明(现场常见类型;未知类型不显示)
 const PROFILE_CN = {
@@ -442,17 +439,7 @@ async function connect() {
   try {
     conn.token = (await api('/api/auth/login', { username: conn.username, password: conn.password })).token
     persistLogin()
-    // 自定义项目:取 Public 客户 id,发布后打开大屏时通过 URL 传给 site.html
-    pubCustomerId.value = ''
-    if (curEnv.value.custom) {
-      try {
-        // 注:/api/customers 带 textSearch 在部分 TB 版本会 500,故直接翻页匹配
-        const cs = (await api('/api/customers?pageSize=100&page=0')).data
-        pubCustomerId.value = cs.find(c => c.additionalInfo?.isPublic || c.title === 'Public')?.id.id || ''
-      } catch {
-        /* 无 Public 客户时大屏链接不带 pub,届时手动处理 */
-      }
-    }
+    // T3.8 起大屏不再用 Public 匿名身份:看什么由登录账号在 TB 里的分配决定
     // 分页拉取全部设备(生产库 200+ 台,不能只取一页)
     const all = []
     for (let p = 0, hasNext = true; hasNext; p++) {
@@ -506,14 +493,7 @@ async function connect() {
     conn.progress = ''
     for (const d of found) d.gwName = d.gwId ? gwById[d.gwId] || null : null
     devices.value = found
-    reportStations.value = []
-    if (conn.env === 'mirror') {
-      try {
-        reportStations.value = await kzStations(conn.token)
-      } catch {
-        /* kz 不可用时报表源为空 */
-      }
-    }
+
     conn.status = 'ok'
     // 发现已发布的站点,自动载入上次配置
     const assets = (await api('/api/tenant/assets?pageSize=100&page=0')).data
@@ -1711,12 +1691,8 @@ async function doCleanup() {
 }
 
 function frontendUrl() {
-  if (curEnv.value.custom) {
-    const pub = pubCustomerId.value ? `&pub=${pubCustomerId.value}` : ''
-    return `/site.html?site=${encodeURIComponent(site.name)}&base=${encodeURIComponent(curEnv.value.base)}${pub}`
-  }
-  const env = conn.env === 'mirror' ? '&env=mirror' : ''
-  return `/site.html?site=${encodeURIComponent(site.name)}${env}`
+  // T3.8:大屏是独立薄壳,打开后用自己的账号登录;只带站点名与 TB 地址(?base=,空 = 同源 /api)
+  return `/site.html?site=${encodeURIComponent(site.name)}&base=${encodeURIComponent(curEnv.value.base)}`
 }
 function openFrontend() {
   window.open(frontendUrl(), '_blank')

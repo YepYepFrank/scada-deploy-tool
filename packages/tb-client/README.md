@@ -15,6 +15,8 @@ provideDataSource(ds) // 之后换成 provideDataSource(new TbClient(...)),渲�
 
 刻意保持薄:一条 WS;断线 3 秒后重连并重放全部订阅;同一 tick 内的订阅变更合并成一条消息(渲染器切配置时 dispose 全部再重订);没有订阅时关掉连接;告警走 REST 轮询(10 秒);不合并重复订阅;不做 token 刷新(宿主通过 `getToken` 提供)。`getHistory` 按窗口自适应聚合:≤2h 原始点,2h–24h 5 分钟 AVG,24h–7d 1 小时,>7d 1 天。
 
+- **`ext()`(ADR-004 路线 A,T3.8 起)**:`LegacyDataSource` 实现了 `source: 'kz'` 的收益趋势——`kzBaseUrl` 选项给 kz 地址(同源 `/kz` 反代或 `http://host:8099`),用同一个 TB token 鉴权;`params.stationId` 必填,`params.metric` 可指定只要 `inc / cost / net` 之一;kz 只支持「本月逐日 / 本年逐月」,本月没归档自动降级为逐月(`meta.mode`)。同事的 TbClient 照此语义实现即可,`test/legacy-adapter.test.ts` 的 kz 用例可搬到一致性套件。
+
 ## 一致性测试(同事交付 TbClient 时的验收)
 
 ```
