@@ -33,8 +33,22 @@ export interface TbAsset {
   label?: string
 }
 
-/** 设备按「最后连接的网关」归到网关下;没网关的进「直连设备」;资产单独一组;网关本身也是设备,可选 */
-export function buildMetaTree(siteName: string, devices: TbDevice[], assets: TbAsset[] = []): MetaNode {
+/** 资产间的 Contains 关系(from 包含 to),T2.5 元数据读取补齐项 */
+export interface ContainsRel {
+  from: string
+  to: string
+}
+
+/**
+ * 设备按「最后连接的网关」归到网关下;没网关的进「直连设备」;资产单独一组并按 Contains 关系递归嵌套
+ * (站点资产 → ScadaPage 资产 / 子站等);有环时后到的那条关系忽略。网关本身也是设备,可选。
+ */
+export function buildMetaTree(
+  siteName: string,
+  devices: TbDevice[],
+  assets: TbAsset[] = [],
+  contains: ContainsRel[] = []
+): MetaNode {
   const gateways = devices.filter(d => d.type === 'gateway' || d.additionalInfo?.gateway)
   const gwIds = new Set(gateways.map(g => g.id.id))
   const dev = (d: TbDevice, kind: MetaKind = 'device'): MetaNode => ({
@@ -60,23 +74,41 @@ export function buildMetaTree(siteName: string, devices: TbDevice[], assets: TbA
   const children: MetaNode[] = [...gwNodes]
   if (orphans.length)
     children.push({ id: 'group:direct', name: '直连 / 未归网关设备', kind: 'group', children: orphans })
-  if (assets.length)
+  if (assets.length) {
+    const nodes = new Map<string, MetaNode>(
+      assets.map(a => [
+        a.id.id,
+        {
+          id: a.id.id,
+          name: a.name,
+          kind: 'asset' as const,
+          entity: { type: 'ASSET' as const, id: a.id.id, name: a.name },
+          profile: a.type,
+          label: a.label,
+          children: [],
+        },
+      ])
+    )
+    // 只认两端都在列表里的资产关系;一个资产只挂到第一个父节点下;成环(祖先被后代包含)时忽略后到的关系
+    const parentOf = new Map<string, string>()
+    const isAncestor = (maybeAncestor: string, of: string): boolean => {
+      for (let p = parentOf.get(of); p; p = parentOf.get(p)) if (p === maybeAncestor) return true
+      return false
+    }
+    for (const r of contains) {
+      if (r.from === r.to || !nodes.has(r.from) || !nodes.has(r.to)) continue
+      if (parentOf.has(r.to) || isAncestor(r.to, r.from)) continue
+      parentOf.set(r.to, r.from)
+      nodes.get(r.from)!.children.push(nodes.get(r.to)!)
+    }
+    for (const n of nodes.values()) n.children.sort(byName)
     children.push({
       id: 'group:assets',
       name: '资产',
       kind: 'group',
-      children: assets
-        .map<MetaNode>(a => ({
-          id: a.id.id,
-          name: a.name,
-          kind: 'asset',
-          entity: { type: 'ASSET', id: a.id.id, name: a.name },
-          profile: a.type,
-          label: a.label,
-          children: [],
-        }))
-        .sort(byName),
+      children: [...nodes.values()].filter(n => !parentOf.has(n.id)).sort(byName),
     })
+  }
   return { id: 'site', name: siteName, kind: 'site', children }
 }
 
@@ -143,6 +175,28 @@ export class MetaClient {
   async assets(me: { authority: string; customerId?: { id: string } }): Promise<TbAsset[]> {
     const base = me.authority === 'CUSTOMER_USER' ? `/api/customer/${me.customerId!.id}/assets` : '/api/tenant/assets'
     return this.paged<TbAsset>(base)
+  }
+  /**
+   * 资产间 Contains 关系(from → to,只保留 to 为 ASSET 的),供 buildMetaTree 递归嵌套。
+   * TB 没有「一次拉全部关系」的接口,按资产逐个查 `/api/relations?fromId=…`,并发 8。
+   */
+  async assetContains(assets: { id: { id: string } }[]): Promise<ContainsRel[]> {
+    const out: ContainsRel[] = []
+    const queue = [...assets]
+    const worker = async () => {
+      for (let a = queue.shift(); a; a = queue.shift()) {
+        const from = a.id.id
+        try {
+          const rels = (await this.api(`/api/relations?fromId=${from}&fromType=ASSET&relationType=Contains`)) as
+            { to: { entityType: string; id: string } }[] | null
+          for (const r of rels ?? []) if (r.to?.entityType === 'ASSET') out.push({ from, to: r.to.id })
+        } catch {
+          /* 单个资产关系读不到只影响它的嵌套 */
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(8, assets.length) }, worker))
+    return out
   }
   private async paged<T>(base: string): Promise<T[]> {
     const out: T[] = []

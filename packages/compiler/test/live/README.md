@@ -1,3 +1,18 @@
-# live 测试
+# live 测试(T2.5)
 
-需要环境变量 `TB_BASE / TB_USER / TB_PASSWORD`(从 `.env.local` 读取,不入库),手动触发。用例随 T2.5 加入。
+连真实 TB(默认镜像 `http://192.168.20.61:8080`)跑,**CI 不跑**:文件名 `*.live.ts`,只被 `vitest.live.config.ts` 收录。
+
+```bash
+pnpm -F @grid/tbsite-compiler test:live
+```
+
+凭据只从环境变量或向上找到的 `.env.local` 读(`TB_BASE / TB_USER / TB_PASSWORD`,租户账号),不入库;没凭据时整组 `skip` 而非失败。
+
+| 文件 | 内容 | 状态 |
+|---|---|---|
+| `rule-chain.live.ts` | 规则链路径:把 `xrs-mirror-test` 的配置改成临时站点(站点名、输出 key、告警名、汇聚 / 收益资产名全部加前缀)→ publish → 断言 CF / 链名与节点数 / Root 转发 / 站点资产 → 再 publish 幂等(快照相等、历史 +1)→ cleanup 全清;前后 `xrs-mirror-test` 快照零差异。`afterAll` 兜底 cleanup,断言失败也不留垃圾 | 可跑 |
+| Profile 告警双轨(ADR-001) | 对测试 Profile 写 1 条 COM 告警规则、二次不重复、cleanup 只删自己的 | **待第二轮回填 A1**(`profile-alarms.ts` 未写) |
+
+元数据读取那两项(Asset 树按 `Contains` 递归、属性 key 列表)在 `apps/deploy-tool/src/meta/MetaNode.ts`,单元测试在 `apps/deploy-tool/test/meta-tree.test.ts`,镜像验收记录见开发计划 T2.5。
+
+注意:计划原文写「对 `xrs-mirror-test` 执行 publish … cleanup」,但 cleanup 会删掉镜像上该站点的规则链与资产,所以改为临时站点,与 T1.3 的手工验证一致。

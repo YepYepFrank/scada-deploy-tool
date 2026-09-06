@@ -65,8 +65,9 @@ export function useMeta() {
       const me = await c.me()
       conn.authority = me.authority
       const [devices, assets] = await Promise.all([c.devices(me), c.assets(me)])
-      tree.value = buildMetaTree(conn.siteName || '站点', devices, assets)
-      conn.msg = `${me.authority} · ${devices.length} 台设备 · ${assets.length} 个资产`
+      const contains = await c.assetContains(assets)
+      tree.value = buildMetaTree(conn.siteName || '站点', devices, assets, contains)
+      conn.msg = `${me.authority} · ${devices.length} 台设备 · ${assets.length} 个资产(${contains.length} 条 Contains)`
     } catch (e) {
       conn.msg = '失败:' + (e instanceof Error ? e.message : String(e))
       tree.value = null
