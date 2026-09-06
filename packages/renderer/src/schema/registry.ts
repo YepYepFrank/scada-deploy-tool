@@ -93,6 +93,11 @@ export interface WidgetDefinition<P extends Record<string, unknown> = Record<str
   defaults?: Partial<P>
   /** /dev 展示页与编辑器缩略图用的假数据:按 bindingSlots 名给值 */
   sampleData?: () => Record<string, unknown>
+  /**
+   * 旧 props 键名迁移(渲染前调用,返回新对象;输入不改)。用于组件改了属性名但 TB 上已发布的配置还是旧名——
+   * 例:line 的 `style` → `chartStyle`(0.2.0)。编辑器 / 迁移器也应调用它把旧配置正规化。
+   */
+  migrateProps?: (props: Record<string, unknown>) => Record<string, unknown>
   /** 推荐最小尺寸(模板槽位单位:栅格格数),工具用于 accepts 之外的软提示 */
   minSize?: { w: number; h: number }
 }

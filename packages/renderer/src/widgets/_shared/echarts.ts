@@ -30,6 +30,8 @@ export interface ChartTokens {
   ink: string
   ink1: string
   fontNum: string
+  /** 图表文字字号:缩放模板下按 --sr-scale 抬高,保证屏幕上 ≥10px */
+  font: number
 }
 
 const FALLBACK: ChartTokens = {
@@ -40,6 +42,7 @@ const FALLBACK: ChartTokens = {
   ink: '#ecf9ff',
   ink1: '#cdeeff',
   fontNum: "'Barlow SemiBold', 'Microsoft YaHei', sans-serif",
+  font: 12,
 }
 
 /** 从元素读取 --sr-* 令牌;未定义时退回默认主题值 */
@@ -55,8 +58,12 @@ export function readTokens(el: Element | null): ChartTokens {
     ink: tok('--sr-ink-0', FALLBACK.ink),
     ink1: tok('--sr-ink-1', FALLBACK.ink1),
     fontNum: tok('--sr-font-num', FALLBACK.fontNum),
+    font: fontFor(Number(tok('--sr-scale', '1')) || 1, Number.parseFloat(tok('--sr-min-text', '10px')) || 10),
   }
 }
+
+/** 缩放后至少 minPx:scale 0.5 时 12px 会画成 6px,抬到 20px 才有 10px */
+export const fontFor = (scale: number, minPx = 10): number => Math.max(12, Math.ceil(minPx / (scale > 0 ? scale : 1)))
 
 export function alpha(color: string, a: number): string {
   try {
@@ -77,7 +84,10 @@ export function useEChart(el: Ref<HTMLElement | null>, build: (t: ChartTokens) =
 
   function update(notMerge = false) {
     if (!chart) return
-    chart.setOption(build(tokens) as EChartsOption, { notMerge, lazyUpdate: true })
+    const opt = build(tokens)
+    // 全局文字字号(轴标签 / 图例 / 提示框都继承),组件自己设了就不动
+    if (opt.textStyle === undefined) opt.textStyle = { fontSize: tokens.font }
+    chart.setOption(opt as EChartsOption, { notMerge, lazyUpdate: true })
   }
 
   onMounted(() => {

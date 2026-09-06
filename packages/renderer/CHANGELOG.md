@@ -2,8 +2,14 @@
 
 版本按 SemVer;0.x 期间次版本号可含破坏性变更,会在条目里标「破坏」。契约(`schemaVersion`)的变更走 ADR,不随包版本隐式变化。
 
-## 未发布
+## 0.2.0 — 2026-09-06
 
+组件 / 模板打磨(T3.9)+ T3.6 起攒下的接口补充。**破坏**:`line` 组件的 `style` 属性改名 `chartStyle`(与 Vue 保留属性同名会触发警告);已发布的旧配置由组件的 `migrateProps` 在渲染前自动转换,不必重发。
+
+- `WidgetDefinition.migrateProps?(props)`:组件旧属性名迁移钩子,`<ScadaPage>` 渲染前调用;`line` 用它把 `style` → `chartStyle`。
+- 缩放模板小字号下限:`.sr-root` 带 `--sr-scale`,主题令牌 `--sr-min-text: 10px`;卡片标题 / 副标 / 侧值 / 表格 / 告警行 / 空态提示等 ≤13px 的文字改为 `max(Npx, calc(var(--sr-min-text) / var(--sr-scale)))`,ECharts 全局 `textStyle.fontSize` 同样按缩放抬高——1920 设计稿缩到 0.5 时文字仍 ≥10px 可读(以前 5–6px)。
+- 运行态空槽位不再显示「槽位名 + 可放组件」占位(只在 `design` 模式显示);大屏上没配的槽位就是留白。
+- 空态 / 错误态文案梳理:图表「暂无数据」、卡片侧栏「数据不可用」、数字卡「不可用 / ——」、告警列表「✓ 当前无活动告警」、图片「未设置图片 / 图片加载失败」、文本「—」;错误态一律带 `title` 显示原因。
 - `<ScadaPage>` 新增 `bindError(widgetId, slot, message)` 事件并 expose `bindErrors`:某个绑定解析 / 订阅失败时抛出,宿主可汇总提示(T3.6 预览的「N 个绑定在该 Customer 下不可见」用它)。
 - 绑定解析器把 `DataSource.subscribeTs / subscribeAttr / subscribeAlarms` 的可选 `onError`(契约 §4,2026-09-06 补充)接到组件错误态:CUSTOMER_USER 订阅未分配实体被 TB 拒绝时组件显示「不可用」而不是一直空着。没有 `onError` 通道的 DataSource 实现行为不变。
 

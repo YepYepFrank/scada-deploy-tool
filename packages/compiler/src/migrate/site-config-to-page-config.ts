@@ -228,7 +228,7 @@ export function migrateSiteConfig(cfg: LegacySiteConfig, ids: EntityIds, opts: M
         id,
         slot: slotId,
         type: 'line',
-        props: { title, subtitle: `${s.deviceLabel ?? ''} 逐日 · 30D`.trim(), unit: '元', style: 'bar' },
+        props: { title, subtitle: `${s.deviceLabel ?? ''} 逐日 · 30D`.trim(), unit: '元', chartStyle: 'bar' },
         bindings: {
           series: [
             {
@@ -295,7 +295,12 @@ export function migrateSiteConfig(cfg: LegacySiteConfig, ids: EntityIds, opts: M
           id,
           slot: slotId,
           type: 'line',
-          props: { title, subtitle: `${s.device} · ${s.key}`, unit: m.unit, style: s.card === 'bar' ? 'bar' : 'area' },
+          props: {
+            title,
+            subtitle: `${s.device} · ${s.key}`,
+            unit: m.unit,
+            chartStyle: s.card === 'bar' ? 'bar' : 'area',
+          },
           bindings: { series: [tsHistory(s, s.card, pid, slotId)] },
         }
       case 'multi': {
@@ -304,7 +309,7 @@ export function migrateSiteConfig(cfg: LegacySiteConfig, ids: EntityIds, opts: M
           id,
           slot: slotId,
           type: 'line',
-          props: { title, subtitle: `${all.length} 序列`, unit: m.unit, style: 'line', showLegend: true },
+          props: { title, subtitle: `${all.length} 序列`, unit: m.unit, chartStyle: 'line', showLegend: true },
           bindings: { series: all.map(r => tsHistory(r, 'line', pid, slotId)) },
         }
       }

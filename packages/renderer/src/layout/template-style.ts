@@ -20,9 +20,12 @@ export function rootStyle(tpl: TemplateDefinition, scale: number): CSSProperties
       height: `${d.h}px`,
       transform: `scale(${scale})`,
       transformOrigin: 'top left',
-    }
+      // 组件用它给小字号设下限:font-size: max(12px, calc(var(--sr-min-text) / var(--sr-scale)))
+      ['--sr-scale' as string]: String(scale),
+    } as CSSProperties
   }
   return {
+    ['--sr-scale' as string]: '1',
     display: 'grid',
     gridTemplateAreas: tpl.areas!.map(r => `"${r}"`).join(' '),
     gridAutoRows: 'minmax(120px, auto)',

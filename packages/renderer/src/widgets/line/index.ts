@@ -21,7 +21,7 @@ export const lineWidget: WidgetDefinition = {
       title: { type: 'string', title: '标题', default: '' },
       subtitle: { type: 'string', title: '副标', default: '' },
       unit: { type: 'string', title: '单位', default: '' },
-      style: {
+      chartStyle: {
         type: 'string',
         title: '样式',
         enum: ['line', 'area', 'bar'],
@@ -44,7 +44,13 @@ export const lineWidget: WidgetDefinition = {
       modes: ['ts-history', 'ext', 'const'],
     },
   ],
-  defaults: { title: '', unit: '', style: 'line', smooth: false, showLegend: true, decimals: 1 },
+  defaults: { title: '', unit: '', chartStyle: 'line', smooth: false, showLegend: true, decimals: 1 },
+  /** 0.1.x 的 `style` 与 Vue 保留属性同名(test-utils 会警告),0.2.0 改为 chartStyle;旧配置在渲染前转一下 */
+  migrateProps: props => {
+    if (!('style' in props) || 'chartStyle' in props) return props
+    const { style, ...rest } = props
+    return { ...rest, chartStyle: style }
+  },
   sampleData: () => ({ series: [sampleSeries('有功', 0), sampleSeries('无功', 1.2, 40, 15)] }),
 }
 

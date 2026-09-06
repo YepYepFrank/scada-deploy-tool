@@ -73,7 +73,7 @@ watch(display, () => {
 .sr-number-card .sr-card-title {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: max(12px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
   letter-spacing: 0.12em;
   color: var(--sr-ink-2);
   font-family: var(--sr-font-body);
@@ -106,7 +106,7 @@ watch(display, () => {
 }
 .sr-number-sub {
   min-height: 1.2em;
-  font-size: 11px;
+  font-size: max(11px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
   color: var(--sr-ink-2);
   white-space: nowrap;
   overflow: hidden;

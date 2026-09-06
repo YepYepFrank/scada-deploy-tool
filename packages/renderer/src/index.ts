@@ -1,5 +1,5 @@
 // @grid/scada-renderer 公共入口。
-export const version = '0.1.0'
+export const version = '0.2.0'
 export * from './schema'
 export { default as ScadaPage } from './ScadaPage.vue'
 export {

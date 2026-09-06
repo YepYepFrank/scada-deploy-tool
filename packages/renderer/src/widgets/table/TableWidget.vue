@@ -148,7 +148,7 @@ const empty = computed(() => !series.value.length || (props.mode === 'timeline' 
 .sr-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: max(12px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
 }
 .sr-table th,
 .sr-table td {
@@ -164,7 +164,7 @@ const empty = computed(() => !series.value.length || (props.mode === 'timeline' 
   color: var(--sr-ink-2);
   font-weight: 400;
   letter-spacing: 0.08em;
-  font-size: 11px;
+  font-size: max(11px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
 }
 .sr-table .num {
   text-align: right;

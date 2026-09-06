@@ -157,3 +157,43 @@ describe('<ScadaPage>', () => {
     expect(w.find('[data-widget="w-s2"] .sr-text').exists()).toBe(true)
   })
 })
+
+describe('0.2.0 打磨(T3.9)', () => {
+  beforeEach(() => {
+    resetRegistry()
+    registerBuiltins()
+  })
+
+  it('运行态不显示空槽位占位,design 模式才显示', async () => {
+    const cfg: PageConfig = {
+      schemaVersion: 1,
+      template: 'overview-a',
+      title: 't',
+      widgets: [
+        {
+          id: 'w-g1',
+          type: 'line',
+          slot: 'g1',
+          bindings: { series: [{ mode: 'const', value: [] }] },
+        },
+      ],
+    }
+    const run = mount(ScadaPage, { props: { config: cfg, dataSource: createMockDataSource() } })
+    await nextTick()
+    expect(run.findAll('.sr-slot-placeholder')).toHaveLength(0)
+    expect(run.findAll('.sr-slot-empty').length).toBeGreaterThan(0)
+    const design = mount(ScadaPage, { props: { config: cfg, design: true } })
+    await nextTick()
+    expect(design.findAll('.sr-slot-placeholder').length).toBeGreaterThan(0)
+  })
+
+  it('scaled 模板根节点带 --sr-scale,grid 模板为 1', async () => {
+    const mk = (template: string): PageConfig => ({ schemaVersion: 1, template, title: 't', widgets: [] })
+    const scaled = mount(ScadaPage, { props: { config: mk('overview-a'), design: true } })
+    await nextTick()
+    expect(scaled.find('.sr-root').attributes('style')).toMatch(/--sr-scale: ?[\d.]+/)
+    const grid = mount(ScadaPage, { props: { config: mk('grid-3x3'), design: true } })
+    await nextTick()
+    expect(grid.find('.sr-root').attributes('style')).toMatch(/--sr-scale: ?1/)
+  })
+})

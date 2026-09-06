@@ -84,6 +84,13 @@ const placed = computed<Placed[]>(() => {
   }))
 })
 
+/** 组件 props:defaults + 配置(先过组件的 migrateProps 把旧键名正规化) */
+function widgetProps(w: Placed['widgets'][number]): Record<string, unknown> {
+  const def = w.def!
+  const raw = (w.cfg.props ?? {}) as Record<string, unknown>
+  return { ...(def.defaults ?? {}), ...(def.migrateProps ? def.migrateProps(raw) : raw) }
+}
+
 // ---------- 绑定 ----------
 const values = reactive<Record<string, Record<string, SlotValue>>>({})
 const bindErrors = reactive<Record<string, Record<string, string>>>({})
@@ -230,14 +237,14 @@ defineExpose({ issues, status, values, bindErrors })
               >
                 <component
                   :is="w.def!.component"
-                  v-bind="{ ...(w.def!.defaults ?? {}), ...(w.cfg.props ?? {}) }"
+                  v-bind="widgetProps(w)"
                   :values="values[w.cfg.id] ?? {}"
                   :errors="bindErrors[w.cfg.id] ?? {}"
                   :disabled="!!w.cfg.actions"
                 />
               </div>
             </template>
-            <div v-else class="sr-slot-placeholder">
+            <div v-else-if="design" class="sr-slot-placeholder">
               <span class="sr-slot-name">{{ p.slot.title ?? p.slot.name }}</span>
               <span v-if="p.slot.accepts" class="sr-slot-accepts">{{ p.slot.accepts.join(' / ') }}</span>
             </div>

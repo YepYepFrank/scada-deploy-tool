@@ -107,7 +107,7 @@ watch([num, () => props.min, () => props.max, () => props.color], () => update()
   right: 0;
   bottom: 6px;
   text-align: center;
-  font-size: 10px;
+  font-size: max(10px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
   letter-spacing: 0.1em;
   color: var(--sr-ink-2);
   pointer-events: none;

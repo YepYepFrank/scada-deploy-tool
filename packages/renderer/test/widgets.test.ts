@@ -30,6 +30,7 @@ import {
   imageWidget,
   builtinWidgets,
 } from '../src/index'
+import { ScadaPage, registerBuiltins, resetRegistry } from '../src/index'
 
 beforeEach(() => setOption.mockClear())
 
@@ -106,7 +107,7 @@ describe('line', () => {
     expect(seriesOf()[0]!.type).toBe('line')
     expect(seriesOf()[0]!.data).toHaveLength(3)
     expect(w.find('.sr-side-v').text()).toContain('2.0') // 首序列最后值
-    await w.setProps({ style: 'bar' })
+    await w.setProps({ chartStyle: 'bar' })
     await nextTick()
     expect(seriesOf()[0]!.type).toBe('bar')
     const empty = mount(C, { props: { title: '功率', values: { series: [] } } })
@@ -311,5 +312,44 @@ describe('image', () => {
     ).toBe('图片地址不可用')
     await a.find('img').trigger('error')
     expect(a.find('.sr-empty-hint').text()).toBe('图片加载失败')
+  })
+})
+
+describe('0.2.0:line 的 style → chartStyle 迁移', () => {
+  it('migrateProps 把旧键名转成新键名;已是新键名或没有旧键名时原样返回', () => {
+    const m = lineWidget.migrateProps!
+    expect(m({ style: 'bar', title: 't' })).toEqual({ chartStyle: 'bar', title: 't' })
+    expect(m({ chartStyle: 'area', style: 'bar' })).toEqual({ chartStyle: 'area', style: 'bar' })
+    const same = { title: 'x' }
+    expect(m(same)).toBe(same)
+  })
+
+  it('<ScadaPage> 渲染旧配置(props.style)时图表按 chartStyle 画柱状', async () => {
+    resetRegistry()
+    registerBuiltins()
+    setOption.mockClear()
+    mount(ScadaPage, {
+      props: {
+        design: true,
+        config: {
+          schemaVersion: 1,
+          template: 'grid-3x3',
+          title: 't',
+          widgets: [
+            {
+              id: 'w1',
+              type: 'line',
+              slot: 'r1c1',
+              props: { title: '旧配置', style: 'bar' },
+              bindings: {}, // design 模式用 sampleData 画
+            },
+          ],
+        },
+      },
+    })
+    await nextTick()
+    expect(seriesOf()[0]?.type).toBe('bar')
+    // 全局字号:grid 模板 --sr-scale=1 → 12
+    expect((lastOption() as { textStyle?: { fontSize?: number } }).textStyle?.fontSize).toBe(12)
   })
 })

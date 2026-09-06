@@ -69,10 +69,10 @@ const rows = computed(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: max(13px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
 }
 .sr-ov-compact .sr-ov-row {
-  font-size: 12px;
+  font-size: max(12px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
 }
 .sr-ov-ind {
   width: 8px;
@@ -94,7 +94,7 @@ const rows = computed(() => {
 }
 .sr-ov-val em {
   font-style: normal;
-  font-size: 11px;
+  font-size: max(11px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
   color: var(--sr-ink-2);
   margin-left: 4px;
 }

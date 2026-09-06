@@ -90,7 +90,7 @@
       "id": "chart-p-24h",
       "slot": "g1",
       "type": "line",
-      "props": { "title": "进线 / 光伏功率", "subtitle": "24H · 5 分钟均值", "unit": "kW", "style": "area" },
+      "props": { "title": "进线 / 光伏功率", "subtitle": "24H · 5 分钟均值", "unit": "kW", "chartStyle": "area" },
       "bindings": {
         "series": [
           {

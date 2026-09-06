@@ -69,7 +69,7 @@ const W = {
     id,
     slot,
     type: 'line',
-    props: { title: '全站功率', subtitle: '24H', unit: 'kW', style: 'area' },
+    props: { title: '全站功率', subtitle: '24H', unit: 'kW', chartStyle: 'area' },
     bindings: {
       series: [
         { mode: 'ts-history', entity: AST, keys: ['calc_total_p'], window: '24h', agg: 'AVG' },
@@ -156,7 +156,7 @@ const W = {
     id,
     slot,
     type: 'line',
-    props: { title: '逐日收益', subtitle: 'kz 归档 · 30D', unit: '元', style: 'bar' },
+    props: { title: '逐日收益', subtitle: 'kz 归档 · 30D', unit: '元', chartStyle: 'bar' },
     bindings: {
       series: [
         { mode: 'ext', source: 'kz', window: '30d', interval: '1d', params: { stationId: 'x', metric: 'revenue' } },

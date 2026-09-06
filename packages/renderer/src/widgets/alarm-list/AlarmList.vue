@@ -102,7 +102,7 @@ const sev = (a: AlarmInfo) => a.severity.toLowerCase()
   padding: 6px 8px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--sr-line-0) 60%, transparent);
-  font-size: 12px;
+  font-size: max(12px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
 }
 .sr-al-dot,
 .sr-ab-dot {
@@ -136,7 +136,7 @@ const sev = (a: AlarmInfo) => a.severity.toLowerCase()
 .sr-ab-since {
   color: var(--sr-ink-2);
   font-family: var(--sr-font-num);
-  font-size: 11px;
+  font-size: max(11px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
   white-space: nowrap;
 }
 .sr-alarm-banner {
@@ -149,7 +149,7 @@ const sev = (a: AlarmInfo) => a.severity.toLowerCase()
   border: 1px solid var(--sr-line-0);
   border-radius: var(--sr-radius);
   background: var(--sr-bg-1);
-  font-size: 13px;
+  font-size: max(13px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
   color: var(--sr-ink-1);
 }
 .sr-alarm-banner.sr-has {

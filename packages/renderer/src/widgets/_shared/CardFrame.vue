@@ -72,7 +72,7 @@ withDefaults(
 .sr-card-en {
   margin-left: 8px;
   font-family: var(--sr-font-num);
-  font-size: 11px;
+  font-size: max(11px, calc(var(--sr-min-text, 10px) * 0.85 / var(--sr-scale, 1)));
   letter-spacing: 0.12em;
   color: var(--sr-ink-2);
 }
@@ -81,7 +81,7 @@ withDefaults(
   flex: none;
 }
 .sr-side-k {
-  font-size: 10px;
+  font-size: max(10px, calc(var(--sr-min-text, 10px) * 0.85 / var(--sr-scale, 1)));
   letter-spacing: 0.12em;
   color: var(--sr-ink-2);
 }
@@ -112,7 +112,7 @@ withDefaults(
   align-items: center;
   justify-content: center;
   color: var(--sr-ink-2);
-  font-size: 12px;
+  font-size: max(12px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
   letter-spacing: 0.08em;
   pointer-events: none;
 }

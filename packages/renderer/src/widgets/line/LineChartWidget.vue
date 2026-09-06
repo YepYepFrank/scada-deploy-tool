@@ -10,7 +10,7 @@ const props = withDefaults(
     title?: string
     subtitle?: string
     unit?: string
-    style?: 'line' | 'area' | 'bar'
+    chartStyle?: 'line' | 'area' | 'bar'
     smooth?: boolean
     showLegend?: boolean
     decimals?: number
@@ -22,7 +22,7 @@ const props = withDefaults(
     title: '',
     subtitle: '',
     unit: '',
-    style: 'line',
+    chartStyle: 'line',
     smooth: false,
     showLegend: true,
     decimals: 1,
@@ -81,7 +81,7 @@ function build(t: ChartTokens) {
     series: series.value.map((s, i) => {
       const color = colorAt(i)
       const base = { name: s.name, data: toPairs(s.points), emphasis: { disabled: true } }
-      if (props.style === 'bar')
+      if (props.chartStyle === 'bar')
         return { ...base, type: 'bar', barWidth: 9, itemStyle: { color, borderRadius: [2, 2, 0, 0] } }
       return {
         ...base,
@@ -91,7 +91,7 @@ function build(t: ChartTokens) {
         lineStyle: { width: 2, color, shadowColor: alpha(color, 0.45), shadowBlur: 9, shadowOffsetY: 3 },
         itemStyle: { color },
         areaStyle:
-          props.style === 'area'
+          props.chartStyle === 'area'
             ? {
                 color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
                   { offset: 0, color: alpha(color, 0.22) },
@@ -107,7 +107,7 @@ const { update } = useEChart(el, build)
 watch(
   () =>
     series.value.map(s => `${s.name}:${s.points.length}:${s.points[s.points.length - 1]?.ts ?? 0}`).join('|') +
-    props.style +
+    props.chartStyle +
     props.smooth,
   () => update(true)
 )

@@ -50,7 +50,7 @@ describe('props-form 逻辑', () => {
     expect(validateProps(nc, { color: '#3987e5', decimals: 2, title: 't' })).toEqual([])
     expect(validateProps(nc, { bogus: 1 })[0]!.message).toMatch(/不是该组件的属性/)
     const line = getWidget('line')!.propsSchema
-    expect(validateProps(line, { style: 'pie' })[0]!.message).toBe('只能是 line / area / bar')
+    expect(validateProps(line, { chartStyle: 'pie' })[0]!.message).toBe('只能是 line / area / bar')
     const tbl = getWidget('table')!.propsSchema
     expect(validateProps(tbl, { columns: [{ label: 'a', decimals: 7 }] })).toEqual([
       { path: 'columns/0/decimals', message: '不能大于 4' },
@@ -96,10 +96,10 @@ describe('PropsForm 组件', () => {
   it('line:枚举下拉显示中文名并 emit 原值;开关 emit 布尔', async () => {
     const schema = getWidget('line')!.propsSchema
     const w = mount(PropsForm, { props: { schema, modelValue: {} } })
-    const sel = w.find('[data-field="style"] select')
+    const sel = w.find('[data-field="chartStyle"] select')
     expect(sel.findAll('option').map(o => o.text())).toEqual(['折线', '面积', '柱状'])
     await sel.setValue('bar')
-    expect(w.emitted('update:modelValue')!.at(-1)![0]).toEqual({ style: 'bar' })
+    expect(w.emitted('update:modelValue')!.at(-1)![0]).toEqual({ chartStyle: 'bar' })
     await w.find('[data-field="smooth"] input[type="checkbox"]').setValue(true)
     expect(w.emitted('update:modelValue')!.at(-1)![0]).toEqual({ smooth: true })
   })

@@ -22,4 +22,6 @@
   --sr-chart-grid: rgba(83, 196, 255, 0.16);
   --sr-radius: 6px;
   --sr-gap: 12px;
+  /* 缩放模板下小字号的屏幕下限(组件里 font-size: max(Npx, calc(var(--sr-min-text) / var(--sr-scale, 1)))) */
+  --sr-min-text: 10px;
 }

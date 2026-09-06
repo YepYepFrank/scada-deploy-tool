@@ -146,11 +146,11 @@ describe('migrateSiteConfig · 每种 card', () => {
   it('line / bar → line 单序列,窗口按旧规则', () => {
     expect(one({ kind: 'metric', device: 'D1', key: 'P', card: 'line' }).g1).toMatchObject({
       type: 'line',
-      props: { style: 'area' },
+      props: { chartStyle: 'area' },
       bindings: { series: [{ mode: 'ts-history', keys: ['P'], window: '15m' }] },
     })
     expect(one({ kind: 'metric', device: 'D1', key: 'PEnergy5m', card: 'bar' }).g1).toMatchObject({
-      props: { style: 'bar' },
+      props: { chartStyle: 'bar' },
       bindings: { series: [{ window: '24h' }] },
     })
     expect(legacyHistoryWindow('PAvg1h', 'line')).toBe('7d')
