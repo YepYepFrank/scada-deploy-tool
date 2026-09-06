@@ -170,12 +170,8 @@ describe('0.2.0 打磨(T3.9)', () => {
       template: 'overview-a',
       title: 't',
       widgets: [
-        {
-          id: 'w-g1',
-          type: 'line',
-          slot: 'g1',
-          bindings: { series: [{ mode: 'const', value: [] }] },
-        },
+        // 用 text 而不是 line:scada-page 测试没 mock echarts,happy-dom 没有 canvas
+        { id: 'w-g1', type: 'text', slot: 'g1', props: { content: '占位' }, bindings: {} },
       ],
     }
     const run = mount(ScadaPage, { props: { config: cfg, dataSource: createMockDataSource() } })
