@@ -1,7 +1,7 @@
 // DataSource 一致性用例:任何实现(LegacyDataSource、同事的 TbClient)都用同一套断言,配合 fake-tb.ts。
-// 同事交付 TbClient 时:新建 test/tb-client.test.ts,调用 describeDataSourceConformance('TbClient', () => ({ ds, tb }))。
+// 同事在自己仓库里:import { describeDataSourceConformance, FakeTb, FakeSocket } from '@grid/tb-client/testing',调用 describeDataSourceConformance('TbClient', () => ({ ds, tb }))。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DataSource, TsUpdate } from '../src/data-source'
+import type { DataSource, TsUpdate } from '../data-source'
 import { FakeSocket, FakeTb } from './fake-tb'
 
 export interface ConformanceHarness {

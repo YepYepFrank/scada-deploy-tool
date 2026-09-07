@@ -17,17 +17,22 @@ provideDataSource(ds) // 之后换成 provideDataSource(new TbClient(...)),渲�
 
 - **`ext()`(ADR-004 路线 A,T3.8 起)**:`LegacyDataSource` 实现了 `source: 'kz'` 的收益趋势——`kzBaseUrl` 选项给 kz 地址(同源 `/kz` 反代或 `http://host:8099`),用同一个 TB token 鉴权;`params.stationId` 必填,`params.metric` 可指定只要 `inc / cost / net` 之一;kz 只支持「本月逐日 / 本年逐月」,本月没归档自动降级为逐月(`meta.mode`)。同事的 TbClient 照此语义实现即可,`test/legacy-adapter.test.ts` 的 kz 用例可搬到一致性套件。
 
-## 一致性测试(同事交付 TbClient 时的验收)
+## 一致性测试(同事交付 TbClient 时的验收)· 子路径 `@grid/tb-client/testing`
+
+按第二轮回填(2026-09-06)的分工,`TbClient` **留在同事的应用仓库**(直接 import 她的 `request.js / websocket.js`,不进本仓库);本包只放契约类型、`LegacyDataSource` 预案和这套一致性用例。
 
 ```
-test/fake-tb.ts        内存版 TB:REST(timeseries / alarm)+ WS(tsSubCmds / attrSubCmds),含真实 TB 的怪脾气
-test/conformance.ts    describeDataSourceConformance(name, setup) —— 任何 DataSource 实现共用的 13 条用例
+src/testing/fake-tb.ts        内存版 TB:REST(timeseries / alarm)+ WS(tsSubCmds / attrSubCmds)+ kz 收益趋势,含真实 TB 的怪脾气
+src/testing/conformance.ts    describeDataSourceConformance(name, setup) —— 任何 DataSource 实现共用的 14 条用例
 test/legacy-adapter.test.ts   LegacyDataSource 跑上面这套 + 自己的细节
 ```
 
-`TbClient` 交付时新建 `test/tb-client.test.ts`:
+同事在自己的仓库里(需要 vitest ≥ 2,`vitest` 是本包的可选 peer;该子路径顶层 import 了 vitest,只能在 vitest 运行时里引):
 
 ```ts
+import { describeDataSourceConformance, FakeTb, FakeSocket } from '@grid/tb-client/testing'
+import { TbClient } from '../src/tb-client'
+
 describeDataSourceConformance('TbClient', () => {
   const tb = new FakeTb()
   const ds = new TbClient({ baseUrl: 'http://tb', getToken: () => tb.token, fetchImpl: tb.fetch, WebSocketImpl: FakeSocket })

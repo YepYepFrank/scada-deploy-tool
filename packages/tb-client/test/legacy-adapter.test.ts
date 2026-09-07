@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { LegacyDataSource, normalizeValue } from '../src/index'
-import { describeDataSourceConformance } from './conformance'
-import { FakeSocket, FakeTb } from './fake-tb'
+import { describeDataSourceConformance } from '../src/testing/conformance'
+import { FakeSocket, FakeTb } from '../src/testing/fake-tb'
 
 describeDataSourceConformance('LegacyDataSource', () => {
   const tb = new FakeTb()

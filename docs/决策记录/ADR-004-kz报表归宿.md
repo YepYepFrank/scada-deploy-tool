@@ -1,6 +1,6 @@
 # ADR-004 kz 归档报表在契约中的归宿
 
-状态:**采纳路线 A**(2026-09-04 同事回填明确「回写 TB 不可行,必须走 `mode: 'ext'`」;T0.2 契约含 ExtBinding,T3.1 报表槽位迁为 line + ext,T3.8 LegacyDataSource 实现 kz `ext()`;正式签字待补)
+状态:**已采纳路线 A,待签字**(2026-09-06 第二轮回填补齐接口形状,见文末;2026-09-04 同事回填明确「回写 TB 不可行,必须走 `mode: 'ext'`」;T0.2 契约含 ExtBinding,T3.1 报表槽位迁为 line + ext,T3.8 LegacyDataSource 实现 kz `ext()`;正式签字待补)
 关联:架构 v2 §0 ⑫、§6「三条补充约定」;计划 T0.2(契约是否加 `mode: 'ext'`)、T3.1、T3.8
 
 ## 背景
@@ -34,3 +34,11 @@
 
 YY:____ 日期:____
 同事:____ 日期:____
+
+## 第二轮回填后的决定(2026-09-06)
+
+- kz 是查询接口服务(数据在 TB 同库的归档表);通用查询按设备 id / 站点 id / 量名 / 毫秒时间段查,鉴权用 TB token,返回 `{ code, msg, data: { <量名>: [{ ts, value, createTime, zdValue }] } }`。
+- 契约 `ExtQuery.params` 冻结为 `{ stationId?, deviceId?, keys?, metric? }`;`window` 由 tbClient 换算为 `startTime / endTime`(毫秒);`interval` → kz 粒度参数的映射表放在 tbClient,取值待第三轮。
+- `ExtResult.series` = data 里的「量名 → 点列」(`ts / value`,其余字段忽略);统计类 key:value 结果放 `ExtResult.meta`。
+- 已实现:`LegacyDataSource.ext()` 的收益趋势(`stationRevenueTrend`,T3.8);通用查询待路径与粒度参数。
+- 待第三轮:接口路径、粒度参数、TB TTL 天数、生产 / 现场 kz 地址。
