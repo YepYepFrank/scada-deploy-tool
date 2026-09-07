@@ -88,7 +88,7 @@ export interface MigrationResult {
 export interface MigrateOptions {
   /** 站点资产名(默认 cfg.site.name),告警横幅 / 告警列表绑它 */
   siteAssetName?: string
-  /** kz 报表槽位的 ext 参数形状待冻结,这里先按 { stationId, metric } */
+  /** kz 报表槽位走收益趋势接口,ext 参数 { stationId, metric }(契约 §4.3b) */
   reportSource?: string
 }
 

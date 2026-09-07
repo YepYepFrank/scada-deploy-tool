@@ -8,6 +8,7 @@ describeDataSourceConformance('LegacyDataSource', () => {
   const ds = new LegacyDataSource({
     baseUrl: 'http://tb',
     getToken: () => tb.token,
+    kzBaseUrl: 'http://kz',
     fetchImpl: tb.fetch,
     WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
   })
@@ -123,6 +124,31 @@ describe('LegacyDataSource.ext(kz,ADR-004 路线 A)', () => {
     expect(r.series.net).toEqual([{ ts: new Date('2026-07-01T00:00:00+08:00').getTime(), value: 1 }])
     const m = await ds.ext({ source: 'kz', interval: '1M', params: { stationId: 'st-1' } })
     expect([m.meta?.mode, m.series.net!.length]).toEqual(['month', 1])
+  })
+
+  it('通用历史:interval → 路径段 + 毫秒;缺 interval 按窗口选;agg 透传(非法回落 AVG);startTs/endTs 可显式给', async () => {
+    const { ds, tb } = make('http://kz')
+    tb.seedKzTs('dev-9', 'P', [[1_000, '1']])
+    const ent = { type: 'DEVICE', id: 'dev-9' } as const
+    const last = () => tb.requests.at(-1)!
+    await ds.ext({
+      source: 'kz',
+      interval: '1M',
+      params: { entity: ent, keys: ['P'], agg: 'ZD', startTs: 0, endTs: 2_000 },
+    })
+    expect(last()).toContain(
+      '/kzserver/tskv/month/telemetry/DEVICE/dev-9/values/timeseries?keys=P&startTs=0&endTs=2000&interval=2592000000&agg=ZD'
+    )
+    await ds.ext({ source: 'kz', interval: '1y', params: { entity: ent, keys: ['P'], agg: 'bogus' } })
+    expect(last()).toMatch(/\/tskv\/year\/.*interval=31622400000&agg=AVG$/)
+    await ds.ext({ source: 'kz', window: '90d', params: { entity: ent, keys: ['P'] } })
+    expect(last()).toMatch(/\/tskv\/day\/.*interval=86400000/)
+    await ds.ext({ source: 'kz', window: '12h', params: { entity: ent, keys: ['P'] } })
+    expect(last()).toMatch(/\/tskv\/minutefive\/.*interval=300000/)
+    await ds.ext({ source: 'kz', window: '3d', params: { entity: ent, keys: ['P'] } })
+    expect(last()).toMatch(/\/tskv\/hour\/.*interval=3600000/)
+    await expect(ds.ext({ source: 'kz', params: { keys: ['P'] } })).rejects.toThrow(/params.entity/)
+    await expect(ds.ext({ source: 'kz', params: { entity: ent, keys: [] } })).rejects.toThrow(/keys 为空/)
   })
 
   it('kz 未配置 / 非 kz 源 / 缺 stationId / 站点不存在 都是明确错误(渲染器据此置错误态)', async () => {

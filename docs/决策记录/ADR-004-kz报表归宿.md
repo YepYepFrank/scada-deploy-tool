@@ -42,3 +42,11 @@ YY:____ 日期:____
 - `ExtResult.series` = data 里的「量名 → 点列」(`ts / value`,其余字段忽略);统计类 key:value 结果放 `ExtResult.meta`。
 - 已实现:`LegacyDataSource.ext()` 的收益趋势(`stationRevenueTrend`,T3.8);通用查询待路径与粒度参数。
 - 待第三轮:接口路径、粒度参数、TB TTL 天数、生产 / 现场 kz 地址。
+
+## 第三轮回填后的定稿(2026-09-06,高潮微信 + 接口汇总 docx)
+
+- 通用历史接口:`GET {kz}/kzserver/tskv/{minute|minutefive|hour|day|month|year}/telemetry/{entityType}/{entityId}/values/timeseries?keys=&startTs=&endTs=&interval=&agg=`,头 `X-Authorization: Bearer <TB token>`;`interval` 毫秒;`agg` ∈ AVG / MAX / MIN / ZD;返回 `{ code, msg, data: { 量名: [{ createTime, ts, value, zdValue }] } }`。**粒度是路径段**,映射表 `KZ_BUCKETS` 在 tbClient。
+- 查询对象是任意实体 + 任意 key(与 TB 的 `values/timeseries` 同形),不是站点 id → 契约 `params` 改为 `{ entity, keys, agg?, startTs?, endTs? }`;业务统计(收益趋势等 `/biz/power/*`)另用 `{ stationId, metric? }`,按需逐个加。
+- 保留期:生产 TB 无 TTL,kz 定时任务 3–7 天清秒级数据;`ts-history` 上限维持 3 天。
+- 地址:`http://{ip}:8099/kzserver`,与 TB 同机;`kzBaseUrl` 填主机(或同源反代空串),路径由 tbClient 拼。
+- 已实现:`LegacyDataSource.ext()` 通用历史分支(`kzTskv`),一致性用例 +1。本 ADR 无未决项。

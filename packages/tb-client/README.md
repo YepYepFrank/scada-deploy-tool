@@ -15,7 +15,8 @@ provideDataSource(ds) // 之后换成 provideDataSource(new TbClient(...)),渲�
 
 刻意保持薄:一条 WS;断线 3 秒后重连并重放全部订阅;同一 tick 内的订阅变更合并成一条消息(渲染器切配置时 dispose 全部再重订);没有订阅时关掉连接;告警走 REST 轮询(10 秒);不合并重复订阅;不做 token 刷新(宿主通过 `getToken` 提供)。`getHistory` 按窗口自适应聚合:≤2h 原始点,2h–24h 5 分钟 AVG,24h–7d 1 小时,>7d 1 天。
 
-- **`ext()`(ADR-004 路线 A,T3.8 起)**:`LegacyDataSource` 实现了 `source: 'kz'` 的收益趋势——`kzBaseUrl` 选项给 kz 地址(同源 `/kz` 反代或 `http://host:8099`),用同一个 TB token 鉴权;`params.stationId` 必填,`params.metric` 可指定只要 `inc / cost / net` 之一;kz 只支持「本月逐日 / 本年逐月」,本月没归档自动降级为逐月(`meta.mode`)。同事的 TbClient 照此语义实现即可,`test/legacy-adapter.test.ts` 的 kz 用例可搬到一致性套件。
+- **`ext()` 通用历史(2026-09-06,第三轮回填定稿)**:`params = { entity, keys, agg?, startTs?, endTs? }` → `GET {kz}/kzserver/tskv/{桶}/telemetry/{type}/{id}/values/timeseries`;契约 `interval` → 路径段 + 毫秒的映射表 `KZ_BUCKETS`(缺省按窗口 `defaultKzInterval`),`agg` ∈ AVG / MAX / MIN / ZD(默认 AVG);返回按量名升序归一,`meta { bucket, agg, startTs, endTs }`。一致性套件里有对应用例,同事 TbClient 也要过。
+- **`ext()` 收益趋势(ADR-004 路线 A,T3.8 起)**:`LegacyDataSource` 实现了 `source: 'kz'` 的收益趋势——`kzBaseUrl` 选项给 kz 地址(同源 `/kz` 反代或 `http://host:8099`),用同一个 TB token 鉴权;`params.stationId` 必填,`params.metric` 可指定只要 `inc / cost / net` 之一;kz 只支持「本月逐日 / 本年逐月」,本月没归档自动降级为逐月(`meta.mode`)。同事的 TbClient 照此语义实现即可,`test/legacy-adapter.test.ts` 的 kz 用例可搬到一致性套件。
 
 ## 一致性测试(同事交付 TbClient 时的验收)· 子路径 `@grid/tb-client/testing`
 
@@ -23,7 +24,7 @@ provideDataSource(ds) // 之后换成 provideDataSource(new TbClient(...)),渲�
 
 ```
 src/testing/fake-tb.ts        内存版 TB:REST(timeseries / alarm)+ WS(tsSubCmds / attrSubCmds)+ kz 收益趋势,含真实 TB 的怪脾气
-src/testing/conformance.ts    describeDataSourceConformance(name, setup) —— 任何 DataSource 实现共用的 14 条用例
+src/testing/conformance.ts    describeDataSourceConformance(name, setup) —— 任何 DataSource 实现共用的 15 条用例
 test/legacy-adapter.test.ts   LegacyDataSource 跑上面这套 + 自己的细节
 ```
 

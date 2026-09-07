@@ -14,6 +14,7 @@ import type {
   ConnectionStatus,
   DataSource,
   EntityRef,
+  ExtInterval,
   ExtQuery,
   ExtResult,
   TsPoint,
@@ -52,6 +53,29 @@ export const HISTORY_BUCKETS: { maxWindowMs: number; intervalMs: number }[] = [
   { maxWindowMs: 7 * 86_400_000, intervalMs: 3_600_000 },
   { maxWindowMs: Infinity, intervalMs: 86_400_000 },
 ]
+
+/**
+ * kz 通用历史查询(ADR-004,第三轮回填 2026-09-06,接口文档 `TB汇总业务-接口_20260818002.docx`):
+ * GET {kz}/kzserver/tskv/{桶}/telemetry/{entityType}/{entityId}/values/timeseries?keys=&startTs=&endTs=&interval=&agg=
+ * 契约 interval → kz 路径段与 interval 毫秒(月 / 年按文档参数表:30 天 / 366 天)。
+ */
+export const KZ_BUCKETS: Record<ExtInterval, { path: string; intervalMs: number }> = {
+  '1m': { path: 'minute', intervalMs: 60_000 },
+  '5m': { path: 'minutefive', intervalMs: 300_000 },
+  '1h': { path: 'hour', intervalMs: 3_600_000 },
+  '1d': { path: 'day', intervalMs: 86_400_000 },
+  '1M': { path: 'month', intervalMs: 30 * 86_400_000 },
+  '1y': { path: 'year', intervalMs: 366 * 86_400_000 },
+}
+/** 没给 interval 时按窗口选粒度:≤2h 1 分钟;≤24h 5 分钟;≤7d 1 小时;≤90d 1 天;更长逐月 */
+export function defaultKzInterval(windowMs: number): ExtInterval {
+  if (windowMs <= 2 * 3_600_000) return '1m'
+  if (windowMs <= 24 * 3_600_000) return '5m'
+  if (windowMs <= 7 * 86_400_000) return '1h'
+  if (windowMs <= 90 * 86_400_000) return '1d'
+  return '1M'
+}
+const KZ_AGGS = new Set(['AVG', 'MAX', 'MIN', 'ZD'])
 
 /** TB 推的值是字符串:数值串转 number,true/false 转 boolean,其余原样;null 透传 */
 export function normalizeValue(raw: unknown): TsPoint['value'] {
@@ -227,17 +251,21 @@ export class LegacyDataSource implements DataSource {
   }
 
   /**
-   * 外部源(一期只有 kz 收益趋势)。服务端语义(反编译确认):queryType=2 本月逐日、3 本年逐月,
-   * 日期范围由服务端时钟决定,不支持任意区间;本月没归档时自动降级为逐月(meta.mode 标明)。
-   * 返回序列 inc(放电收益)/ cost(充电成本)/ net(净收益);params.metric 指定则只返回那一条。
+   * 外部源 kz(契约 §4.3b)。两种查询按 params 分派:
+   * - 通用历史 `{ entity, keys, agg? }`:GET /kzserver/tskv/{桶}/telemetry/…(第三轮回填定稿),任意实体 + 任意 key,
+   *   窗口 → startTs/endTs(毫秒,默认 30d 到现在),interval → 路径段(缺省按窗口选),agg ∈ AVG/MAX/MIN/ZD(默认 AVG)。
+   *   series 就是 data 里「量名 → 升序点列」;meta { bucket, agg, startTs, endTs }。
+   * - 收益趋势 `{ stationId, metric? }`:POST /kzserver/biz/power/stationRevenueTrend(反编译确认 queryType=2 本月逐日、3 本年逐月,
+   *   日期范围由服务端时钟决定);本月没归档时降级为逐月(meta.mode);序列 inc / cost / net。
    */
   async ext(query: ExtQuery): Promise<ExtResult> {
     if (query.source !== 'kz') throw new Error(`不支持的外部源「${query.source}」(一期只有 kz)`)
     const kz = this.opts.kzBaseUrl
     if (!kz) throw new Error('kz 未配置:LegacyDataSource.kzBaseUrl(大屏 ?kz=)为空')
-    const stationId = query.params?.stationId
-    if (!stationId) throw new Error('ext(kz) 缺 params.stationId')
     const token = await this.opts.getToken()
+    if (Array.isArray(query.params?.keys)) return this.kzTskv(kz, token, query)
+    const stationId = query.params?.stationId
+    if (!stationId) throw new Error('ext(kz) 缺 params:通用查询要 { entity, keys },收益趋势要 { stationId }')
     type Row = { statDate: string; dischargeIncome?: unknown; chargeCost?: unknown; netProfit?: unknown }
     const fetchRows = async (queryType: 2 | 3): Promise<Row[]> => {
       const r = await this.fetchImpl(`${kz}/kzserver/biz/power/stationRevenueTrend`, {
@@ -267,6 +295,45 @@ export class LegacyDataSource implements DataSource {
     const metric = query.params?.metric
     const series = typeof metric === 'string' && all[metric] ? { [metric]: all[metric]! } : all
     return { series, meta: { mode, rows: rows.length } }
+  }
+
+  private async kzTskv(kz: string, token: string, query: ExtQuery): Promise<ExtResult> {
+    const p = query.params as { entity?: EntityRef; keys: unknown[]; agg?: unknown; startTs?: unknown; endTs?: unknown }
+    const entity = p.entity
+    if (!entity?.type || !entity.id) throw new Error('ext(kz) 通用查询缺 params.entity { type, id }')
+    const keys = p.keys.map(String).filter(Boolean)
+    if (!keys.length) throw new Error('ext(kz) 通用查询 params.keys 为空')
+    const endTs = typeof p.endTs === 'number' ? p.endTs : Date.now()
+    const windowMs = parseWindow(query.window ?? '30d')
+    const startTs = typeof p.startTs === 'number' ? p.startTs : endTs - windowMs
+    const interval = query.interval ?? defaultKzInterval(endTs - startTs)
+    const bucket = KZ_BUCKETS[interval]
+    if (!bucket) throw new Error(`ext(kz) 不支持的粒度「${String(interval)}」`)
+    const agg = typeof p.agg === 'string' && KZ_AGGS.has(p.agg) ? p.agg : 'AVG'
+    const qs = new URLSearchParams({
+      keys: keys.join(','),
+      startTs: String(startTs),
+      endTs: String(endTs),
+      interval: String(bucket.intervalMs),
+      agg,
+    })
+    const r = await this.fetchImpl(
+      `${kz}/kzserver/tskv/${bucket.path}/telemetry/${entity.type}/${entity.id}/values/timeseries?${qs}`,
+      { headers: { 'X-Authorization': `Bearer ${token}` } }
+    )
+    if (!r.ok) throw new Error(`kz → HTTP ${r.status}`)
+    const j = (await r.json()) as {
+      code?: number
+      msg?: string
+      data?: Record<string, { ts: number; value: unknown }[]>
+    }
+    if (j.code !== 200) throw new Error(j.msg || 'kz 历史查询失败')
+    const series: Record<string, TsPoint[]> = {}
+    for (const k of keys)
+      series[k] = (j.data?.[k] ?? [])
+        .map(pt => ({ ts: Number(pt.ts), value: normalizeValue(pt.value) }))
+        .sort((a, b) => a.ts - b.ts)
+    return { series, meta: { bucket: bucket.path, agg, startTs, endTs } }
   }
 
   async getLatest(entity: EntityRef, keys: string[]): Promise<Record<string, TsPoint | null>> {

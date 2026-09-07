@@ -241,5 +241,29 @@ export function describeDataSourceConformance(name: string, setup: () => Conform
       expect(alarmReqs.length).toBeGreaterThan(0) // 第二个订阅仍在轮询
       expect(alarmReqs.length).toBeLessThanOrEqual(7) // 第一个已停:60 秒内约 6 次而非 12 次
     })
+
+    it('ext(kz 通用历史):{ entity, keys } 走 /kzserver/tskv/{桶}/…,窗口换算毫秒 startTs/endTs,series 升序、数值归一', async () => {
+      if (!h.ds.ext) return
+      h.tb.seedKzTs(DEV.id, 'P', [
+        [1_699_996_400_000, 12],
+        [1_699_999_800_000, '13.5'],
+        [1_699_900_000_000, 1], // 窗口外
+      ])
+      const r = await h.ds.ext({
+        source: 'kz',
+        window: '1h',
+        interval: '1m',
+        params: { entity: DEV, keys: ['P', 'Q'] },
+      })
+      const url = h.tb.requests.find(u => u.includes('/kzserver/tskv/'))
+      expect(url).toMatch(new RegExp(`/kzserver/tskv/minute/telemetry/DEVICE/${DEV.id}/values/timeseries\\?`))
+      expect(url).toContain('keys=P%2CQ')
+      expect(url).toContain(`startTs=${1_700_000_000_000 - 3_600_000}&endTs=1700000000000&interval=60000&agg=AVG`)
+      expect(r.series.P).toEqual([
+        { ts: 1_699_996_400_000, value: 12 },
+        { ts: 1_699_999_800_000, value: 13.5 },
+      ])
+      expect(r.series.Q).toEqual([])
+    })
   })
 }

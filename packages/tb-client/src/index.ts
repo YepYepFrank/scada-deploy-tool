@@ -16,4 +16,11 @@ export type {
   ExtResult,
 } from './data-source'
 export { parseWindow } from './data-source'
-export { LegacyDataSource, normalizeValue, HISTORY_BUCKETS, type LegacyDataSourceOptions } from './legacy-adapter'
+export {
+  LegacyDataSource,
+  normalizeValue,
+  HISTORY_BUCKETS,
+  KZ_BUCKETS,
+  defaultKzInterval,
+  type LegacyDataSourceOptions,
+} from './legacy-adapter'

@@ -50,6 +50,15 @@ export class FakeTb {
   forbidden = new Set<string>()
   /** kz 收益趋势:stationId → 本月逐日 / 本年逐月行 */
   kz = new Map<string, { day: Record<string, unknown>[]; month: Record<string, unknown>[] }>()
+  /** kz 通用历史(tskv 归档表):entityId → key → 点列;所有粒度桶共用同一份(测试只看路径与筛选) */
+  kzTs = new Map<string, Map<string, Point[]>>()
+  seedKzTs(entityId: string, key: string, points: [number, unknown][]) {
+    const m = this.kzTs.get(entityId) ?? this.kzTs.set(entityId, new Map()).get(entityId)!
+    m.set(
+      key,
+      points.map(([ts, value]) => ({ ts, value }))
+    )
+  }
   /** cmdId → {socket, entityId, keys, kind} */
   subs = new Map<number, { socket: FakeSocket; entityId: string; keys: string[]; kind: 'ts' | 'attr' }>()
   token = 'jwt-test'
@@ -183,6 +192,32 @@ export class FakeTb {
       return json({ code: 200, data: body.queryType === 3 ? st.month : st.day })
     }
     let m: RegExpMatchArray | null
+    // kz 通用历史(第三轮回填定稿):/kzserver/tskv/{minute|minutefive|hour|day|month|year}/telemetry/{type}/{id}/values/timeseries
+    if (
+      (m = u.pathname.match(
+        /\/kzserver\/tskv\/(minute|minutefive|hour|day|month|year)\/telemetry\/(DEVICE|ASSET)\/([^/]+)\/values\/timeseries$/
+      ))
+    ) {
+      const keys = (u.searchParams.get('keys') ?? '').split(',').filter(Boolean)
+      const start = Number(u.searchParams.get('startTs') ?? 0)
+      const end = Number(u.searchParams.get('endTs') ?? 0)
+      const agg = u.searchParams.get('agg')
+      if (!agg || !['AVG', 'MAX', 'MIN', 'ZD'].includes(agg)) return json({ code: 500, msg: 'agg 不支持' })
+      const data: Record<string, unknown[]> = {}
+      for (const k of keys) {
+        const pts = (this.kzTs.get(m[3]!)?.get(k) ?? []).filter(p => p.ts >= start && p.ts <= end)
+        // kz 返回:createTime 文本、ts、value、zdValue(整点值,非 ZD 时 null);顺序不保证 → 这里给降序考验实现
+        data[k] = pts
+          .map(p => ({
+            createTime: new Date(p.ts).toISOString(),
+            ts: p.ts,
+            value: p.value,
+            zdValue: agg === 'ZD' ? p.value : null,
+          }))
+          .sort((a, b) => b.ts - a.ts)
+      }
+      return json({ msg: '操作成功', code: 200, data })
+    }
     if ((m = u.pathname.match(/\/(DEVICE|ASSET)\/([^/]+)/)) && this.forbidden.has(m[2]!))
       return json({ message: "You don't have permission to perform this operation!", errorCode: 20 }, 403)
     if ((m = u.pathname.match(/^\/api\/plugins\/telemetry\/(DEVICE|ASSET)\/([^/]+)\/values\/timeseries$/))) {

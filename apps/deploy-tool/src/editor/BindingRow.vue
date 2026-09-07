@@ -306,7 +306,7 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
           class="br-wide"
           :class="{ bad: paramsBad }"
           rows="2"
-          placeholder='params JSON,如 {"stationId":"…","metric":"revenue"}(形状待 kz 接口冻结)'
+          placeholder='params JSON:通用历史 {"entity":{"type":"DEVICE","id":"…"},"keys":["P"],"agg":"AVG"};收益趋势 {"stationId":"…","metric":"net"}'
           :value="JSON.stringify(f('params') ?? {})"
           @change="setParams(ev($event))"
         ></textarea>
