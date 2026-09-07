@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** 组件选择弹层:列出注册表组件,按槽位 accepts 过滤;固定槽位只列固定类型。 */
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import type { TemplateSlotDefinition, WidgetDefinition } from '@grid/scada-renderer'
 
 const props = defineProps<{
@@ -19,6 +19,16 @@ const CATEGORY: Record<string, string> = {
   diagram: '图形',
   text: '文本',
 }
+
+/** Esc 关闭(与点遮罩 / × 等价)。编辑器的全局 Esc 先看到 pickerOpen 仍为 true,所以不会同时退出全屏 */
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    emit('close')
+  }
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 const options = computed(() =>
   props.widgets.filter(w => {
