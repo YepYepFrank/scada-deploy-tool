@@ -10,7 +10,12 @@ const enabled = hasCreds && process.env.KZ_AUTH_FIXED === '1'
 describe.skipIf(!enabled)(`kz tskv/** 鉴权(live @ ${KZ_BASE},KZ_AUTH_FIXED=1)`, () => {
   let ied: { type: 'DEVICE'; id: string }
   let token: string
-  const query = () => ({ source: 'kz' as const, window: '1h' as const, interval: '1m' as const, params: { entity: ied, keys: ['P'] } })
+  const query = () => ({
+    source: 'kz' as const,
+    window: '1h' as const,
+    interval: '1m' as const,
+    params: { entity: ied, keys: ['P'] },
+  })
   const ds = (getToken: () => string) => new LegacyDataSource({ baseUrl: TB_BASE, getToken, kzBaseUrl: KZ_BASE })
 
   beforeAll(async () => {
@@ -29,7 +34,9 @@ describe.skipIf(!enabled)(`kz tskv/** 鉴权(live @ ${KZ_BASE},KZ_AUTH_FIXED=1)`
 
   it('篡改 payload + 假签名的 JWT → 拒绝', async () => {
     const [h] = token.split('.')
-    const payload = Buffer.from(JSON.stringify({ sub: 'x', scopes: ['TENANT_ADMIN'], exp: 4102444800 })).toString('base64url')
+    const payload = Buffer.from(JSON.stringify({ sub: 'x', scopes: ['TENANT_ADMIN'], exp: 4102444800 })).toString(
+      'base64url'
+    )
     const forged = `${h}.${payload}.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`
     await expect(ds(() => forged).ext(query())).rejects.toThrow(/token|401/i)
   })
