@@ -319,8 +319,12 @@ function seriesName(b: Binding, i: number): string {
       return b.keys[0] ?? `series-${i}`
     case 'attr':
       return b.key
-    case 'ext':
-      return String((b.params as Record<string, unknown>).metric ?? `${b.source}-${i}`)
+    case 'ext': {
+      // 图例名:业务统计用 metric(inc / cost / net);通用历史用第一个 key;都没有才退到 kz-<序号>
+      const p = b.params as { metric?: unknown; keys?: unknown }
+      const key = Array.isArray(p.keys) ? p.keys[0] : undefined
+      return String(p.metric ?? key ?? `${b.source}-${i}`)
+    }
     default:
       return `series-${i}`
   }

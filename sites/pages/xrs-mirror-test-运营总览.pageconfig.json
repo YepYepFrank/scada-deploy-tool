@@ -1,0 +1,290 @@
+{
+  "schemaVersion": 1,
+  "template": "overview-a",
+  "title": "仙人山服务区 · 运营总览",
+  "widgets": [
+    {
+      "id": "banner-alarms",
+      "slot": "banner",
+      "type": "alarm-list",
+      "props": { "title": "全站告警", "compact": true, "maxRows": 5 },
+      "bindings": {
+        "alarms": {
+          "mode": "alarm",
+          "entity": { "type": "ASSET", "id": "22e38540-a2c1-11f1-b6b5-f5e88fe257c3", "name": "xrs-mirror-test" }
+        }
+      }
+    },
+    {
+      "id": "kpi-load",
+      "slot": "s1",
+      "type": "number-card",
+      "props": {
+        "title": "全站负荷总功率",
+        "subtitle": "TOTAL LOAD",
+        "unit": "kW",
+        "decimals": 1,
+        "sub": "REALTIME_TOTAL_LOAD_POWER · tsLoadPowerTotal"
+      },
+      "bindings": {
+        "value": {
+          "mode": "ts",
+          "entity": {
+            "type": "ASSET",
+            "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+            "name": "REALTIME_TOTAL_LOAD_POWER"
+          },
+          "key": "tsLoadPowerTotal"
+        }
+      }
+    },
+    {
+      "id": "kpi-gen",
+      "slot": "s2",
+      "type": "number-card",
+      "props": {
+        "title": "全站发电功率",
+        "subtitle": "GENERATION",
+        "unit": "kW",
+        "decimals": 1,
+        "sub": "SITE_OVERVIEW · totalGenerationPower",
+        "color": "#199e70"
+      },
+      "bindings": {
+        "value": {
+          "mode": "ts",
+          "entity": { "type": "ASSET", "id": "e6d97bb0-5250-11f1-90ba-53cf2ab0fe96", "name": "SITE_OVERVIEW" },
+          "key": "totalGenerationPower"
+        }
+      }
+    },
+    {
+      "id": "kpi-ied-total",
+      "slot": "s3",
+      "type": "number-card",
+      "props": {
+        "title": "IED 进线总有功",
+        "subtitle": "32 IED · 工具汇聚",
+        "unit": "kW",
+        "decimals": 1,
+        "sub": "xrs-mirror-test-agg · calc_totalP",
+        "color": "#19b7ff"
+      },
+      "bindings": {
+        "value": {
+          "mode": "ts",
+          "entity": { "type": "ASSET", "id": "03520f30-aa6e-11f1-88c6-2b21f8c26565", "name": "xrs-mirror-test-agg" },
+          "key": "calc_totalP"
+        }
+      }
+    },
+    {
+      "id": "kpi-pv",
+      "slot": "s4",
+      "type": "number-card",
+      "props": {
+        "title": "光伏出力总功率",
+        "subtitle": "PV OUTPUT",
+        "unit": "kW",
+        "decimals": 1,
+        "sub": "REALTIME_TOTAL_PV_POWER · tsPvPowerTotal",
+        "color": "#f2b134"
+      },
+      "bindings": {
+        "value": {
+          "mode": "ts",
+          "entity": {
+            "type": "ASSET",
+            "id": "95bf2370-527c-11f1-90ba-53cf2ab0fe96",
+            "name": "REALTIME_TOTAL_PV_POWER"
+          },
+          "key": "tsPvPowerTotal"
+        }
+      }
+    },
+    {
+      "id": "chart-24h",
+      "slot": "g1",
+      "type": "line",
+      "props": {
+        "title": "IED 总有功 / 全站负荷",
+        "subtitle": "24H · 5 分钟均值(TB)",
+        "unit": "kW",
+        "chartStyle": "area",
+        "smooth": true
+      },
+      "bindings": {
+        "series": [
+          {
+            "mode": "ts-history",
+            "entity": { "type": "ASSET", "id": "03520f30-aa6e-11f1-88c6-2b21f8c26565", "name": "xrs-mirror-test-agg" },
+            "keys": ["calc_totalP"],
+            "window": "24h",
+            "agg": "AVG"
+          },
+          {
+            "mode": "ts-history",
+            "entity": {
+              "type": "ASSET",
+              "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+              "name": "REALTIME_TOTAL_LOAD_POWER"
+            },
+            "keys": ["tsLoadPowerTotal"],
+            "window": "24h",
+            "agg": "AVG"
+          }
+        ]
+      }
+    },
+    {
+      "id": "chart-30d",
+      "slot": "g2",
+      "type": "line",
+      "props": {
+        "title": "光伏出力 / 全站发电",
+        "subtitle": "30 天 · 日均值(kz 归档)",
+        "unit": "kW",
+        "chartStyle": "bar"
+      },
+      "bindings": {
+        "series": [
+          {
+            "mode": "ext",
+            "source": "kz",
+            "window": "30d",
+            "interval": "1d",
+            "params": {
+              "entity": {
+                "type": "ASSET",
+                "id": "95bf2370-527c-11f1-90ba-53cf2ab0fe96",
+                "name": "REALTIME_TOTAL_PV_POWER"
+              },
+              "keys": ["tsPvPowerTotal"],
+              "agg": "AVG"
+            }
+          },
+          {
+            "mode": "ext",
+            "source": "kz",
+            "window": "30d",
+            "interval": "1d",
+            "params": {
+              "entity": { "type": "ASSET", "id": "e6d97bb0-5250-11f1-90ba-53cf2ab0fe96", "name": "SITE_OVERVIEW" },
+              "keys": ["totalGenerationPower"],
+              "agg": "AVG"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "table-areas",
+      "slot": "g3",
+      "type": "table",
+      "props": {
+        "title": "分区负荷",
+        "mode": "latest",
+        "columns": [
+          { "label": "一级开闭所 SSP1", "unit": "kW", "decimals": 1 },
+          { "label": "二级开闭所 SSP2", "unit": "kW", "decimals": 1 },
+          { "label": "配电房 PDR", "unit": "kW", "decimals": 1 },
+          { "label": "全站(绝对值)", "unit": "kW", "decimals": 1 }
+        ]
+      },
+      "bindings": {
+        "rows": [
+          {
+            "mode": "ts",
+            "entity": {
+              "type": "ASSET",
+              "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+              "name": "REALTIME_TOTAL_LOAD_POWER"
+            },
+            "key": "tsLoadPowerTotalSSP1"
+          },
+          {
+            "mode": "ts",
+            "entity": {
+              "type": "ASSET",
+              "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+              "name": "REALTIME_TOTAL_LOAD_POWER"
+            },
+            "key": "tsLoadPowerTotalSSP2"
+          },
+          {
+            "mode": "ts",
+            "entity": {
+              "type": "ASSET",
+              "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+              "name": "REALTIME_TOTAL_LOAD_POWER"
+            },
+            "key": "tsLoadPowerTotalPDR"
+          },
+          {
+            "mode": "ts",
+            "entity": {
+              "type": "ASSET",
+              "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+              "name": "REALTIME_TOTAL_LOAD_POWER"
+            },
+            "key": "tsLoadPowerTotalABS"
+          }
+        ]
+      }
+    },
+    {
+      "id": "overview-green",
+      "slot": "g4",
+      "type": "overview-card",
+      "props": {
+        "title": "新能源与充电",
+        "items": [
+          { "label": "光伏出力", "unit": "kW" },
+          { "label": "风电出力", "unit": "kW" },
+          { "label": "绿电出力合计", "unit": "kW" },
+          { "label": "EV 充电总功率", "unit": "kW" }
+        ]
+      },
+      "bindings": {
+        "items": [
+          {
+            "mode": "ts",
+            "entity": {
+              "type": "ASSET",
+              "id": "95bf2370-527c-11f1-90ba-53cf2ab0fe96",
+              "name": "REALTIME_TOTAL_PV_POWER"
+            },
+            "key": "tsPvPowerTotal"
+          },
+          {
+            "mode": "ts",
+            "entity": {
+              "type": "ASSET",
+              "id": "a815cf60-527c-11f1-90ba-53cf2ab0fe96",
+              "name": "REALTIME_TOTAL_WIND_POWER"
+            },
+            "key": "tsWindPowerTotal"
+          },
+          {
+            "mode": "ts",
+            "entity": {
+              "type": "ASSET",
+              "id": "cae873d0-527c-11f1-90ba-53cf2ab0fe96",
+              "name": "REALTIME_TOTAL_GREEN_POWER"
+            },
+            "key": "tsGreenPowerTotal"
+          },
+          {
+            "mode": "ts",
+            "entity": {
+              "type": "ASSET",
+              "id": "dcf14de0-527c-11f1-90ba-53cf2ab0fe96",
+              "name": "REALTIME_TOTAL_EV_CHARGING_POWER"
+            },
+            "key": "tsEvPowerCharging"
+          }
+        ]
+      }
+    }
+  ]
+}
