@@ -45,6 +45,12 @@ if (Object.keys(out).length === 0) return { msg: msg, metadata: metadata, msgTyp
 return { msg: out, metadata: metadata, msgType: 'POST_TELEMETRY_REQUEST' };
 `
 
+/** 带前缀站点用的窗口聚合脚本:输出 key = spec.pfx + 测点 + 后缀(ADR-003);无前缀站点仍用 AGG_JS,parity 不受影响 */
+export const AGG_JS_PREFIXED = AGG_JS.replace(
+  'if (v.length) out[k + suffix]',
+  "if (v.length) out[(spec.pfx || '') + k + suffix]"
+)
+
 export const CASCADE_JS = `
 var spec = %SPEC%;
 function series(key) {

@@ -10,7 +10,7 @@ import type {
   Window,
 } from '../types'
 import { AGG_SUFFIX, CASCADE_LEVELS, WINDOW_SECONDS } from './constants'
-import { AGG_JS, CASCADE_JS, CASCADE_TICK_JS, ROLLUP_TICK_JS, withSpec } from './scripts'
+import { AGG_JS, AGG_JS_PREFIXED, CASCADE_JS, CASCADE_TICK_JS, ROLLUP_TICK_JS, withSpec } from './scripts'
 
 const blank = (): RollupGroupSpec => ({ avg: [], min: [], max: [], sum: [], delta: {}, integrate: {} })
 
@@ -85,8 +85,11 @@ export function rollupMetadata(
   chainId: string,
   groups: Record<string, RollupGroupSpec>,
   devIds: Record<string, string>,
-  cascades: Computation[] = []
+  cascades: Computation[] = [],
+  /** 输出前缀(ADR-003):派生名 PAvg5m → calc_PAvg5m;级联下一级读的也是带前缀的上一级输出 */
+  prefix = ''
 ): RuleChainMetadata {
+  const pfx = (k: string) => (!prefix || k.startsWith(prefix) ? k : prefix + k)
   const nodes: RuleNode[] = []
   const connections: RuleConnection[] = []
   const add = (n: RuleNode) => nodes.push(n) - 1
@@ -107,8 +110,8 @@ export function rollupMetadata(
       const entries: { src: string; out: string; fn: AggName }[] = []
       for (const k of c.keys || [])
         for (const a of c.aggs || []) {
-          const src = li === 0 ? k : `${k}${AGG_SUFFIX[a]}${CASCADE_LEVELS[li - 1]!.id}`
-          entries.push({ src, out: `${k}${AGG_SUFFIX[a]}${lv.id}`, fn: a })
+          const src = li === 0 ? k : pfx(`${k}${AGG_SUFFIX[a]}${CASCADE_LEVELS[li - 1]!.id}`)
+          entries.push({ src, out: pfx(`${k}${AGG_SUFFIX[a]}${lv.id}`), fn: a })
         }
       const fetchKeys = [...new Set(entries.map(e => e.src))]
       const g = add(
@@ -143,7 +146,14 @@ export function rollupMetadata(
     ].sort()
     const g = add(genNode(`tick ${device} @${window}`, period, devIds[device] as string, ROLLUP_TICK_JS, 100, y))
     const f = add(fetchNode(`fetch ${device} @${window}`, fetch, period, 400, y))
-    const a = add(transformNode(`aggregate ${device} @${window}`, withSpec(AGG_JS, { ...spec, sfx }), 700, y))
+    const a = add(
+      transformNode(
+        `aggregate ${device} @${window}`,
+        prefix ? withSpec(AGG_JS_PREFIXED, { ...spec, sfx, pfx: prefix }) : withSpec(AGG_JS, { ...spec, sfx }),
+        700,
+        y
+      )
+    )
     connections.push(
       { fromIndex: g, toIndex: f, type: 'Success' },
       { fromIndex: f, toIndex: a, type: 'Success' },

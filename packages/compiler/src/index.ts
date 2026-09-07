@@ -5,13 +5,24 @@ export const version = '0.1.0'
 
 export type * from './types'
 export * from './core/constants'
-export { AGG_JS, CASCADE_JS, REVENUE_JS } from './core/scripts'
+export { AGG_JS, AGG_JS_PREFIXED, CASCADE_JS, REVENUE_JS } from './core/scripts'
 export { matchSelector, itemKeys, expandTemplates } from './core/templates'
 export { validateConfig } from './core/validate'
 export { tsArg, buildCf } from './core/cf'
 export { resolveAggMembers, buildAggCfs } from './core/aggregate'
 export { rollupGroups, rollupMetadata } from './core/rollup'
-export { alarmMetadata, alarmStateAttr } from './core/alarm'
+export { alarmMetadata, alarmStateAttr, cascadeGuardScript } from './core/alarm'
+export {
+  DEFAULT_OUTPUT_PREFIX,
+  outputPrefixOf,
+  withPrefix,
+  applyOutputPrefix,
+  outputInventory,
+  cascadeWhitelist,
+  renameTable,
+  type OutputKey,
+  type RenameEntry,
+} from './core/prefix'
 export { revenueMetadata } from './core/revenue'
 export {
   compile,

@@ -1,15 +1,18 @@
 // 写入器:按步骤把写入计划落到 TB。report(stepId, 'run'|'ok'|'err', detail) 汇报进度。
 // 返回失败清单 [{step, device?, output?, error}];为空即全部成功。所有写入幂等,重跑安全。
-import type { TbsiteConfig } from '../types'
+import type { Computation, TbsiteConfig } from '../types'
 import { alarmMetadata } from '../core/alarm'
 import { buildAggCfs, resolveAggMembers } from '../core/aggregate'
 import { buildCf } from '../core/cf'
 import { AGG_ASSET_TYPE, chainNames, isCfTemplate, SITE_ASSET_TYPE } from '../core/constants'
+import { cascadeWhitelist, outputInventory, outputPrefixOf } from '../core/prefix'
 import { ConfigError, expandConfig, siteChainNames } from '../core/plan'
 import { revenueMetadata } from '../core/revenue'
 import { rollupGroups, rollupMetadata } from '../core/rollup'
 import { validateConfig } from '../core/validate'
 import {
+  findAsset,
+  findDevice,
   ensureAsset,
   ensureChain,
   listCfs,
@@ -57,6 +60,85 @@ export async function wireRootChain(api: TbApi, alarmChainId: string, siteName: 
   return 'Root 链已接线'
 }
 
+/** 上一版 siteConfig 声明过、这一版不再声明的输出 CF:按名删除(只删本站点自己写过的名字,不碰存量) */
+async function pruneStaleCfs(
+  cfg: TbsiteConfig,
+  computations: Computation[],
+  devIds: Record<string, string>,
+  api: TbApi
+): Promise<number> {
+  const site = await findAsset(api, cfg.site.name)
+  if (!site) return 0
+  const attrs: { key: string; value: unknown }[] =
+    (await api(`/api/plugins/telemetry/ASSET/${site.id.id}/values/attributes/SERVER_SCOPE?keys=siteConfig`)) || []
+  const raw = attrs.find(a => a.key === 'siteConfig')?.value
+  if (!raw) return 0
+  const prevCfg = (typeof raw === 'string' ? JSON.parse(raw) : raw) as TbsiteConfig
+  const prev = expandConfig(prevCfg)
+  const prevOut = outputInventory(prev.cfg, prev.computations, prev.prefix).filter(
+    o => o.kind === 'cf' || o.kind === 'agg'
+  )
+  const nextKeys = new Set(
+    outputInventory(cfg, computations, outputPrefixOf(cfg)).map(o => `${o.entityType}|${o.entity}|${o.key}`)
+  )
+  const stale = prevOut.filter(o => !nextKeys.has(`${o.entityType}|${o.entity}|${o.key}`))
+  if (!stale.length) return 0
+  let n = 0
+  const idCache: Record<string, string | null> = {}
+  const idOf = async (o: (typeof stale)[number]) => {
+    const k = `${o.entityType}|${o.entity}`
+    if (!(k in idCache)) {
+      if (o.entityType === 'DEVICE') idCache[k] = devIds[o.entity] ?? (await findDevice(api, o.entity))?.id.id ?? null
+      else idCache[k] = (await findAsset(api, o.entity))?.id.id ?? null
+    }
+    return idCache[k]
+  }
+  const cfCache: Record<string, { id: { id: string }; name: string }[]> = {}
+  for (const o of stale) {
+    const eid = await idOf(o)
+    if (!eid) continue
+    cfCache[eid] ||= await listCfs(api, o.entityType, eid)
+    const f = cfCache[eid].find(x => x.name === o.key)
+    if (f) {
+      await api(`/api/calculatedField/${f.id.id}`, null, 'DELETE')
+      n++
+    }
+  }
+  return n
+}
+
+/** 汇聚 / 收益资产分给站点资产所属 Customer,并建 站点 Contains 资产 关系(幂等) */
+async function followSiteAsset(
+  cfg: TbsiteConfig,
+  computations: Computation[],
+  siteAssetId: string,
+  api: TbApi
+): Promise<number> {
+  const site = await api(`/api/asset/${siteAssetId}`)
+  const customerId: string | undefined = site?.customerId?.id
+  const names = [
+    ...new Set(
+      computations
+        .filter(c => c.template === 'aggregate.crossEntity' || c.template === 'revenue.periodic')
+        .map(c => c.asset as string)
+    ),
+  ]
+  let n = 0
+  for (const name of names) {
+    const a = await findAsset(api, name)
+    if (!a || a.id.id === siteAssetId) continue
+    await api('/api/relation', {
+      from: { entityType: 'ASSET', id: siteAssetId },
+      to: { entityType: 'ASSET', id: a.id.id },
+      type: 'Contains',
+      typeGroup: 'COMMON',
+    })
+    if (customerId && a.customerId?.id !== customerId) await api(`/api/customer/${customerId}/asset/${a.id.id}`, {})
+    n++
+  }
+  return n
+}
+
 export async function publish(
   original: TbsiteConfig,
   devIds: Record<string, string>,
@@ -80,13 +162,14 @@ export async function publish(
     report('validate', 'err', errs.join(';'))
     throw new ConfigError(errs)
   }
-  const { cfg, computations, notes } = expandConfig(original)
+  const { cfg, computations, notes, prefix } = expandConfig(original)
   const expandedCount = computations.length - (original.computations || []).length
   report(
     'validate',
     'ok',
     `${cfg.devices.length} 设备 · ${computations.length} 运算` +
       (expandedCount ? `(模板展开 ${expandedCount} 条)` : '') +
+      (prefix ? ` · 输出前缀 ${prefix}` : '') +
       (notes.length ? ` · ${notes.join('; ')}` : '')
   )
   const names = siteChainNames(cfg)
@@ -105,6 +188,14 @@ export async function publish(
   report('cf', 'run')
   if (!stepOn('cf')) report('cf', 'ok', '跳过(上次已成功)')
   else {
+    // 3a. 先清掉上一版配置声明过、这一版不再有的输出 CF(配置即真相;也给单实体 CF 上限腾位)
+    const pruned = await pruneStaleCfs(cfg, computations, devIds, api).catch(e => {
+      failures.push({
+        step: 'cf',
+        error: '清理旧输出失败(不影响本次写入):' + (e instanceof Error ? e.message : String(e)),
+      })
+      return 0
+    })
     let cfComps = computations.filter(c => isCfTemplate(c.template))
     if (retry?.cf?.length) {
       const want = new Set(retry.cf.map(x => `${x.device}@@${x.output}`))
@@ -136,6 +227,7 @@ export async function publish(
     }
     const detail = cfComps.length
       ? `新建 ${created} · 更新 ${updated}` +
+        (pruned ? ` · 清理旧输出 ${pruned}` : '') +
         (failed ? ` · 失败 ${failed}(见下方失败清单)` : '') +
         (retry?.cf?.length ? ` · 重试范围 ${cfComps.length} 条` : '')
       : '无'
@@ -229,7 +321,7 @@ export async function publish(
       const cascades = computations.filter(c => c.template === 'window.cascade')
       if (Object.keys(groups).length || cascades.length) {
         const { id, created } = await ensureChain(api, names.rollup)
-        await api('/api/ruleChain/metadata', rollupMetadata(id, groups, devIds, cascades))
+        await api('/api/ruleChain/metadata', rollupMetadata(id, groups, devIds, cascades, prefix))
         report(
           'rollup',
           'ok',
@@ -249,7 +341,15 @@ export async function publish(
       const alarms = computations.filter(c => c.template === 'alarm.threshold')
       if (alarms.length) {
         const { id } = await ensureChain(api, names.alarm)
-        await api('/api/ruleChain/metadata', alarmMetadata(id, alarms))
+        await api(
+          '/api/ruleChain/metadata',
+          alarmMetadata(
+            id,
+            alarms,
+            prefix ? { prefix, whitelist: cascadeWhitelist(cfg, computations, prefix) } : undefined,
+            { propagate: !!cfg.alarm?.propagate }
+          )
+        )
         const wired = await wireRootChain(api, id, cfg.site.name)
         report('alarm', 'ok', `${alarms.length} 条规则 · ${wired}`)
       } else report('alarm', 'ok', '无')
@@ -283,12 +383,17 @@ export async function publish(
     } catch {
       /* 历史读取失败不阻塞发布 */
     }
-    await api(`/api/plugins/telemetry/ASSET/${id}/attributes/SERVER_SCOPE`, {
-      siteConfig: original,
-      siteConfigHistory: history,
-    })
-    // 不再「设为 Public」(T3.7 移除):页面资产由 publishPage 分给站点所属 Customer,站点资产按 T3.8 处理
-    report('asset', 'ok', `资产 ${cfg.site.name} · 历史 ${history.length} 版`)
+    const attrBody: Record<string, unknown> = { siteConfig: original, siteConfigHistory: history }
+    if (prefix) attrBody.calcCascadeKeys = cascadeWhitelist(cfg, computations, prefix)
+    await api(`/api/plugins/telemetry/ASSET/${id}/attributes/SERVER_SCOPE`, attrBody)
+    // 不再「设为 Public」(T3.7 移除):页面资产由 publishPage 分给站点所属 Customer,站点资产按 T3.8 处理。
+    // 汇聚 / 收益资产跟随站点资产:同一 Customer 可见 + 站点 Contains 关系(编辑器资产树、Customer 视角都靠这两条)
+    const followed = await followSiteAsset(cfg, computations, id, api)
+    report(
+      'asset',
+      'ok',
+      `资产 ${cfg.site.name} · 历史 ${history.length} 版` + (followed ? ` · 汇聚资产随站点 ${followed}` : '')
+    )
   } catch (e) {
     fail('asset', e)
   }

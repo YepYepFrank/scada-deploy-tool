@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // tbsite CLI:validate | plan | publish | cleanup | page | pages
 // 凭据只从环境变量 / --env-file 读(默认 TB_USER / TB_PASSWORD),不接受命令行明文,不写日志。
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   cleanup,
   compile,
   ConfigError,
   expandConfig,
+  findAsset,
   listSitePages,
+  renameTable,
   publish,
   publishPage,
   type PagePayload,
@@ -22,7 +24,7 @@ import type { StepId, StepStatus, TbApi } from '../src/writer/api'
 const USAGE = `用法:
   tbsite validate <站点.tbsite.json>
   tbsite plan     <站点.tbsite.json> [--json] [--out 计划.json] [--ids ids.json]
-  tbsite publish  <站点.tbsite.json> [连接参数] [--by 操作者]
+  tbsite publish  <站点.tbsite.json> [连接参数] [--by 操作者]   带 outputPrefix 且 TB 上有旧版配置时,把「旧 key → 新 key」写到 migrations/<站点>.rename.json(只生成不执行,ADR-003)
   tbsite cleanup  <站点.tbsite.json> [连接参数]
   tbsite page     <页面.pageconfig.json> --site <站点资产名> [--name 页面资产名] [--by 操作者] [连接参数]
   tbsite pages    --site <站点资产名> [连接参数]        列出站点下的 ScadaPage 资产与 version
@@ -162,9 +164,34 @@ async function main(argv: string[]) {
       console.log(`✗ ${missing.length} 台设备在 TB 中不存在(v2 不创建设备,由网关上报产生):${missing.join(', ')}`)
       return 1
     }
+    // ADR-003 迁移表:发布前先取 TB 上的旧版配置(发布会把它推进历史)
+    const prevCfg: TbsiteConfig | null = await (async () => {
+      try {
+        const a = await findAsset(api, cfg.site.name)
+        if (!a) return null
+        const attrs: { key: string; value: unknown }[] =
+          (await api(`/api/plugins/telemetry/ASSET/${a.id.id}/values/attributes/SERVER_SCOPE?keys=siteConfig`)) || []
+        const v = attrs.find(x => x.key === 'siteConfig')?.value
+        return v ? ((typeof v === 'string' ? JSON.parse(v) : v) as TbsiteConfig) : null
+      } catch {
+        return null
+      }
+    })()
     const failures = await publish(cfg, devIds, api, report, {
       publishedBy: typeof flags.by === 'string' ? flags.by : user,
     })
+    if (prevCfg && cfg.outputPrefix) {
+      const rows = renameTable(
+        { cfg: prevCfg, computations: expandConfig(prevCfg).computations },
+        { cfg, computations: expandConfig(cfg).computations }
+      )
+      if (rows.length) {
+        const out = resolve(file, '..', 'migrations', `${cfg.site.name}.rename.json`)
+        mkdirSync(resolve(out, '..'), { recursive: true })
+        writeFileSync(out, JSON.stringify(rows, null, 2) + '\n')
+        console.log(`迁移表:${rows.length} 个旧 key 在新版带前缀出现,已写 ${out}(一期只记录不执行)`)
+      }
+    }
     if (failures.length) {
       console.log(`\n${failures.length} 项失败:`)
       for (const f of failures)

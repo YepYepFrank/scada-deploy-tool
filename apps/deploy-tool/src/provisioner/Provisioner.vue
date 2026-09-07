@@ -584,6 +584,13 @@ function hydrate(cfg) {
   site.name = cfg.site?.name || site.name
   site.label = cfg.site?.label || site.label
   rollupChainName.value = cfg.rollup?.chainName || rollupChainName.value
+  // 旧站点(有运算但没声明前缀)不改名;新站点 / 已声明的照声明
+  outputPrefix.value =
+    typeof cfg.outputPrefix === 'string'
+      ? cfg.outputPrefix
+      : (cfg.computations || []).length || (cfg.deviceTemplates || []).length
+        ? ''
+        : 'calc_'
   // 回填认领状态与业务名/单位
   const byName = Object.fromEntries((cfg.devices || []).map(d => [d.name, d]))
   for (const d of devices.value) {
@@ -1484,9 +1491,12 @@ function downloadProject() {
 
 /* ── export ─────────────────────────────────────────────── */
 const rollupChainName = ref('Periodic Rollups')
+/** ADR-003:新站点的运算输出统一加 calc_ 前缀;从 TB 读回的旧站点若没声明前缀则保持不改名(空串 = 不加) */
+const outputPrefix = ref('calc_')
 const siteJson = computed(() => ({
   schema: 'tbsite/v2',
   site: { name: site.name, label: site.label },
+  ...(outputPrefix.value ? { outputPrefix: outputPrefix.value } : {}),
   devices: claimedDevices.value.map(d => ({
     name: d.name,
     type: d.profile || 'simulator',
@@ -1496,6 +1506,8 @@ const siteJson = computed(() => ({
   deviceTemplates: JSON.parse(JSON.stringify(deviceTemplates.value)),
   computations: computations.value,
   rollup: { chainName: rollupChainName.value },
+  // 告警沿 Contains 传播到汇聚 / 站点资产:页面「告警列表」绑站点资产即可看到全站告警
+  alarm: { propagate: true },
   // T3.7 起不再有 layout / display:页面组态发布为 ScadaPage 资产(见第 4 / 5 步)
 }))
 const jsonText = computed(() => JSON.stringify(siteJson.value, null, 2))
@@ -2463,9 +2475,14 @@ function openFrontend() {
 
         <div v-if="modalTpl.needsOutput" class="frow">
           <div class="field">
-            <label>输出测点名 (英文)</label>
+            <label>输出测点名 (英文){{ outputPrefix ? ' · 自动加前缀 ' + outputPrefix : '' }}</label>
             <input type="text" v-model="modal.form.output" placeholder="如 netPower" />
-            <div class="fhint">计算结果保存成的新测点名,用英文字母/数字,如 netPower(净功率)</div>
+            <div class="fhint">
+              计算结果保存成的新测点名,用英文字母/数字,如 netPower(净功率)
+              <template v-if="outputPrefix"
+                >;发布后的 key 为 <b>{{ outputPrefix }}{{ modal.form.output.trim() || 'netPower' }}</b>(前缀不可改,ADR-003)</template
+              >
+            </div>
           </div>
           <div v-if="modalTpl.kind === 'cf'" class="field">
             <label>输出存为</label>

@@ -56,6 +56,17 @@ function fakeTb(deviceNames: string[]) {
       assets.push(a)
       return a
     }
+    if ((m = p.match(/^\/api\/customer\/([^/]+)\/asset\/(.+)$/)) && data) {
+      const a = assets.find(x => x.id.id === m![2])
+      if (!a) throw new Error(`${url} → HTTP 404`)
+      a.customerId = { id: m[1], entityType: 'CUSTOMER' }
+      return a
+    }
+    if ((m = p.match(/^\/api\/asset\/(.+)$/)) && !method && !data) {
+      const a = assets.find(x => x.id.id === m![1])
+      if (!a) throw new Error(`${url} → HTTP 404`)
+      return a
+    }
     if ((m = p.match(/^\/api\/asset\/(.+)$/)) && method === 'DELETE') {
       const i = assets.findIndex(a => a.id.id === m![1])
       if (i < 0) throw new Error(`${url} → HTTP 404`)
@@ -208,6 +219,91 @@ describe('publish(写入器)', () => {
     await expect(publish(cfg, {}, tb.api, r.report)).rejects.toThrow('在 TB 中不存在')
     expect(r.log.at(-1)).toMatch(/^devices:err/)
     await expect(publish({ ...cfg, devices: [] }, {}, tb.api, r.report)).rejects.toThrow('校验失败')
+  })
+})
+
+describe('publish · ADR-003 前缀 / 清理旧输出 / 汇聚资产随站点', () => {
+  const dev = (name: string, keys: string[]) => ({ name, profile: 'IED', keys: keys.map(key => ({ key })) })
+  const cfgOf = (output: string, extra: Partial<TbsiteConfig> = {}): TbsiteConfig => ({
+    schema: 'tbsite/v2',
+    site: { name: 'S' },
+    devices: [dev('D1', ['P', 'Q']), dev('D2', ['P'])],
+    computations: [
+      {
+        template: 'expr.add',
+        device: 'D1',
+        output,
+        inputs: { a: { device: 'D1', key: 'P' }, b: { device: 'D1', key: 'Q' } },
+      },
+      {
+        template: 'aggregate.crossEntity',
+        name: 'ΣP',
+        selector: { profiles: ['IED'] },
+        key: 'P',
+        agg: 'sum',
+        asset: 'S-agg',
+        output: 'totalP',
+      },
+      { template: 'window.cascade', device: 'D1', keys: ['P'], aggs: ['avg'] },
+      {
+        template: 'alarm.threshold',
+        device: 'D1',
+        key: output,
+        name: 'x',
+        condition: { op: 'gt', value: 1 },
+        severity: 'MINOR',
+        message: 'm',
+      },
+    ],
+    ...extra,
+  })
+
+  it('带前缀:CF / 汇聚 / 级联 / 告警引用全部改名;calcCascadeKeys 写站点资产;入口过滤含白名单', async () => {
+    const cfg = cfgOf('pq', { outputPrefix: 'calc_' })
+    const tb = fakeTb(['D1', 'D2'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1', 'D2'])
+    const r = collect()
+    expect(await publish(cfg, devIds, tb.api, r.report, { publishedBy: 't', layeredSettleMs: 0 })).toEqual([])
+    expect(tb.cfs.map(c => c.name).sort()).toEqual(['calc_pq', 'calc_totalP'])
+    const site = tb.assets.find(a => a.name === 'S')!
+    expect(tb.attrs[site.id.id]!.calcCascadeKeys).toEqual(['calc_PAvg1h', 'calc_PAvg5m', 'calc_pq'])
+    const alarmChain = tb.chains.find(c => c.name === 'Site Alarms · S')!
+    const entry = tb.metadata[alarmChain.id.id]!.nodes.find(n => n.name === 'entry')!
+    expect(entry.configuration.jsScript).toContain('"calc_pq":1')
+    expect(entry.configuration.jsScript).toContain("typeof metadata.deviceName === 'undefined'")
+    const relNode = tb.metadata[alarmChain.id.id]!.nodes.find(n => String(n.name).startsWith('关于 D1.'))!
+    expect(relNode.name).toBe('关于 D1.calc_pq?')
+    const rollup = tb.chains.find(c => c.name === 'Site Rollups · S')!
+    const lv2 = tb.metadata[rollup.id.id]!.nodes.find(n => n.name === '级联汇算 D1 @1h')!
+    expect(lv2.configuration.jsScript).toContain('{"src":"calc_PAvg5m","out":"calc_PAvg1h","fn":"avg"}')
+    expect(r.log.find(l => l.startsWith('validate:ok'))).toContain('输出前缀 calc_')
+  })
+
+  it('再发布时清理上一版声明、这一版没有的输出 CF;汇聚资产分给站点 Customer 并建 Contains', async () => {
+    const tb = fakeTb(['D1', 'D2'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1', 'D2'])
+    const r1 = collect()
+    expect(await publish(cfgOf('pq'), devIds, tb.api, r1.report, { layeredSettleMs: 0 })).toEqual([])
+    expect(tb.cfs.map(c => c.name).sort()).toEqual(['pq', 'totalP'])
+    // 模拟运维把站点资产分给了某 Customer
+    const site = tb.assets.find(a => a.name === 'S')!
+    site.customerId = { id: 'cust-1', entityType: 'CUSTOMER' }
+    const r2 = collect()
+    expect(
+      await publish(cfgOf('pq', { outputPrefix: 'calc_' }), devIds, tb.api, r2.report, { layeredSettleMs: 0 })
+    ).toEqual([])
+    // 旧 pq / totalP 被清,新 calc_ 版就位
+    expect(tb.cfs.map(c => c.name).sort()).toEqual(['calc_pq', 'calc_totalP'])
+    expect(r2.log.find(l => l.startsWith('cf:ok'))).toContain('清理旧输出 2')
+    const agg = tb.assets.find(a => a.name === 'S-agg')!
+    expect(agg.customerId).toEqual({ id: 'cust-1', entityType: 'CUSTOMER' })
+    expect(
+      tb.relations.some((x: unknown) => {
+        const r = x as { from: { id: string }; to: { id: string }; type: string }
+        return r.from.id === site.id.id && r.to.id === agg.id.id && r.type === 'Contains'
+      })
+    ).toBe(true)
+    expect(r2.log.find(l => l.startsWith('asset:ok'))).toContain('汇聚资产随站点 1')
   })
 })
 

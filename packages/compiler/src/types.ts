@@ -65,7 +65,13 @@ export interface TbsiteConfig {
   deviceTemplates?: DeviceTemplate[]
   computations?: Computation[]
   rollup?: { chainName?: string }
-  alarm?: { chainName?: string }
+  /** propagate:告警沿 Contains 关系向上传播到汇聚 / 站点资产(页面的告警列表绑站点资产时需要);默认不传播 */
+  alarm?: { chainName?: string; propagate?: boolean }
+  /**
+   * 运算结果 key 的统一前缀(ADR-003)。向导新建站点写 'calc_';既有站点配置没有该字段 → 旧输出不改名。
+   * 派生名(PAvg5m、级联各级、收益 Income/Cost/Daily)同样加前缀;引用其它运算输出的 key 由编译器同步改名。
+   */
+  outputPrefix?: string
   [k: string]: unknown
 }
 
@@ -134,6 +140,12 @@ export interface RollupGroupSpec {
 export interface WritePlan {
   site: { name: string; assetType: 'tbsite' }
   validation: { errors: string[]; notes: string[] }
+  /** 生效的输出前缀(ADR-003),'' 表示不加 */
+  outputPrefix: string
+  /** 这份配置会写出的全部 key(见 core/prefix.ts outputInventory) */
+  outputs: { entityType: 'DEVICE' | 'ASSET'; entity: string; key: string; kind: string; template: string }[]
+  /** 级联白名单:设备上被其它运算再当输入的带前缀 key;写进告警链入口过滤与站点资产属性 calcCascadeKeys */
+  cascadeKeys: string[]
   /** 模板展开产物在前 + 手工运算项 */
   computations: Computation[]
   /** 设备上的即时派生 CF(expr.* / formula.*) */
@@ -149,5 +161,5 @@ export interface WritePlan {
   } | null
   alarm: { chainName: string; rootFlowName: string; items: Computation[]; metadata: RuleChainMetadata } | null
   /** 站点资产属性:原始声明(不含展开产物) */
-  siteAsset: { name: string; type: 'tbsite'; attributes: { siteConfig: TbsiteConfig } }
+  siteAsset: { name: string; type: 'tbsite'; attributes: { siteConfig: TbsiteConfig; calcCascadeKeys?: string[] } }
 }

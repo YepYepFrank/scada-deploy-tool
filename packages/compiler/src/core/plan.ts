@@ -7,6 +7,7 @@ import { buildCf } from './cf'
 import { chainNames, isCfTemplate } from './constants'
 import { revenueMetadata } from './revenue'
 import { rollupGroups, rollupMetadata } from './rollup'
+import { applyOutputPrefix, cascadeWhitelist, outputInventory, outputPrefixOf } from './prefix'
 import { expandTemplates } from './templates'
 import { validateConfig } from './validate'
 
@@ -26,11 +27,20 @@ export const placeholderIds = (cfg: TbsiteConfig): Required<IdMap> => ({
 
 const pick = (map: Record<string, string> | undefined, kind: string, name: string) => map?.[name] ?? `${kind}:${name}`
 
-/** 模板展开 + 并入手工运算项(模板项在前,便于同名输出被手工项覆盖时以手工项为准) */
-export function expandConfig(cfg: TbsiteConfig): { cfg: TbsiteConfig; computations: Computation[]; notes: string[] } {
+/**
+ * 模板展开 + 并入手工运算项(模板项在前,便于同名输出被手工项覆盖时以手工项为准)+ 输出前缀(ADR-003)。
+ * 返回的 computations 已带前缀;写入器、清理器、CLI 都从这里出发,保证四处看到同一组名字。
+ */
+export function expandConfig(cfg: TbsiteConfig): {
+  cfg: TbsiteConfig
+  computations: Computation[]
+  notes: string[]
+  prefix: string
+} {
   const expanded = expandTemplates(cfg)
-  const computations = [...expanded.computations, ...(cfg.computations || [])]
-  return { cfg: { ...cfg, computations }, computations, notes: expanded.notes }
+  const prefix = outputPrefixOf(cfg)
+  const computations = applyOutputPrefix([...expanded.computations, ...(cfg.computations || [])], prefix)
+  return { cfg: { ...cfg, computations }, computations, notes: expanded.notes, prefix }
 }
 
 /** 站点规则链名(可被配置覆盖) */
@@ -52,9 +62,11 @@ export function compile(
 ): WritePlan {
   const errors = validateConfig(original)
   if (errors.length && opts.throwOnError !== false) throw new ConfigError(errors)
-  const { cfg, computations, notes } = expandConfig(original)
+  const { cfg, computations, notes, prefix } = expandConfig(original)
   const devIds = { ...placeholderIds(original).devices, ...ids.devices }
   const names = siteChainNames(cfg)
+  const outputs = outputInventory(cfg, computations, prefix)
+  const cascadeKeys = cascadeWhitelist(cfg, computations, prefix)
 
   const cfs = computations
     .filter(c => isCfTemplate(c.template))
@@ -101,7 +113,7 @@ export function compile(
           chainName: names.rollup,
           groups,
           cascades,
-          metadata: rollupMetadata(pick(ids.chains, 'chain', names.rollup), groups, devIds, cascades),
+          metadata: rollupMetadata(pick(ids.chains, 'chain', names.rollup), groups, devIds, cascades, prefix),
         }
       : null
 
@@ -111,20 +123,32 @@ export function compile(
         chainName: names.alarm,
         rootFlowName: chainNames.rootFlow(cfg.site.name),
         items: alarms,
-        metadata: alarmMetadata(pick(ids.chains, 'chain', names.alarm), alarms),
+        metadata: alarmMetadata(
+          pick(ids.chains, 'chain', names.alarm),
+          alarms,
+          prefix ? { prefix, whitelist: cascadeKeys } : undefined,
+          { propagate: !!cfg.alarm?.propagate }
+        ),
       }
     : null
 
   return {
     site: { name: cfg.site.name, assetType: 'tbsite' },
     validation: { errors, notes },
+    outputPrefix: prefix,
+    outputs,
+    cascadeKeys,
     computations,
     cfs,
     aggregates,
     revenue,
     rollup,
     alarm,
-    siteAsset: { name: cfg.site.name, type: 'tbsite', attributes: { siteConfig: original } },
+    siteAsset: {
+      name: cfg.site.name,
+      type: 'tbsite',
+      attributes: prefix ? { siteConfig: original, calcCascadeKeys: cascadeKeys } : { siteConfig: original },
+    },
   }
 }
 
@@ -148,7 +172,15 @@ export function summarizePlan(p: WritePlan): string[] {
     p.alarm
       ? `告警链「${p.alarm.chainName}」· ${p.alarm.items.length} 条规则 · ${p.alarm.metadata.nodes.length} 节点 + Root 转发「${p.alarm.rootFlowName}」`
       : '告警链:无',
-    `站点资产「${p.siteAsset.name}」(${p.siteAsset.type})写入 siteConfig 属性`,
+    `站点资产「${p.siteAsset.name}」(${p.siteAsset.type})写入 siteConfig 属性` +
+      (p.outputPrefix ? ` + calcCascadeKeys(${p.cascadeKeys.length} 个级联键)` : ''),
   ]
+  if (p.outputPrefix)
+    lines.splice(
+      1,
+      0,
+      `输出前缀 ${p.outputPrefix}(ADR-003)· 共 ${p.outputs.length} 个输出 key` +
+        (p.cascadeKeys.length ? ` · 级联白名单:${p.cascadeKeys.join(', ')}` : '')
+    )
   return lines
 }

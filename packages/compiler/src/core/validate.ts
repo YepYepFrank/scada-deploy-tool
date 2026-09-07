@@ -8,6 +8,11 @@ export function validateConfig(cfg: TbsiteConfig): string[] {
   if (cfg.schema !== 'tbsite/v1' && cfg.schema !== 'tbsite/v2') errs.push("schema 必须为 'tbsite/v1' 或 'tbsite/v2'")
   if (!cfg.site?.name) errs.push('站点标识不能为空')
   if (!cfg.devices?.length) errs.push('至少认领一台设备')
+  if (
+    cfg.outputPrefix !== undefined &&
+    (typeof cfg.outputPrefix !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(cfg.outputPrefix))
+  )
+    errs.push("outputPrefix 须为字母开头的英文标识(如 'calc_')")
   for (const [i, t] of (cfg.deviceTemplates || []).entries()) {
     if (!t.name) errs.push(`设备模板 #${i + 1}: 缺少名称`)
     const sel = t.selector || {}

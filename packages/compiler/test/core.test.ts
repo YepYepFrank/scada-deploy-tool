@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyOutputPrefix,
+  cascadeWhitelist,
+  expandConfig,
+  outputInventory,
+  renameTable,
   alarmMetadata,
   buildAggCfs,
   buildCf,
@@ -303,5 +308,139 @@ describe('compile', () => {
     expect(compile(base({ devices: [] }), undefined, { throwOnError: false }).validation.errors).toEqual([
       '至少认领一台设备',
     ])
+  })
+})
+
+describe('ADR-003 输出前缀', () => {
+  const cfg = (outputPrefix?: string): TbsiteConfig =>
+    base({
+      ...(outputPrefix !== undefined ? { outputPrefix } : {}),
+      deviceTemplates: [
+        {
+          name: 'T',
+          selector: { profiles: ['PCS'] },
+          items: [{ template: 'expr.add', output: 'pq', inputs: { a: { key: 'p' }, b: { key: 'q' } } }] as never,
+        },
+      ],
+      computations: [
+        { template: 'window.cascade', device: 'A1', keys: ['p'], aggs: ['max'] },
+        { template: 'window.aggregate', device: 'A1', window: '5m', keys: ['pq'], aggs: ['avg'] },
+        {
+          template: 'aggregate.crossEntity',
+          name: 'Σ',
+          selector: { profiles: ['PCS'] },
+          key: 'p',
+          agg: 'sum',
+          asset: 'AGG',
+          output: 'tot',
+        },
+        {
+          template: 'expr.custom',
+          device: 'A1',
+          output: 'absPq',
+          terms: [
+            { kind: 'key', device: 'A1', key: 'pq', abs: true },
+            { kind: 'const', value: 0 },
+          ],
+          ops: ['+'],
+        },
+      ],
+    })
+
+  it('没有 outputPrefix:名字原样(旧站点不改名,parity 不受影响)', () => {
+    const { computations, prefix } = expandConfig(cfg())
+    expect(prefix).toBe('')
+    expect(computations.map(c => c.output).filter(Boolean)).toEqual(['pq', 'tot', 'absPq'])
+    expect(compile(cfg()).cascadeKeys).toEqual([])
+    expect(compile(cfg()).siteAsset.attributes.calcCascadeKeys).toBeUndefined()
+  })
+
+  it('有前缀:显式输出与对它的引用同步改名;派生名带前缀;幂等', () => {
+    const { computations } = expandConfig(cfg('calc_'))
+    const byOut = Object.fromEntries(computations.filter(c => c.output).map(c => [c.output, c]))
+    expect(Object.keys(byOut).sort()).toEqual(['calc_absPq', 'calc_pq', 'calc_tot'])
+    expect(byOut.calc_absPq!.terms![0]).toMatchObject({ kind: 'key', key: 'calc_pq' })
+    expect(computations.find(c => c.template === 'window.aggregate')!.keys).toEqual(['calc_pq'])
+    // 引用原始测点的不改
+    expect(byOut.calc_pq!.inputs!.a!.key).toBe('p')
+    expect(applyOutputPrefix(computations, 'calc_')).toEqual(computations)
+  })
+
+  it('outputInventory / cascadeWhitelist / 计划各段', () => {
+    const plan = compile(cfg('calc_'))
+    const keys = (et: string) =>
+      plan.outputs
+        .filter(o => o.entityType === et)
+        .map(o => `${o.entity}.${o.key}`)
+        .sort()
+    expect(keys('DEVICE')).toEqual([
+      'A1.calc_absPq',
+      'A1.calc_pMax1d',
+      'A1.calc_pMax1h',
+      'A1.calc_pMax5m',
+      'A1.calc_pq',
+      'A1.calc_pqAvg5m',
+    ])
+    expect(keys('ASSET')).toEqual(['AGG.calc_tot'])
+    // 白名单 = 设备输出里被再次当输入的:pq(被 absPq 与窗口聚合引用)、级联 5m/1h(下一级读)
+    expect(plan.cascadeKeys).toEqual(['calc_pMax1h', 'calc_pMax5m', 'calc_pq'])
+    expect(plan.siteAsset.attributes.calcCascadeKeys).toEqual(plan.cascadeKeys)
+    const agg5 = plan.rollup!.metadata.nodes.find(n => n.name === 'aggregate A1 @5m')!
+    expect(agg5.configuration.jsScript).toContain('"pfx":"calc_"')
+    expect(agg5.configuration.jsScript).toContain("out[(spec.pfx || '') + k + suffix]")
+    expect(plan.rollup!.metadata.nodes.find(n => n.name === 'fetch A1 @5m')!.configuration.latestTsKeyNames).toEqual([
+      'calc_pq',
+    ])
+    expect(summarizePlan(plan)[1]).toContain('输出前缀 calc_')
+    expect(cascadeWhitelist(cfg(), expandConfig(cfg()).computations, '')).toEqual([])
+    expect(outputInventory(cfg(), expandConfig(cfg()).computations, '').map(o => o.key)).toContain('pMax5m')
+  })
+
+  it('迁移表:旧配置无前缀、新配置带前缀 → 同实体同名 key 成对列出;只生成不执行', () => {
+    const prev = expandConfig(cfg())
+    const next = expandConfig(cfg('calc_'))
+    const rows = renameTable(
+      { cfg: cfg(), computations: prev.computations },
+      { cfg: cfg('calc_'), computations: next.computations },
+      '2026-09-06'
+    )
+    expect(rows.map(r => `${r.entityType}:${r.entity}:${r.old}→${r.new}`).sort()).toEqual([
+      'ASSET:AGG:tot→calc_tot',
+      'DEVICE:A1:absPq→calc_absPq',
+      'DEVICE:A1:pMax1d→calc_pMax1d',
+      'DEVICE:A1:pMax1h→calc_pMax1h',
+      'DEVICE:A1:pMax5m→calc_pMax5m',
+      'DEVICE:A1:pqAvg5m→calc_pqAvg5m',
+      'DEVICE:A1:pq→calc_pq',
+    ])
+    expect(rows[0]!.since).toBe('2026-09-06')
+    expect(
+      renameTable({ cfg: cfg(), computations: prev.computations }, { cfg: cfg(), computations: prev.computations })
+    ).toEqual([])
+  })
+
+  it('alarm.propagate:建告警节点沿 Contains 传播;默认不传播(parity 不变)', () => {
+    const a: Computation = {
+      template: 'alarm.threshold',
+      device: 'A1',
+      key: 'p',
+      name: 'x',
+      condition: { op: 'gt', value: 1 },
+      severity: 'MINOR',
+      message: 'm',
+    }
+    const off = alarmMetadata('c', [a]).nodes.find(n => n.name === '告警: x')!
+    expect(off.configuration.propagate).toBe(false)
+    expect(off.configuration.propagateRelationTypes).toBeUndefined()
+    const on = compile(base({ alarm: { propagate: true }, computations: [a] })).alarm!.metadata.nodes.find(
+      n => n.name === '告警: x'
+    )!
+    expect(on.configuration).toMatchObject({ propagate: true, propagateRelationTypes: ['Contains'] })
+  })
+
+  it('校验:前缀必须是字母开头的标识', () => {
+    expect(validateConfig(cfg('1x'))).toContain("outputPrefix 须为字母开头的英文标识(如 'calc_')")
+    expect(validateConfig(cfg('calc-'))).toHaveLength(1)
+    expect(validateConfig(cfg('calc_'))).toEqual([])
   })
 })

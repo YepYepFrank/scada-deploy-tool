@@ -14,11 +14,28 @@ const filterNode = (name: string, jsScript: string, x: number, y: number): RuleN
 /** 边沿触发用的状态属性名 */
 export const alarmStateAttr = (key: string, op: string) => `almState_${key}_${op}`.replace(/[^\w]/g, '_')
 
-export function alarmMetadata(chainId: string, alarms: Computation[]): RuleChainMetadata {
+/** 入口防回环过滤(ADR-003 决定 2):资产消息放行;设备消息里带前缀且不在白名单的 key → 丢弃 */
+export function cascadeGuardScript(prefix: string, whitelist: string[]): string {
+  const wl = Object.fromEntries(whitelist.map(k => [k, 1]))
+  return (
+    `var pfx = ${JSON.stringify(prefix)}; var wl = ${JSON.stringify(wl)}; ` +
+    "if (typeof metadata.deviceName === 'undefined') return true; " +
+    'var ks = Object.keys(msg); for (var i = 0; i < ks.length; i++) { if (ks[i].indexOf(pfx) === 0 && !wl[ks[i]]) return false; } ' +
+    'return true;'
+  )
+}
+
+export function alarmMetadata(
+  chainId: string,
+  alarms: Computation[],
+  guard?: { prefix: string; whitelist: string[] },
+  opts: { propagate?: boolean } = {}
+): RuleChainMetadata {
   const nodes: RuleNode[] = []
   const connections: RuleConnection[] = []
   const add = (n: RuleNode) => nodes.push(n) - 1
-  const entry = add(filterNode('entry', 'return true;', 40, 40))
+  const entryScript = guard?.prefix ? cascadeGuardScript(guard.prefix, guard.whitelist) : 'return true;'
+  const entry = add(filterNode('entry', entryScript, 40, 40))
   alarms.forEach((a, i) => {
     const y = 120 + i * 140
     const key = a.key as string
@@ -45,7 +62,8 @@ export function alarmMetadata(chainId: string, alarms: Computation[]): RuleChain
       configuration: {
         alarmType,
         severity: a.severity,
-        propagate: false,
+        propagate: !!opts.propagate,
+        ...(opts.propagate ? { propagateRelationTypes: ['Contains'] } : {}),
         useMessageAlarmData: false,
         overwriteAlarmDetails: false,
         dynamicSeverity: false,

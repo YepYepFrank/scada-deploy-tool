@@ -40,3 +40,7 @@ YY:YY 日期:2026-09-06
 ## 第三轮回填(2026-09-06)
 
 高潮:「资产改网关 + key 加前缀」**两周前已完成**,规则「业务模块_原测点名」(如光伏 `GFFD_xxx`),为省级 / 站点区分。KEY 清单即现状,不存在待发生的改名;`calc_` 仍不重叠。本 ADR 无未决项。
+
+## 落地(2026-09-06)
+
+`packages/compiler/src/core/prefix.ts`:决定 1(`outputPrefix`,向导新站点默认 `calc_`,旧站点不改名)、决定 2(白名单由配置推导,写入告警链入口过滤 `cascadeGuardScript` 与站点资产属性 `calcCascadeKeys`)、决定 3(`renameTable` → CLI 写 `migrations/<站点>.rename.json`,只生成不执行)。首个带前缀站点:镜像 `xrs-mirror-test`(`sites/xrs-mirror-test.tbsite.json`),`calc_totalP` / `calc_pqSum` / `calc_PAvg5m…` 已在跑。见 compiler README「输出前缀」一节。
