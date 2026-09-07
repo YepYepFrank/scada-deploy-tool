@@ -21,6 +21,11 @@ describe.skipIf(!hasCreds)(`kz 通用历史(live @ ${KZ_BASE})`, () => {
   const steps = (pts: TsPoint[]) => [...new Set(pts.slice(1).map((p, i) => p.ts - pts[i]!.ts))]
   const numeric = (pts: TsPoint[]) => pts.every(p => typeof p.value === 'number' && Number.isFinite(p.value))
   const ascending = (pts: TsPoint[]) => pts.every((p, i) => i === 0 || p.ts > pts[i - 1]!.ts)
+  /** 归档缺点不补 0(实测):最小步长 = 桶宽,其余步长都是桶宽的整数倍 */
+  const bucketed = (pts: TsPoint[], w: number) => {
+    const st = steps(pts)
+    return Math.min(...st) === w && st.every(x => x % w === 0)
+  }
 
   it('minute:1h 窗口 → 升序、60 秒步长、数值;meta 带桶 / agg / 窗口', async () => {
     const r = await ds.ext({ source: 'kz', window: '1h', interval: '1m', params: { entity: ied, keys: ['P', 'Q'] } })
@@ -29,7 +34,7 @@ describe.skipIf(!hasCreds)(`kz 通用历史(live @ ${KZ_BASE})`, () => {
     expect(p.length).toBeGreaterThan(30)
     expect(ascending(p)).toBe(true)
     expect(numeric(p)).toBe(true)
-    expect(steps(p)).toEqual([60_000])
+    expect(bucketed(p, 60_000)).toBe(true)
     expect(r.meta).toMatchObject({ bucket: 'minute', agg: 'AVG' })
     expect((r.meta!.endTs as number) - (r.meta!.startTs as number)).toBe(H)
   })
@@ -37,7 +42,7 @@ describe.skipIf(!hasCreds)(`kz 通用历史(live @ ${KZ_BASE})`, () => {
   it('缺省粒度按窗口选:12h → minutefive(300 秒步长);3d → hour;90d → day', async () => {
     const five = await ds.ext({ source: 'kz', window: '12h', params: { entity: ied, keys: ['P'] } })
     expect(five.meta!.bucket).toBe('minutefive')
-    expect(steps(five.series.P!)).toEqual([300_000])
+    expect(bucketed(five.series.P!, 300_000)).toBe(true)
     const hour = await ds.ext({ source: 'kz', window: '3d', params: { entity: ied, keys: ['P'] } })
     expect(hour.meta!.bucket).toBe('hour')
     // 归档有空洞(09-05 镜像停机等),步长只要求整小时倍数

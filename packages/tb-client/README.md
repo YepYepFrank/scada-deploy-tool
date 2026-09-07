@@ -45,6 +45,7 @@ describeDataSourceConformance('TbClient', () => {
 
 ```bash
 pnpm -F @grid/tb-client test:live     # test/live/*.live.ts;凭据从向上找到的 .env.local 读(TB_BASE / TB_USER / TB_PASSWORD / 可选 KZ_BASE),没凭据整组 skip
+KZ_AUTH_FIXED=1 pnpm -F @grid/tb-client test:live   # 另跑 test/live/kz-auth.live.ts(kz tskv/** token 校验;同事修复前必红,所以默认不跑)
 ```
 
 `kz-ext.live.ts`(2026-09-07):`ext()` 通用历史六个桶、缺省粒度按窗口、ZD / MAX、资产 key(`calc_totalP`)、key 不存在报错、收益趋势,7 条;首跑记录与接口怪癖见 `docs/联调记录/kz-接口实测-2026-09-07.md`。
