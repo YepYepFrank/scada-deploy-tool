@@ -50,3 +50,7 @@ YY:YY 日期:2026-09-06
 - 保留期:生产 TB 无 TTL,kz 定时任务 3–7 天清秒级数据;`ts-history` 上限维持 3 天。
 - 地址:`http://{ip}:8099/kzserver`,与 TB 同机;`kzBaseUrl` 填主机(或同源反代空串),路径由 tbClient 拼。
 - 已实现:`LegacyDataSource.ext()` 通用历史分支(`kzTskv`),一致性用例 +1。本 ADR 无未决项。
+
+## 实测(2026-09-07)
+
+对镜像 kz 逐桶实测(`docs/联调记录/kz-接口实测-2026-09-07.md`):六个粒度桶、四种 agg、资产 key 归档、错误路径与 `LegacyDataSource.ext()` 的实现一致,live 用例 `packages/tb-client/test/live/kz-ext.live.ts` 7/7。三条与文档不同的细节:`interval` 参数被忽略(粒度只看路径)、`year` 桶只回 1 个 `ts` = 查询时刻的点、非 ZD 时 `zdValue` 为 0。**一条安全问题**:kz 不校验 token 有效性,只查非空——「与 TB 同 token、同权限」的前提在同事修复前不成立,已交高潮(联调环境 §5 待办 ⑤)。

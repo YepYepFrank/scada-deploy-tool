@@ -41,6 +41,22 @@ describeDataSourceConformance('TbClient', () => {
 })
 ```
 
+## live 用例(连真 TB + kz,CI 不跑)
+
+```bash
+pnpm -F @grid/tb-client test:live     # test/live/*.live.ts;凭据从向上找到的 .env.local 读(TB_BASE / TB_USER / TB_PASSWORD / 可选 KZ_BASE),没凭据整组 skip
+```
+
+`kz-ext.live.ts`(2026-09-07):`ext()` 通用历史六个桶、缺省粒度按窗口、ZD / MAX、资产 key(`calc_totalP`)、key 不存在报错、收益趋势,7 条;首跑记录与接口怪癖见 `docs/联调记录/kz-接口实测-2026-09-07.md`。
+
+## kz 真数据上的坑(镜像 8099,2026-09-07)
+
+- 粒度只由路径段(`minute … year`)决定,`interval` 参数被忽略;非 ZD 时 `zdValue` 是 0 不是 null;`agg=ZD` 时 `value === zdValue`。
+- 缺数据的时段不补 0,直接没有点;`year` 桶只回 1 个点且 `ts` 是查询时刻(适合数字卡,不适合曲线)。
+- 不存在的 key:HTTP 200 + `{ code: 500, msg: "key不存在" }`,多 key 里一个不存在整个请求失败 → `ext()` 抛该 msg;不支持的 agg 静默返回 `data: {}`(适配器只放行 AVG / MAX / MIN / ZD)。
+- 首次调用冷启动约 5 s,之后几十毫秒。
+- **kz 不校验 token 有效性**(假 token 也返回数据),同事修复前不要把 8099 暴露给客户可达网络。
+
 ## 真数据上踩到的坑(镜像 CE 4.3.1,2026-09-05;详见第二轮回填清单 4.8)
 
 - 退订命令必须带 `entityType / entityId`,只发 `{cmdId, unsubscribe: true}` 会被 TB 当成关闭整个会话,之后同一连接上的命令全部报 `Session meta-data not found!`。
