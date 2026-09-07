@@ -2085,9 +2085,11 @@ function openFrontend() {
     <!-- 4 组态编辑(T3.7 起:新编辑器嵌入,页面存为 ScadaPage 资产,不再写 siteConfig.layout) -->
     <div v-show="step === 3" class="panel">
       <h2>组态编辑 — 把数据放进页面模板</h2>
-      <p class="hint">
-        选模板、点槽位放组件、在右栏绑定设备与测点;「预览」用真数据渲染(可切 Customer
-        视角),「发布」把页面写进 ThingsBoard 的 ScadaPage 资产(第 5 步也能发)。已发布的页面在第 1 步载入站点时自动读回。
+      <p
+        class="hint"
+        title="选模板、点槽位放组件、在右栏绑定设备与测点;「预览」用真数据渲染(可切 Customer 视角);「发布」把页面写进 ThingsBoard 的 ScadaPage 资产(第 5 步也能发);已发布的页面在第 1 步载入站点时自动读回。"
+      >
+        点击下方缩略图进入全屏编辑;编辑器里「预览」看真数据,「发布」写进 TB。
       </p>
       <p v-if="conn.status !== 'ok'" class="err-msg">尚未连接 ThingsBoard——请先在第 1 步连接。</p>
       <EditorApp v-else ref="editorRef" embedded :session="editorSession" />

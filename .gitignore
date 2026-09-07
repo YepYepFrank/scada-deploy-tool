@@ -21,3 +21,6 @@ Thumbs.db
 *.log
 .cache/
 coverage/
+
+# 本机 IDE / 代理配置
+.claude/

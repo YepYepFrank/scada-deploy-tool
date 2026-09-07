@@ -3,7 +3,7 @@
  * 组态编辑器(T3.2 起,独立页 editor.html;T3.7 发布器完成后接入向导第 4 步):
  * 左:模板卡片;中:槽位示意图(点槽位选组件);右:当前槽位、撤销 / 重做、校验结果、JSON。
  */
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import {
   getTemplate,
   listTemplates,
@@ -34,6 +34,8 @@ import type { BindingFlag } from './binding-check'
 
 /**
  * embedded:嵌进向导第 4 步——隐藏标题与 TB 连接面板,采用向导已登录的 session(T3.7 接入)。
+ * 嵌入态默认只显示画布缩略图(compact),点击进入全屏编辑(Teleport 到 body 的覆盖层 + 浏览器全屏),
+ * 同一个组件实例,撤销栈 / 选中槽位 / 未保存改动全部保留;Esc 或「返回向导」退出。
  * 独立页(editor.html)不传这两个 prop。
  */
 const props = defineProps<{ embedded?: boolean; session?: EditorSession | null }>()
@@ -297,6 +299,10 @@ function onKey(e: KeyboardEvent) {
     return
   }
   if (previewOpen.value) return
+  if (e.key === 'Escape' && fullscreen.value && !previewOpen.value && !pickerOpen.value && !publishOpen.value) {
+    void exitFullscreen()
+    return
+  }
   if (!(e.ctrlKey || e.metaKey)) return
   if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
     e.preventDefault()
@@ -318,6 +324,37 @@ const previewTitle = computed(() =>
       ? `当前连接是 ${meta.conn.authority},预览会以此身份渲染`
       : '用真数据渲染当前 JSON'
 )
+
+// ---------- 全屏编辑(嵌入向导时:缩略图 → 点击全屏;Esc / 返回向导 退出) ----------
+const fullscreen = ref(false)
+/** 嵌入且未全屏:只画缩略图 + 一行状态,左右栏与工具栏都不显示 */
+const compact = computed(() => !!props.embedded && !fullscreen.value)
+/** 右栏 JSON 源码默认折起(高级功能,不和「当前槽位」抢空间) */
+const showJson = ref(false)
+async function enterFullscreen() {
+  if (!props.embedded) return
+  fullscreen.value = true
+  try {
+    await document.documentElement.requestFullscreen?.()
+  } catch {
+    /* 浏览器不允许时只用覆盖层,效果一样 */
+  }
+}
+async function exitFullscreen() {
+  fullscreen.value = false
+  if (document.fullscreenElement) await document.exitFullscreen().catch(() => {})
+}
+/** 浏览器层按 Esc 退出全屏 → 一起退回向导;预览 / 弹窗打开时 Esc 归它们,覆盖层留着 */
+function onFsChange() {
+  if (fullscreen.value && !document.fullscreenElement && !previewOpen.value && !pickerOpen.value && !publishOpen.value)
+    fullscreen.value = false
+}
+document.addEventListener('fullscreenchange', onFsChange)
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey)
+  document.removeEventListener('fullscreenchange', onFsChange)
+  if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+})
 
 const toastMsg = ref('')
 let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -354,239 +391,288 @@ defineExpose({
   openPreview() {
     previewOpen.value = true
   },
+  enterFullscreen,
+  exitFullscreen,
 })
 </script>
 
 <template>
-  <PreviewPane
-    v-if="previewOpen"
-    :config="ed.config.value"
-    :base="meta.conn.base"
-    :tenant-token="meta.conn.token"
-    :tenant-user="meta.conn.user"
-    :customer-user="customerIdentity?.user"
-    :customer-pass="customerIdentity?.pass"
-    @close="previewOpen = false"
-  />
-  <div v-else class="ed" :class="{ 'ed-embedded': embedded }">
-    <div v-if="publishOpen" class="ed-modal" data-role="publish-modal">
-      <div class="ed-modal-box">
-        <PublishPanel
-          :config="ed.config.value"
-          :site-name="meta.conn.siteName"
-          :user="meta.conn.user"
-          :api="meta.api"
-          :error-count="errorCount"
-          :page-name="currentPageName"
-          :published="currentPublished"
-          @published="onPublished"
-          @restored="loadConfig"
-          @close="publishOpen = false"
+  <Teleport to="body" :disabled="!fullscreen">
+    <div :class="{ 'ed-fs-host': fullscreen }">
+      <PreviewPane
+        v-if="previewOpen"
+        :config="ed.config.value"
+        :base="meta.conn.base"
+        :tenant-token="meta.conn.token"
+        :tenant-user="meta.conn.user"
+        :customer-user="customerIdentity?.user"
+        :customer-pass="customerIdentity?.pass"
+        @close="previewOpen = false"
+      />
+      <div v-else class="ed" :class="{ 'ed-embedded': compact, 'ed-compact': compact, 'ed-fullscreen': fullscreen }">
+        <div v-if="publishOpen" class="ed-modal" data-role="publish-modal">
+          <div class="ed-modal-box">
+            <PublishPanel
+              :config="ed.config.value"
+              :site-name="meta.conn.siteName"
+              :user="meta.conn.user"
+              :api="meta.api"
+              :error-count="errorCount"
+              :page-name="currentPageName"
+              :published="currentPublished"
+              @published="onPublished"
+              @restored="loadConfig"
+              @close="publishOpen = false"
+            />
+          </div>
+        </div>
+        <div v-if="drift.length" class="ed-modal" data-role="drift-modal">
+          <div class="ed-modal-box">
+            <b>发布版本与 ThingsBoard 不一致</b>
+            <p class="dim">
+              项目文件记录的已发布 version 与 TB 上资产的 version 不同,说明有人在 TB 上直接改过,或这份项目文件不是最新。
+            </p>
+            <div v-for="d in drift" :key="d.pageName" class="ed-drift" :data-page="d.pageName">
+              <div>
+                <code>{{ d.pageName }}</code> 本地 version {{ d.local }} · TB 上
+                {{ d.remote === null ? '资产已不存在' : `version ${d.remote}` }}
+              </div>
+              <div class="ed-drift-btns">
+                <button type="button" data-role="drift-override" @click="driftOverride(d)">
+                  覆盖(以本地为准,重新发布)
+                </button>
+                <button type="button" :disabled="d.remote === null" data-role="drift-keep" @click="driftKeep(d)">
+                  保留(以 TB 为准,反向导入)
+                </button>
+                <button type="button" data-role="drift-cancel" @click="dropDrift(d)">取消</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 嵌入向导的缩略图态:只看画布,点击进入全屏 -->
+        <template v-if="compact">
+          <div class="ed-compact-canvas" data-role="compact-canvas" @click="enterFullscreen">
+            <SlotBoard :config="ed.config.value" :template="template" :selected="null" />
+            <div class="ed-compact-mask"><span>点击进入全屏编辑</span></div>
+          </div>
+          <div class="ed-compact-bar">
+            <b>{{ title }}</b>
+            <span class="dim">{{ template.name }} · {{ ed.config.value.widgets.length }} 个组件</span>
+            <span class="ed-issues" :class="{ bad: errorCount, warn: !errorCount && warningCount }">{{
+              errorCount ? `${errorCount} 个错误,不可发布` : warningCount ? `${warningCount} 个提示` : '校验通过'
+            }}</span>
+            <span v-if="currentPublished" class="dim">已发布 version {{ currentPublished.version }}</span>
+            <button type="button" class="ed-fs-btn" data-role="fullscreen-open" @click="enterFullscreen">
+              全屏编辑
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <header v-if="fullscreen" class="ed-fsbar">
+            <button type="button" data-role="fullscreen-exit" @click="exitFullscreen">
+              ← 返回向导 <span class="dim">Esc</span>
+            </button>
+            <b>{{ title }}</b>
+            <span class="dim">{{ template.name }} · {{ ed.config.value.widgets.length }} 个组件</span>
+            <span v-if="currentPublished" class="dim"
+              >已发布 version {{ currentPublished.version }} · {{ currentPublished.by }}</span
+            >
+          </header>
+          <aside class="ed-left">
+            <h1 v-if="!embedded">组态编辑器 <small>T3.2 · 模板与槽位</small></h1>
+            <label class="ed-field">页面标题 <input v-model.lazy="title" /></label>
+            <h2>模板</h2>
+            <TemplatePicker v-model="templateId" :templates="templates" />
+
+            <h2>项目文件 <span class="dim">.scadaproj · 页面的「源码」</span></h2>
+            <div class="ed-proj">
+              <button type="button" class="ed-mini" data-role="proj-export" @click="project.exportFile()">导出</button>
+              <label class="ed-mini ed-file"
+                >导入<input
+                  type="file"
+                  accept=".scadaproj,application/json"
+                  data-role="proj-import"
+                  @change="importProject"
+              /></label>
+              <span class="dim">{{ project.fileName.value || '未保存' }}</span>
+              <div v-if="currentPublished" class="dim" data-role="proj-published">
+                「{{ currentPageName }}」已发布 version {{ currentPublished.version }} · {{ currentPublished.by }}
+              </div>
+            </div>
+
+            <h2 v-if="!embedded">ThingsBoard <span class="dim">绑定选择器的实体 / 测点来源</span></h2>
+            <div v-if="!embedded" class="ed-conn">
+              <label class="ed-field">地址 <input v-model="meta.conn.base" /></label>
+              <label v-if="meta.identities.length > 1" class="ed-field"
+                >身份预填
+                <select v-model="meta.conn.identity" @change="meta.pickIdentity()">
+                  <option v-for="i in meta.identities" :key="i.id" :value="i.id">{{ i.label }} · {{ i.user }}</option>
+                </select></label
+              >
+              <label class="ed-field">账号 <input v-model="meta.conn.user" autocomplete="username" /></label>
+              <label class="ed-field"
+                >密码 <input v-model="meta.conn.pass" type="password" autocomplete="current-password"
+              /></label>
+              <label class="ed-field">站点名 <input v-model="meta.conn.siteName" placeholder="树根显示用" /></label>
+              <div class="ed-conn-foot">
+                <button type="button" :disabled="meta.conn.busy" @click="meta.connect()">
+                  {{ meta.connected.value ? '重新连接' : '连接' }}
+                </button>
+                <button v-if="meta.connected.value" type="button" :disabled="meta.conn.busy" @click="meta.refresh()">
+                  刷新树
+                </button>
+                <span class="dim">{{ meta.conn.msg }}</span>
+              </div>
+            </div>
+          </aside>
+
+          <main class="ed-main">
+            <div class="ed-toolbar">
+              <button type="button" :disabled="!ed.canUndo.value" title="Ctrl+Z" @click="ed.undo()">
+                撤销 ({{ ed.state.pastCount }})
+              </button>
+              <button type="button" :disabled="!ed.canRedo.value" title="Ctrl+Y" @click="ed.redo()">
+                重做 ({{ ed.state.futureCount }})
+              </button>
+              <button type="button" @click="resetAll">清空</button>
+              <button
+                type="button"
+                class="ed-preview"
+                :disabled="!meta.connected.value"
+                :title="previewTitle"
+                data-role="preview"
+                @click="previewOpen = true"
+              >
+                预览
+              </button>
+              <button
+                type="button"
+                class="ed-publish"
+                :disabled="!meta.connected.value || errorCount > 0"
+                :title="
+                  !meta.connected.value
+                    ? '先在左栏连接 TB'
+                    : errorCount
+                      ? `校验有 ${errorCount} 个错误`
+                      : '发布到 ScadaPage 资产'
+                "
+                data-role="publish-open"
+                @click="publishOpen = true"
+              >
+                发布
+              </button>
+              <span class="ed-issues" :class="{ bad: errorCount, warn: !errorCount && warningCount }">{{
+                errorCount ? `${errorCount} 个错误,不可发布` : warningCount ? `${warningCount} 个提示` : '校验通过'
+              }}</span>
+            </div>
+            <div class="ed-status">
+              点击槽位选择组件 · {{ template.name }} · {{ ed.config.value.widgets.length }} 个组件
+            </div>
+            <SlotBoard :config="ed.config.value" :template="template" :selected="selected" @select="onSelect" />
+            <div v-if="toastMsg" class="ed-toast">{{ toastMsg }}</div>
+          </main>
+
+          <aside class="ed-right">
+            <h2>当前槽位</h2>
+            <div v-if="selectedSlot" class="ed-slot-info">
+              <b>{{ selectedSlot.title ?? selectedSlot.name }}</b> <code>{{ selectedSlot.name }}</code>
+              <div class="dim">
+                {{
+                  selectedSlot.fixed
+                    ? `固定:${selectedSlot.fixed.type}`
+                    : selectedSlot.accepts
+                      ? `可放:${selectedSlot.accepts.join(' / ')}`
+                      : '任意组件'
+                }}
+                <span v-if="selectedSlot.required"> · 必填</span>
+              </div>
+              <div v-if="selectedWidget" class="ed-widget">
+                组件 <code>{{ selectedWidget.type }}</code> <span class="dim">id {{ selectedWidget.id }}</span>
+              </div>
+              <div v-else class="dim">空槽位</div>
+              <button type="button" @click="pickerOpen = true">
+                {{ selectedWidget ? '更换 / 移除组件' : '选择组件' }}
+              </button>
+            </div>
+            <div v-else class="dim">在示意图上点一个槽位</div>
+
+            <template v-if="selectedWidget && selectedDef">
+              <h2>
+                属性 <span class="dim">{{ selectedDef.name }} · 改了即时反映到示意图</span>
+              </h2>
+              <PropsForm :key="selectedWidget.id" v-model="widgetProps" :schema="selectedDef.propsSchema" />
+              <h2>
+                绑定
+                <span class="dim">{{
+                  meta.connected.value ? `${meta.entityCount.value} 个实体可选` : '未连接 TB,可手输'
+                }}</span>
+              </h2>
+              <BindingsPanel
+                :key="'b' + selectedWidget.id"
+                :def="selectedDef"
+                :widget="selectedWidget"
+                :tree="meta.tree.value"
+                :client="meta.client.value"
+                @update="onBindings"
+                @flags="bindingFlags = $event"
+              />
+            </template>
+
+            <h2>
+              校验
+              <span class="dim ed-vstate">{{
+                bindingBusy ? '正在核对绑定…' : bindingChecked ? '含绑定存在性' : '未连接 TB,绑定存在性未查'
+              }}</span>
+            </h2>
+            <ul v-if="issues.length" class="ed-issue-list">
+              <li
+                v-for="(i, k) in issues"
+                :key="k"
+                :class="[i.level, { link: !!i.widgetId || (i.layer === 'template' && !!i.slot) }]"
+                :data-layer="i.layer"
+                :title="i.path"
+                @click="gotoIssue(i)"
+              >
+                <span class="ed-layer">{{ LAYER_TITLE[i.layer] }}</span>
+                <code v-if="i.widgetId">{{ i.widgetId }}{{ i.slot ? '/' + i.slot : '' }}</code>
+                <code v-else-if="i.slot">槽位 {{ i.slot }}</code>
+                {{ i.message }}
+              </li>
+            </ul>
+            <div v-else class="dim">{{ bindingChecked ? '四层校验通过' : '形状 / 注册表 / 模板 / 属性校验通过' }}</div>
+
+            <h2 class="ed-fold" data-role="json-toggle" @click="showJson = !showJson">
+              <span class="ed-caret">{{ showJson ? '▾' : '▸' }}</span> JSON
+              <span class="dim">{{ showJson ? '源码 · 改完点「应用」' : '源码与导入(高级)' }}</span>
+            </h2>
+            <template v-if="showJson">
+              <div class="ed-json-tools">
+                <button type="button" class="ed-mini" @click="copyJson">复制</button>
+                <label class="ed-mini ed-file"
+                  >导入<input type="file" accept="application/json" @change="importFile"
+                /></label>
+              </div>
+              <textarea v-model="jsonDraft" spellcheck="false"></textarea>
+              <div class="ed-json-foot">
+                <button type="button" @click="applyJson">应用编辑后的 JSON</button>
+                <span class="dim">{{ jsonMsg }}</span>
+              </div>
+            </template>
+          </aside>
+        </template>
+
+        <WidgetPicker
+          v-if="pickerOpen && selectedSlot"
+          :slot-def="selectedSlot"
+          :widgets="widgets"
+          :current="selectedWidget?.type"
+          @pick="onPick"
+          @remove="onRemove"
+          @close="pickerOpen = false"
         />
       </div>
     </div>
-    <div v-if="drift.length" class="ed-modal" data-role="drift-modal">
-      <div class="ed-modal-box">
-        <b>发布版本与 ThingsBoard 不一致</b>
-        <p class="dim">
-          项目文件记录的已发布 version 与 TB 上资产的 version 不同,说明有人在 TB 上直接改过,或这份项目文件不是最新。
-        </p>
-        <div v-for="d in drift" :key="d.pageName" class="ed-drift" :data-page="d.pageName">
-          <div>
-            <code>{{ d.pageName }}</code> 本地 version {{ d.local }} · TB 上
-            {{ d.remote === null ? '资产已不存在' : `version ${d.remote}` }}
-          </div>
-          <div class="ed-drift-btns">
-            <button type="button" data-role="drift-override" @click="driftOverride(d)">
-              覆盖(以本地为准,重新发布)
-            </button>
-            <button type="button" :disabled="d.remote === null" data-role="drift-keep" @click="driftKeep(d)">
-              保留(以 TB 为准,反向导入)
-            </button>
-            <button type="button" data-role="drift-cancel" @click="dropDrift(d)">取消</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <aside class="ed-left">
-      <h1 v-if="!embedded">组态编辑器 <small>T3.2 · 模板与槽位</small></h1>
-      <label class="ed-field">页面标题 <input v-model.lazy="title" /></label>
-      <h2>模板</h2>
-      <TemplatePicker v-model="templateId" :templates="templates" />
-
-      <h2>项目文件 <span class="dim">.scadaproj · 页面的「源码」</span></h2>
-      <div class="ed-proj">
-        <button type="button" class="ed-mini" data-role="proj-export" @click="project.exportFile()">导出</button>
-        <label class="ed-mini ed-file"
-          >导入<input type="file" accept=".scadaproj,application/json" data-role="proj-import" @change="importProject"
-        /></label>
-        <span class="dim">{{ project.fileName.value || '未保存' }}</span>
-        <div v-if="currentPublished" class="dim" data-role="proj-published">
-          「{{ currentPageName }}」已发布 version {{ currentPublished.version }} · {{ currentPublished.by }}
-        </div>
-      </div>
-
-      <h2 v-if="!embedded">ThingsBoard <span class="dim">绑定选择器的实体 / 测点来源</span></h2>
-      <div v-if="!embedded" class="ed-conn">
-        <label class="ed-field">地址 <input v-model="meta.conn.base" /></label>
-        <label v-if="meta.identities.length > 1" class="ed-field"
-          >身份预填
-          <select v-model="meta.conn.identity" @change="meta.pickIdentity()">
-            <option v-for="i in meta.identities" :key="i.id" :value="i.id">{{ i.label }} · {{ i.user }}</option>
-          </select></label
-        >
-        <label class="ed-field">账号 <input v-model="meta.conn.user" autocomplete="username" /></label>
-        <label class="ed-field"
-          >密码 <input v-model="meta.conn.pass" type="password" autocomplete="current-password"
-        /></label>
-        <label class="ed-field">站点名 <input v-model="meta.conn.siteName" placeholder="树根显示用" /></label>
-        <div class="ed-conn-foot">
-          <button type="button" :disabled="meta.conn.busy" @click="meta.connect()">
-            {{ meta.connected.value ? '重新连接' : '连接' }}
-          </button>
-          <button v-if="meta.connected.value" type="button" :disabled="meta.conn.busy" @click="meta.refresh()">
-            刷新树
-          </button>
-          <span class="dim">{{ meta.conn.msg }}</span>
-        </div>
-      </div>
-    </aside>
-
-    <main class="ed-main">
-      <div class="ed-toolbar">
-        <button type="button" :disabled="!ed.canUndo.value" title="Ctrl+Z" @click="ed.undo()">
-          撤销 ({{ ed.state.pastCount }})
-        </button>
-        <button type="button" :disabled="!ed.canRedo.value" title="Ctrl+Y" @click="ed.redo()">
-          重做 ({{ ed.state.futureCount }})
-        </button>
-        <button type="button" @click="resetAll">清空</button>
-        <button
-          type="button"
-          class="ed-preview"
-          :disabled="!meta.connected.value"
-          :title="previewTitle"
-          data-role="preview"
-          @click="previewOpen = true"
-        >
-          预览
-        </button>
-        <button
-          type="button"
-          class="ed-publish"
-          :disabled="!meta.connected.value || errorCount > 0"
-          :title="
-            !meta.connected.value
-              ? '先在左栏连接 TB'
-              : errorCount
-                ? `校验有 ${errorCount} 个错误`
-                : '发布到 ScadaPage 资产'
-          "
-          data-role="publish-open"
-          @click="publishOpen = true"
-        >
-          发布
-        </button>
-        <span class="ed-hint"
-          >点击槽位选择组件 · {{ template.name }} · {{ ed.config.value.widgets.length }} 个组件</span
-        >
-        <span class="ed-issues" :class="{ bad: errorCount, warn: !errorCount && warningCount }">{{
-          errorCount ? `${errorCount} 个错误,不可发布` : warningCount ? `${warningCount} 个提示` : '校验通过'
-        }}</span>
-      </div>
-      <SlotBoard :config="ed.config.value" :template="template" :selected="selected" @select="onSelect" />
-      <div v-if="toastMsg" class="ed-toast">{{ toastMsg }}</div>
-    </main>
-
-    <aside class="ed-right">
-      <h2>当前槽位</h2>
-      <div v-if="selectedSlot" class="ed-slot-info">
-        <b>{{ selectedSlot.title ?? selectedSlot.name }}</b> <code>{{ selectedSlot.name }}</code>
-        <div class="dim">
-          {{
-            selectedSlot.fixed
-              ? `固定:${selectedSlot.fixed.type}`
-              : selectedSlot.accepts
-                ? `可放:${selectedSlot.accepts.join(' / ')}`
-                : '任意组件'
-          }}
-          <span v-if="selectedSlot.required"> · 必填</span>
-        </div>
-        <div v-if="selectedWidget" class="ed-widget">
-          组件 <code>{{ selectedWidget.type }}</code> <span class="dim">id {{ selectedWidget.id }}</span>
-        </div>
-        <div v-else class="dim">空槽位</div>
-        <button type="button" @click="pickerOpen = true">{{ selectedWidget ? '更换 / 移除组件' : '选择组件' }}</button>
-      </div>
-      <div v-else class="dim">在示意图上点一个槽位</div>
-
-      <template v-if="selectedWidget && selectedDef">
-        <h2>
-          属性 <span class="dim">{{ selectedDef.name }} · 改了即时反映到示意图</span>
-        </h2>
-        <PropsForm :key="selectedWidget.id" v-model="widgetProps" :schema="selectedDef.propsSchema" />
-        <h2>
-          绑定
-          <span class="dim">{{
-            meta.connected.value ? `${meta.entityCount.value} 个实体可选` : '未连接 TB,可手输'
-          }}</span>
-        </h2>
-        <BindingsPanel
-          :key="'b' + selectedWidget.id"
-          :def="selectedDef"
-          :widget="selectedWidget"
-          :tree="meta.tree.value"
-          :client="meta.client.value"
-          @update="onBindings"
-          @flags="bindingFlags = $event"
-        />
-      </template>
-
-      <h2>
-        校验
-        <span class="dim ed-vstate">{{
-          bindingBusy ? '正在核对绑定…' : bindingChecked ? '含绑定存在性' : '未连接 TB,绑定存在性未查'
-        }}</span>
-      </h2>
-      <ul v-if="issues.length" class="ed-issue-list">
-        <li
-          v-for="(i, k) in issues"
-          :key="k"
-          :class="[i.level, { link: !!i.widgetId || (i.layer === 'template' && !!i.slot) }]"
-          :data-layer="i.layer"
-          :title="i.path"
-          @click="gotoIssue(i)"
-        >
-          <span class="ed-layer">{{ LAYER_TITLE[i.layer] }}</span>
-          <code v-if="i.widgetId">{{ i.widgetId }}{{ i.slot ? '/' + i.slot : '' }}</code>
-          <code v-else-if="i.slot">槽位 {{ i.slot }}</code>
-          {{ i.message }}
-        </li>
-      </ul>
-      <div v-else class="dim">{{ bindingChecked ? '四层校验通过' : '形状 / 注册表 / 模板 / 属性校验通过' }}</div>
-
-      <h2>
-        JSON
-        <button type="button" class="ed-mini" @click="copyJson">复制</button>
-        <label class="ed-mini ed-file">导入<input type="file" accept="application/json" @change="importFile" /></label>
-      </h2>
-      <textarea v-model="jsonDraft" spellcheck="false"></textarea>
-      <div class="ed-json-foot">
-        <button type="button" @click="applyJson">应用编辑后的 JSON</button>
-        <span class="dim">{{ jsonMsg }}</span>
-      </div>
-    </aside>
-
-    <WidgetPicker
-      v-if="pickerOpen && selectedSlot"
-      :slot-def="selectedSlot"
-      :widgets="widgets"
-      :current="selectedWidget?.type"
-      @pick="onPick"
-      @remove="onRemove"
-      @close="pickerOpen = false"
-    />
-  </div>
+  </Teleport>
 </template>
 
 <style>
@@ -616,6 +702,80 @@ body {
   border: 1px solid var(--ed-line, rgba(83, 196, 255, 0.2));
   border-radius: 10px;
   overflow: hidden;
+}
+/* 嵌入态缩略图:只有画布 + 一行状态 */
+.ed.ed-compact {
+  display: block;
+  height: auto;
+  position: relative;
+}
+.ed-compact-canvas {
+  position: relative;
+  padding: 10px;
+  cursor: zoom-in;
+}
+.ed-compact-canvas .sb {
+  pointer-events: none;
+}
+.ed-compact-mask {
+  position: absolute;
+  inset: 10px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(6, 16, 36, 0.55);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.ed-compact-mask span {
+  padding: 10px 18px;
+  border: 1px solid var(--ed-accent);
+  border-radius: 999px;
+  background: rgba(6, 16, 36, 0.85);
+  color: #dbeaff;
+  font-size: 14px;
+}
+.ed-compact-canvas:hover .ed-compact-mask {
+  opacity: 1;
+}
+.ed-compact-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--ed-line);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ed-compact-bar .ed-issues {
+  margin-left: 0;
+}
+.ed-compact-bar .ed-fs-btn {
+  margin-left: auto;
+  border-color: var(--ed-accent);
+}
+/* 全屏编辑:Teleport 到 body 的覆盖层;顶栏 + 三栏 */
+.ed-fs-host {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--ed-bg-0);
+}
+.ed.ed-fullscreen {
+  height: 100vh;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.ed-fsbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--ed-line);
+  white-space: nowrap;
+}
+.ed-fsbar .dim {
+  font-weight: 400;
 }
 .ed-left,
 .ed-right {
@@ -654,7 +814,32 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.ed-toolbar > button {
+  flex: none;
+}
+.ed-status {
+  opacity: 0.7;
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ed-fold {
+  cursor: pointer;
+  user-select: none;
+}
+.ed-caret {
+  display: inline-block;
+  width: 1em;
+}
+.ed-json-tools {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 .ed button,
 .ed input,
