@@ -15,7 +15,7 @@ export interface RegistryIssue {
   code?: 'template-slot-required' | 'binding-slot-required'
 }
 
-const widgets = new Map<string, WidgetDefinition>()
+const widgets_ = new Map<string, WidgetDefinition>()
 const templates = new Map<string, TemplateDefinition>()
 
 export function registerWidget(def: WidgetDefinition): void {
@@ -25,7 +25,7 @@ export function registerWidget(def: WidgetDefinition): void {
     if (names.has(s.name)) throw new Error(`widget "${def.type}" 绑定槽位 "${s.name}" 重复`)
     names.add(s.name)
   }
-  widgets.set(def.type, def)
+  widgets_.set(def.type, def)
 }
 
 export function registerTemplate(def: TemplateDefinition): void {
@@ -40,13 +40,31 @@ export function registerTemplate(def: TemplateDefinition): void {
   templates.set(def.id, def)
 }
 
-export const getWidget = (type: string): WidgetDefinition | undefined => widgets.get(type)
+export const getWidget = (type: string): WidgetDefinition | undefined => widgets_.get(type)
 export const getTemplate = (id: string): TemplateDefinition | undefined => templates.get(id)
-export const listWidgets = (): WidgetDefinition[] => [...widgets.values()]
+export const listWidgets = (): WidgetDefinition[] => [...widgets_.values()]
 export const listTemplates = (): TemplateDefinition[] => [...templates.values()]
+/**
+ * 把配置里每个组件的旧属性名按其 migrateProps 正规化(不改输入,返回新对象;没有 migrateProps 的组件原样)。
+ * <ScadaPage> 渲染前会自动做同样的事;编辑器 / 宿主在「读入一份可能是旧版本发布的配置」时调用它,
+ * 这样校验层不会把旧键名当多余属性报错,再发布出去的也是新键名。
+ */
+export function migrateConfigProps(config: PageConfig): PageConfig {
+  let changed = false
+  const widgets = config.widgets.map(w => {
+    const def = widgets_.get(w.type)
+    if (!def?.migrateProps || !w.props) return w
+    const next = def.migrateProps(w.props as Record<string, unknown>)
+    if (next === w.props) return w
+    changed = true
+    return { ...w, props: next }
+  })
+  return changed ? { ...config, widgets } : config
+}
+
 /** 测试用:清空注册表 */
 export function resetRegistry(): void {
-  widgets.clear()
+  widgets_.clear()
   templates.clear()
 }
 
@@ -73,7 +91,7 @@ export function validateAgainstRegistry(config: PageConfig): RegistryIssue[] {
     if (seenIds.has(w.id)) issues.push({ level: 'error', path: base, message: `组件 id "${w.id}" 重复` })
     seenIds.add(w.id)
 
-    const def = widgets.get(w.type)
+    const def = widgets_.get(w.type)
     if (!def) {
       issues.push({ level: 'error', path: `${base}/type`, message: `未知组件类型 "${w.type}"` })
       continue

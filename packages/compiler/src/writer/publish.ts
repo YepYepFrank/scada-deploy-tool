@@ -257,7 +257,7 @@ export async function publish(
       fail('alarm', e)
     }
 
-  // 6. 站点配置写入 + 公开(保存原始声明,不含展开产物)
+  // 6. 站点配置写入(保存原始声明,不含展开产物;不再设为 Public,T3.7)
   report('asset', 'run')
   if (!stepOn('asset')) {
     report('asset', 'ok', '跳过(上次已成功)')

@@ -1464,6 +1464,14 @@ watch([editorRef, pendingPage], ([ed, pending]) => {
   })
   pendingPage.value = null
 })
+/** 第 5 步页面发布面板的回调:走 script 函数而不是模板内联表达式(内联的 editorRef.x() 在此 JS SFC 里不生效) */
+function onPagePublished(name, rec) {
+  editorRef.value?.setPageName(name)
+  editorRef.value?.recordPublished(name, rec)
+}
+function onPageRestored(cfg) {
+  editorRef.value?.setConfig(cfg)
+}
 function downloadProject() {
   if (!editorRef.value) return
   const blob = new Blob([editorRef.value.exportText(siteJson.value)], { type: 'application/json' })
@@ -2107,8 +2115,8 @@ function openFrontend() {
               :error-count="pageState.errorCount"
               :page-name="pageState.currentPageName"
               :published="pageState.published[pageState.currentPageName]"
-              @published="(n, r) => (editorRef.setPageName(n), editorRef.recordPublished(n, r))"
-              @restored="cfg => editorRef.setConfig(cfg)"
+              @published="onPagePublished"
+              @restored="onPageRestored"
               @close="pagePubOpen = false"
             />
           </div>

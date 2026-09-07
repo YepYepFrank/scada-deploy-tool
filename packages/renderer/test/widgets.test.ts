@@ -30,7 +30,7 @@ import {
   imageWidget,
   builtinWidgets,
 } from '../src/index'
-import { ScadaPage, registerBuiltins, resetRegistry } from '../src/index'
+import { ScadaPage, registerBuiltins, resetRegistry, migrateConfigProps } from '../src/index'
 
 beforeEach(() => setOption.mockClear())
 
@@ -351,5 +351,29 @@ describe('0.2.0:line 的 style → chartStyle 迁移', () => {
     expect(seriesOf()[0]?.type).toBe('bar')
     // 全局字号:grid 模板 --sr-scale=1 → 12
     expect((lastOption() as { textStyle?: { fontSize?: number } }).textStyle?.fontSize).toBe(12)
+  })
+})
+
+describe('migrateConfigProps(整份配置正规化)', () => {
+  it('只改有 migrateProps 且带旧键名的组件;其余组件与输入对象都不动;没变化时返回原引用', () => {
+    resetRegistry()
+    registerBuiltins()
+    const cfg = {
+      schemaVersion: 1 as const,
+      template: 'grid-3x3',
+      title: 't',
+      widgets: [
+        { id: 'w1', type: 'line', slot: 'r1c1', props: { title: 'a', style: 'area' }, bindings: {} },
+        { id: 'w2', type: 'number-card', slot: 'r1c2', props: { title: 'b' }, bindings: {} },
+        { id: 'w3', type: 'line', slot: 'r1c3', props: { chartStyle: 'bar' }, bindings: {} },
+      ],
+    }
+    const out = migrateConfigProps(cfg)
+    expect(out).not.toBe(cfg)
+    expect(out.widgets[0]!.props).toEqual({ title: 'a', chartStyle: 'area' })
+    expect(cfg.widgets[0]!.props).toEqual({ title: 'a', style: 'area' })
+    expect(out.widgets[1]).toBe(cfg.widgets[1])
+    expect(out.widgets[2]).toBe(cfg.widgets[2])
+    expect(migrateConfigProps(out)).toBe(out)
   })
 })

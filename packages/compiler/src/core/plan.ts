@@ -148,7 +148,7 @@ export function summarizePlan(p: WritePlan): string[] {
     p.alarm
       ? `告警链「${p.alarm.chainName}」· ${p.alarm.items.length} 条规则 · ${p.alarm.metadata.nodes.length} 节点 + Root 转发「${p.alarm.rootFlowName}」`
       : '告警链:无',
-    `站点资产「${p.siteAsset.name}」(${p.siteAsset.type})写入 siteConfig 属性并公开`,
+    `站点资产「${p.siteAsset.name}」(${p.siteAsset.type})写入 siteConfig 属性`,
   ]
   return lines
 }

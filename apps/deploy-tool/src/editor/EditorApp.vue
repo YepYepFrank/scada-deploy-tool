@@ -8,6 +8,7 @@ import {
   getTemplate,
   listTemplates,
   listWidgets,
+  migrateConfigProps,
   registerBuiltins,
   type PageConfig,
   type TemplateDefinition,
@@ -54,12 +55,23 @@ watch(
 )
 
 // ---------- 项目文件 / 发布 / 漂移(T3.7) ----------
-const project = useProject({ getConfig: () => ed.config.value, setConfig: cfg => ed.commit(cfg), conn: meta.conn })
+/** 读入外部配置(导入 / TB 读回 / 恢复历史 / JSON 粘贴)统一走这里:旧属性名先正规化,校验层才不会把它当多余键 */
+function loadConfig(cfg: PageConfig) {
+  ed.commit(migrateConfigProps(cfg))
+  selected.value = null
+}
+const project = useProject({ getConfig: () => ed.config.value, setConfig: loadConfig, conn: meta.conn })
 const publishOpen = ref(false)
 /** 页面资产名:缺省 <站点>-<标题>;从 TB 读回的页面沿用它在 TB 上的名字(里程碑 A 那种自由命名的资产也能原地更新) */
 const pageNameOverride = ref<string | null>(null)
 const currentPageName = computed(() => pageNameOverride.value ?? pageNameOf(meta.conn.siteName, ed.config.value))
 const currentPublished = computed(() => project.published.value[currentPageName.value])
+/** 清空:配置回到初始,同时放弃沿用的资产名(否则新页面会原地覆盖刚才读回的那个资产) */
+function resetAll() {
+  ed.reset()
+  pageNameOverride.value = null
+  selected.value = null
+}
 function onPublished(name: string, rec: PublishedRecord) {
   pageNameOverride.value = name
   project.recordPublished(name, rec)
@@ -110,8 +122,7 @@ async function driftKeep(d: DriftItem) {
   try {
     const st = await readPageState(meta.api, d.assetId)
     if (st.config) {
-      ed.commit(st.config as unknown as PageConfig)
-      selected.value = null
+      loadConfig(st.config as unknown as PageConfig)
       pageNameOverride.value = d.pageName
       project.recordPublished(d.pageName, { assetId: d.assetId, version: d.remote ?? 0, at: Date.now(), by: '(TB)' })
       toast(`已以 TB 为准反向导入「${d.pageName}」version ${d.remote}`)
@@ -256,7 +267,7 @@ watch(json, v => (jsonDraft.value = v), { immediate: true })
 function applyJson() {
   try {
     const cfg = JSON.parse(jsonDraft.value) as PageConfig
-    ed.commit(cfg)
+    loadConfig(cfg)
     jsonMsg.value = '已应用'
   } catch (e) {
     jsonMsg.value = 'JSON 解析失败:' + (e instanceof Error ? e.message : String(e))
@@ -326,10 +337,7 @@ const state = reactive({
 })
 defineExpose({
   state,
-  setConfig(cfg: PageConfig) {
-    ed.commit(cfg)
-    selected.value = null
-  },
+  setConfig: loadConfig,
   recordPublished: project.recordPublished,
   /** 从 TB 读回的页面:沿用资产名,发布时原地更新而不是新建 */
   setPageName(name: string | null) {
@@ -372,7 +380,7 @@ defineExpose({
           :page-name="currentPageName"
           :published="currentPublished"
           @published="onPublished"
-          @restored="cfg => ed.commit(cfg)"
+          @restored="loadConfig"
           @close="publishOpen = false"
         />
       </div>
@@ -452,7 +460,7 @@ defineExpose({
         <button type="button" :disabled="!ed.canRedo.value" title="Ctrl+Y" @click="ed.redo()">
           重做 ({{ ed.state.futureCount }})
         </button>
-        <button type="button" @click="ed.reset()">清空</button>
+        <button type="button" @click="resetAll">清空</button>
         <button
           type="button"
           class="ed-preview"

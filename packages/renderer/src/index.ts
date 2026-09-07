@@ -11,6 +11,7 @@ export {
   listTemplates,
   resetRegistry,
   validateAgainstRegistry,
+  migrateConfigProps,
   type RegistryIssue,
 } from './registry'
 export { resolveBindings, type ResolverHandle, type SeriesValue, type SlotValue } from './binding-resolver'

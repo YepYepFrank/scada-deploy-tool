@@ -15,4 +15,6 @@ pnpm -F @grid/tbsite-compiler test:live
 
 元数据读取那两项(Asset 树按 `Contains` 递归、属性 key 列表)在 `apps/deploy-tool/src/meta/MetaNode.ts`,单元测试在 `apps/deploy-tool/test/meta-tree.test.ts`,镜像验收记录见开发计划 T2.5。
 
+注意:用例的临时站点跑完后 CF 已删,但设备上会留下 `t25xxxx_*` 的遥测 key(历史点 7 天 TTL 后清),KeyPicker 里可能看到,对功能无影响。
+
 注意:计划原文写「对 `xrs-mirror-test` 执行 publish … cleanup」,但 cleanup 会删掉镜像上该站点的规则链与资产,所以改为临时站点,与 T1.3 的手工验证一致。
