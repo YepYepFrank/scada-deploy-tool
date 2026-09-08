@@ -1,0 +1,173 @@
+{
+  "alarm_config": [
+    {
+      "title": "功率越限告警",
+      "alarm_severity": "WARNING",
+      "operator": ">",
+      "key": "P",
+      "value": 45
+    }
+  ],
+  "alarm_devices": [
+    {
+      "entityId": "bafa3730-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP1_IED1",
+      "labelName": "一级开闭所间隔1进线柜保护测控装置"
+    },
+    {
+      "entityId": "bc337a80-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP4_IED1",
+      "labelName": "一级开闭所间隔4出线柜保护测控装置"
+    },
+    {
+      "entityId": "bc6b5360-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP5_IED1",
+      "labelName": "一级开闭所间隔5出线柜保护测控装置"
+    },
+    {
+      "entityId": "bca8aa80-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP6_IED1",
+      "labelName": "一级开闭所间隔6出线柜保护测控装置"
+    },
+    {
+      "entityId": "bce2f460-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP7_IED1",
+      "labelName": "一级开闭所间隔7出线柜保护测控装置"
+    },
+    {
+      "entityId": "bd1d6550-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP8_IED1",
+      "labelName": "一级开闭所间隔8出线柜保护测控装置"
+    },
+    {
+      "entityId": "bd5abc70-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP9_IED1",
+      "labelName": "一级开闭所间隔9出线柜保护测控装置"
+    },
+    {
+      "entityId": "bda11440-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP10_IED1",
+      "labelName": "一级开闭所间隔10分段柜保护测控装置"
+    },
+    {
+      "entityId": "bdddcf20-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP11_IED1",
+      "labelName": "一级开闭所间隔11出线柜保护测控装置"
+    },
+    {
+      "entityId": "be20cb90-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP12_IED1",
+      "labelName": "一级开闭所间隔12出线柜保护测控装置"
+    },
+    {
+      "entityId": "be668720-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP13_IED1",
+      "labelName": "一级开闭所间隔13出线柜保护测控装置"
+    },
+    {
+      "entityId": "beae6590-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP14_IED1",
+      "labelName": "一级开闭所间隔14出线柜保护测控装置"
+    },
+    {
+      "entityId": "beed9170-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP15_IED1",
+      "labelName": "一级开闭所间隔15出线柜保护测控装置"
+    },
+    {
+      "entityId": "bf348580-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP16_IED1",
+      "labelName": "一级开闭所间隔16出线柜保护测控装置"
+    },
+    {
+      "entityId": "bf775ae0-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP1_GP19_IED1",
+      "labelName": "一级开闭所间隔19进线柜保护测控装置"
+    },
+    {
+      "entityId": "bfbdb2b0-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP2_GP1_IED1",
+      "labelName": "二级开闭所间隔1进线柜保护测控装置"
+    },
+    {
+      "entityId": "bff00d50-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP2_GP4_IED1",
+      "labelName": "二级开闭所间隔4出线柜保护测控装置"
+    },
+    {
+      "entityId": "c020e150-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP2_GP5_IED1",
+      "labelName": "二级开闭所间隔5出线柜保护测控装置"
+    },
+    {
+      "entityId": "c05fe620-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP2_GP6_IED1",
+      "labelName": "二级开闭所间隔6出线柜保护测控装置"
+    },
+    {
+      "entityId": "c0a15bf0-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP2_GP7_IED1",
+      "labelName": "二级开闭所间隔7出线柜保护测控装置"
+    },
+    {
+      "entityId": "c0e3e330-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "SSP2_GP8_IED1",
+      "labelName": "二级开闭所间隔8出线柜保护测控装置"
+    },
+    {
+      "entityId": "c1cd0ab0-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "PDR1_LP1_IED1",
+      "labelName": "北区配电房进线1保护测控装置"
+    },
+    {
+      "entityId": "c2410230-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "PDR1_LP9_IED1",
+      "labelName": "北区配电房进线2测控保护"
+    },
+    {
+      "entityId": "c3577b40-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "PDR2_GP1_IED1",
+      "labelName": "北区重卡换电站配电房间隔1保护测控装置"
+    },
+    {
+      "entityId": "c39cc1a0-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "PDR2_GP3_IED1",
+      "labelName": "北区重卡换电站配电房间隔3出线柜保护测控装置"
+    },
+    {
+      "entityId": "c4026140-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "PDR2_LP1_IED1",
+      "labelName": "北区重卡换电站配电房低压进线1保护测控装置"
+    },
+    {
+      "entityId": "c434e2f0-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "PDR3_GP1_IED1",
+      "labelName": "南区重卡换电站配电房间隔1保护测控装置"
+    },
+    {
+      "entityId": "c4796600-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "PDR3_GP3_IED1",
+      "labelName": "南区重卡换电站配电房间隔3出线柜保护测控装置"
+    },
+    {
+      "entityId": "c4df2cb0-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "PDR3_LP1_IED1",
+      "labelName": "南区重卡换电站配电房低压进线1保护测控装置"
+    },
+    {
+      "entityId": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "PDR4_T3_IED1",
+      "labelName": "南区配电房高压并网光伏箱变"
+    },
+    {
+      "entityId": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "PDR4_LP1_IED1",
+      "labelName": "南区配电房进线1保护测控装置"
+    },
+    {
+      "entityId": "c62170b0-528e-11f1-90ba-53cf2ab0fe96",
+      "entityName": "PDR4_LP9_IED1",
+      "labelName": "南区配电房进线2测控保护"
+    }
+  ]
+}

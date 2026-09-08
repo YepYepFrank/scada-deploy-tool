@@ -1,0 +1,1559 @@
+{
+  "version": 1,
+  "connection": {
+    "base": "http://192.168.20.61:8080",
+    "user": "tenant@thingsboard.org"
+  },
+  "siteName": "xianrenshan",
+  "metaSnapshot": {
+    "takenAt": 1788831000000,
+    "devices": [
+      {
+        "name": "SSP1_GP1_IED1",
+        "type": "IED"
+      },
+      {
+        "name": "SSP1_GP8_IED1",
+        "type": "IED"
+      },
+      {
+        "name": "SSP1_GP12_IED1",
+        "type": "IED"
+      },
+      {
+        "name": "SSP2_GP1_IED1",
+        "type": "IED"
+      },
+      {
+        "name": "SSP2_GP5_IED1",
+        "type": "IED"
+      },
+      {
+        "name": "PDR1_LP1_IED1",
+        "type": "IED"
+      },
+      {
+        "name": "PDR1_LP9_IED1",
+        "type": "IED"
+      },
+      {
+        "name": "PDR4_T3_IED1",
+        "type": "IED"
+      },
+      {
+        "name": "PDR4_LP1_IED1",
+        "type": "IED"
+      },
+      {
+        "name": "PDR4_LP9_IED1",
+        "type": "IED"
+      },
+      {
+        "name": "PDR1_PGC1_METER1",
+        "type": "METER"
+      },
+      {
+        "name": "PDR4_LP1_ATS1",
+        "type": "ATS"
+      }
+    ],
+    "assets": [
+      {
+        "name": "xianrenshan",
+        "type": "tbsite"
+      },
+      {
+        "name": "xianrenshan-agg",
+        "type": "tbsite-agg"
+      },
+      {
+        "name": "SITE_OVERVIEW",
+        "type": "报表"
+      },
+      {
+        "name": "REALTIME_TOTAL_LOAD_POWER",
+        "type": "RT-负荷总功率类型"
+      },
+      {
+        "name": "REALTIME_TOTAL_PV_POWER",
+        "type": "RT-光伏出力总功率"
+      },
+      {
+        "name": "REALTIME_TOTAL_WIND_POWER",
+        "type": "RT-风电出力总功率"
+      },
+      {
+        "name": "REALTIME_TOTAL_GREEN_POWER",
+        "type": "RT-绿电出力总功率"
+      },
+      {
+        "name": "REALTIME_TOTAL_EV_CHARGING_POWER",
+        "type": "RT-EV 充电总功率"
+      },
+      {
+        "name": "HIST_TOTAL_POWER_CONSUMPTION",
+        "type": "HIS-总用电量"
+      }
+    ]
+  },
+  "pages": [
+    {
+      "schemaVersion": 1,
+      "template": "overview-a",
+      "title": "仙人山服务区 · 运营总览",
+      "widgets": [
+        {
+          "id": "banner-alarms",
+          "slot": "banner",
+          "type": "alarm-list",
+          "props": {
+            "title": "全站告警",
+            "compact": true,
+            "maxRows": 5
+          },
+          "bindings": {
+            "alarms": {
+              "mode": "alarm",
+              "entity": {
+                "type": "ASSET",
+                "id": "22e38540-a2c1-11f1-b6b5-f5e88fe257c3",
+                "name": "xianrenshan"
+              }
+            }
+          }
+        },
+        {
+          "id": "kpi-load",
+          "slot": "s1",
+          "type": "number-card",
+          "props": {
+            "title": "全站负荷总功率",
+            "subtitle": "TOTAL LOAD",
+            "unit": "kW",
+            "decimals": 1,
+            "sub": "REALTIME_TOTAL_LOAD_POWER · tsLoadPowerTotal"
+          },
+          "bindings": {
+            "value": {
+              "mode": "ts",
+              "entity": {
+                "type": "ASSET",
+                "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+                "name": "REALTIME_TOTAL_LOAD_POWER"
+              },
+              "key": "tsLoadPowerTotal"
+            }
+          }
+        },
+        {
+          "id": "kpi-gen",
+          "slot": "s2",
+          "type": "number-card",
+          "props": {
+            "title": "全站发电功率",
+            "subtitle": "GENERATION",
+            "unit": "kW",
+            "decimals": 1,
+            "sub": "SITE_OVERVIEW · totalGenerationPower",
+            "color": "#199e70"
+          },
+          "bindings": {
+            "value": {
+              "mode": "ts",
+              "entity": {
+                "type": "ASSET",
+                "id": "e6d97bb0-5250-11f1-90ba-53cf2ab0fe96",
+                "name": "SITE_OVERVIEW"
+              },
+              "key": "totalGenerationPower"
+            }
+          }
+        },
+        {
+          "id": "kpi-ied-total",
+          "slot": "s3",
+          "type": "number-card",
+          "props": {
+            "title": "IED 进线总有功",
+            "subtitle": "32 IED · 工具汇聚",
+            "unit": "kW",
+            "decimals": 1,
+            "sub": "xianrenshan-agg · calc_totalP",
+            "color": "#19b7ff"
+          },
+          "bindings": {
+            "value": {
+              "mode": "ts",
+              "entity": {
+                "type": "ASSET",
+                "id": "03520f30-aa6e-11f1-88c6-2b21f8c26565",
+                "name": "xianrenshan-agg"
+              },
+              "key": "calc_totalP"
+            }
+          }
+        },
+        {
+          "id": "kpi-pv",
+          "slot": "s4",
+          "type": "number-card",
+          "props": {
+            "title": "光伏出力总功率",
+            "subtitle": "PV OUTPUT",
+            "unit": "kW",
+            "decimals": 1,
+            "sub": "REALTIME_TOTAL_PV_POWER · tsPvPowerTotal",
+            "color": "#f2b134"
+          },
+          "bindings": {
+            "value": {
+              "mode": "ts",
+              "entity": {
+                "type": "ASSET",
+                "id": "95bf2370-527c-11f1-90ba-53cf2ab0fe96",
+                "name": "REALTIME_TOTAL_PV_POWER"
+              },
+              "key": "tsPvPowerTotal"
+            }
+          }
+        },
+        {
+          "id": "chart-24h",
+          "slot": "g1",
+          "type": "line",
+          "props": {
+            "title": "IED 总有功 / 全站负荷",
+            "subtitle": "24H · 5 分钟均值(TB)",
+            "unit": "kW",
+            "chartStyle": "area",
+            "smooth": true
+          },
+          "bindings": {
+            "series": [
+              {
+                "mode": "ts-history",
+                "entity": {
+                  "type": "ASSET",
+                  "id": "03520f30-aa6e-11f1-88c6-2b21f8c26565",
+                  "name": "xianrenshan-agg"
+                },
+                "keys": [
+                  "calc_totalP"
+                ],
+                "window": "24h",
+                "agg": "AVG"
+              },
+              {
+                "mode": "ts-history",
+                "entity": {
+                  "type": "ASSET",
+                  "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+                  "name": "REALTIME_TOTAL_LOAD_POWER"
+                },
+                "keys": [
+                  "tsLoadPowerTotal"
+                ],
+                "window": "24h",
+                "agg": "AVG"
+              }
+            ]
+          }
+        },
+        {
+          "id": "chart-30d",
+          "slot": "g2",
+          "type": "line",
+          "props": {
+            "title": "光伏出力 / 全站发电",
+            "subtitle": "30 天 · 日均值(kz 归档)",
+            "unit": "kW",
+            "chartStyle": "bar"
+          },
+          "bindings": {
+            "series": [
+              {
+                "mode": "ext",
+                "source": "kz",
+                "window": "30d",
+                "interval": "1d",
+                "params": {
+                  "entity": {
+                    "type": "ASSET",
+                    "id": "95bf2370-527c-11f1-90ba-53cf2ab0fe96",
+                    "name": "REALTIME_TOTAL_PV_POWER"
+                  },
+                  "keys": [
+                    "tsPvPowerTotal"
+                  ],
+                  "agg": "AVG"
+                }
+              },
+              {
+                "mode": "ext",
+                "source": "kz",
+                "window": "30d",
+                "interval": "1d",
+                "params": {
+                  "entity": {
+                    "type": "ASSET",
+                    "id": "e6d97bb0-5250-11f1-90ba-53cf2ab0fe96",
+                    "name": "SITE_OVERVIEW"
+                  },
+                  "keys": [
+                    "totalGenerationPower"
+                  ],
+                  "agg": "AVG"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "table-areas",
+          "slot": "g3",
+          "type": "table",
+          "props": {
+            "title": "分区负荷",
+            "mode": "latest",
+            "columns": [
+              {
+                "label": "一级开闭所 SSP1",
+                "unit": "kW",
+                "decimals": 1
+              },
+              {
+                "label": "二级开闭所 SSP2",
+                "unit": "kW",
+                "decimals": 1
+              },
+              {
+                "label": "配电房 PDR",
+                "unit": "kW",
+                "decimals": 1
+              },
+              {
+                "label": "全站(绝对值)",
+                "unit": "kW",
+                "decimals": 1
+              }
+            ]
+          },
+          "bindings": {
+            "rows": [
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "ASSET",
+                  "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+                  "name": "REALTIME_TOTAL_LOAD_POWER"
+                },
+                "key": "tsLoadPowerTotalSSP1"
+              },
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "ASSET",
+                  "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+                  "name": "REALTIME_TOTAL_LOAD_POWER"
+                },
+                "key": "tsLoadPowerTotalSSP2"
+              },
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "ASSET",
+                  "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+                  "name": "REALTIME_TOTAL_LOAD_POWER"
+                },
+                "key": "tsLoadPowerTotalPDR"
+              },
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "ASSET",
+                  "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
+                  "name": "REALTIME_TOTAL_LOAD_POWER"
+                },
+                "key": "tsLoadPowerTotalABS"
+              }
+            ]
+          }
+        },
+        {
+          "id": "overview-green",
+          "slot": "g4",
+          "type": "overview-card",
+          "props": {
+            "title": "新能源与充电",
+            "items": [
+              {
+                "label": "光伏出力",
+                "unit": "kW"
+              },
+              {
+                "label": "风电出力",
+                "unit": "kW"
+              },
+              {
+                "label": "绿电出力合计",
+                "unit": "kW"
+              },
+              {
+                "label": "EV 充电总功率",
+                "unit": "kW"
+              }
+            ]
+          },
+          "bindings": {
+            "items": [
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "ASSET",
+                  "id": "95bf2370-527c-11f1-90ba-53cf2ab0fe96",
+                  "name": "REALTIME_TOTAL_PV_POWER"
+                },
+                "key": "tsPvPowerTotal"
+              },
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "ASSET",
+                  "id": "a815cf60-527c-11f1-90ba-53cf2ab0fe96",
+                  "name": "REALTIME_TOTAL_WIND_POWER"
+                },
+                "key": "tsWindPowerTotal"
+              },
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "ASSET",
+                  "id": "cae873d0-527c-11f1-90ba-53cf2ab0fe96",
+                  "name": "REALTIME_TOTAL_GREEN_POWER"
+                },
+                "key": "tsGreenPowerTotal"
+              },
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "ASSET",
+                  "id": "dcf14de0-527c-11f1-90ba-53cf2ab0fe96",
+                  "name": "REALTIME_TOTAL_EV_CHARGING_POWER"
+                },
+                "key": "tsEvPowerCharging"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "template": "monitor-3col",
+      "title": "仙人山服务区 · 南区配电房",
+      "widgets": [
+        {
+          "id": "banner",
+          "slot": "banner",
+          "type": "alarm-list",
+          "props": {
+            "title": "南区配电房告警",
+            "compact": true,
+            "maxRows": 5
+          },
+          "bindings": {
+            "alarms": {
+              "mode": "alarm",
+              "entity": {
+                "type": "ASSET",
+                "id": "22e38540-a2c1-11f1-b6b5-f5e88fe257c3",
+                "name": "xianrenshan"
+              }
+            }
+          }
+        },
+        {
+          "id": "l1",
+          "slot": "l1",
+          "type": "number-card",
+          "props": {
+            "title": "进线 1 有功",
+            "subtitle": "PDR4_LP1",
+            "unit": "kW",
+            "decimals": 1,
+            "sub": "南区配电房 · 进线 1 保护测控"
+          },
+          "bindings": {
+            "value": {
+              "mode": "ts",
+              "entity": {
+                "type": "DEVICE",
+                "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                "name": "PDR4_LP1_IED1"
+              },
+              "key": "P"
+            }
+          }
+        },
+        {
+          "id": "l2",
+          "slot": "l2",
+          "type": "gauge",
+          "props": {
+            "title": "进线 1 线电压",
+            "subtitle": "Uab",
+            "unit": "V",
+            "min": 340,
+            "max": 460,
+            "decimals": 1
+          },
+          "bindings": {
+            "value": {
+              "mode": "ts",
+              "entity": {
+                "type": "DEVICE",
+                "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                "name": "PDR4_LP1_IED1"
+              },
+              "key": "Uab"
+            }
+          }
+        },
+        {
+          "id": "l3",
+          "slot": "l3",
+          "type": "status-light",
+          "props": {
+            "title": "进线 1 断路器",
+            "onValue": "1",
+            "onLabel": "合位",
+            "offLabel": "分位",
+            "sub": "CB"
+          },
+          "bindings": {
+            "state": {
+              "mode": "ts",
+              "entity": {
+                "type": "DEVICE",
+                "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                "name": "PDR4_LP1_IED1"
+              },
+              "key": "CB"
+            }
+          }
+        },
+        {
+          "id": "main",
+          "slot": "main",
+          "type": "line",
+          "props": {
+            "title": "南区配电房进线有功",
+            "subtitle": "24H · 5 分钟均值",
+            "unit": "kW",
+            "chartStyle": "area",
+            "smooth": true
+          },
+          "bindings": {
+            "series": [
+              {
+                "mode": "ts-history",
+                "entity": {
+                  "type": "DEVICE",
+                  "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                  "name": "PDR4_LP1_IED1"
+                },
+                "keys": [
+                  "P"
+                ],
+                "window": "24h",
+                "agg": "AVG"
+              },
+              {
+                "mode": "ts-history",
+                "entity": {
+                  "type": "DEVICE",
+                  "id": "5c9c2b20-528e-11f1-90ba-53cf2ab0fe96",
+                  "name": "PDR4_LP9_IED1"
+                },
+                "keys": [
+                  "P"
+                ],
+                "window": "24h",
+                "agg": "AVG"
+              }
+            ]
+          }
+        },
+        {
+          "id": "c1",
+          "slot": "c1",
+          "type": "dual-axis",
+          "props": {
+            "title": "3 号变有功 / 无功",
+            "subtitle": "24H",
+            "unitL": "kW",
+            "unitR": "kvar",
+            "decimals": 2
+          },
+          "bindings": {
+            "primary": [
+              {
+                "mode": "ts-history",
+                "entity": {
+                  "type": "DEVICE",
+                  "id": "5d3e7c30-528e-11f1-90ba-53cf2ab0fe96",
+                  "name": "PDR4_T3_IED1"
+                },
+                "keys": [
+                  "P"
+                ],
+                "window": "24h",
+                "agg": "AVG"
+              }
+            ],
+            "secondary": [
+              {
+                "mode": "ts-history",
+                "entity": {
+                  "type": "DEVICE",
+                  "id": "5d3e7c30-528e-11f1-90ba-53cf2ab0fe96",
+                  "name": "PDR4_T3_IED1"
+                },
+                "keys": [
+                  "Q"
+                ],
+                "window": "24h",
+                "agg": "AVG"
+              }
+            ]
+          }
+        },
+        {
+          "id": "c2",
+          "slot": "c2",
+          "type": "table",
+          "props": {
+            "title": "进线三相电流",
+            "mode": "latest",
+            "columns": [
+              {
+                "label": "进线 1 Ia",
+                "unit": "A",
+                "decimals": 1
+              },
+              {
+                "label": "进线 1 Ib",
+                "unit": "A",
+                "decimals": 1
+              },
+              {
+                "label": "进线 1 Ic",
+                "unit": "A",
+                "decimals": 1
+              },
+              {
+                "label": "进线 2 Ia",
+                "unit": "A",
+                "decimals": 1
+              },
+              {
+                "label": "进线 2 Ib",
+                "unit": "A",
+                "decimals": 1
+              },
+              {
+                "label": "进线 2 Ic",
+                "unit": "A",
+                "decimals": 1
+              }
+            ]
+          },
+          "bindings": {
+            "rows": [
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "DEVICE",
+                  "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                  "name": "PDR4_LP1_IED1"
+                },
+                "key": "Ia"
+              },
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "DEVICE",
+                  "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                  "name": "PDR4_LP1_IED1"
+                },
+                "key": "Ib"
+              },
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "DEVICE",
+                  "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                  "name": "PDR4_LP1_IED1"
+                },
+                "key": "Ic"
+              },
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "DEVICE",
+                  "id": "5c9c2b20-528e-11f1-90ba-53cf2ab0fe96",
+                  "name": "PDR4_LP9_IED1"
+                },
+                "key": "Ia"
+              },
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "DEVICE",
+                  "id": "5c9c2b20-528e-11f1-90ba-53cf2ab0fe96",
+                  "name": "PDR4_LP9_IED1"
+                },
+                "key": "Ib"
+              },
+              {
+                "mode": "ts",
+                "entity": {
+                  "type": "DEVICE",
+                  "id": "5c9c2b20-528e-11f1-90ba-53cf2ab0fe96",
+                  "name": "PDR4_LP9_IED1"
+                },
+                "key": "Ic"
+              }
+            ]
+          }
+        },
+        {
+          "id": "r1",
+          "slot": "r1",
+          "type": "number-card",
+          "props": {
+            "title": "进线 2 有功",
+            "subtitle": "PDR4_LP9",
+            "unit": "kW",
+            "decimals": 1,
+            "sub": "南区配电房 · 进线 2 保护测控"
+          },
+          "bindings": {
+            "value": {
+              "mode": "ts",
+              "entity": {
+                "type": "DEVICE",
+                "id": "5c9c2b20-528e-11f1-90ba-53cf2ab0fe96",
+                "name": "PDR4_LP9_IED1"
+              },
+              "key": "P"
+            }
+          }
+        },
+        {
+          "id": "r2",
+          "slot": "r2",
+          "type": "number-card",
+          "props": {
+            "title": "配电房进线总有功",
+            "subtitle": "工具汇聚",
+            "unit": "kW",
+            "decimals": 1,
+            "sub": "xianrenshan-agg · calc_pdrInP",
+            "color": "#19b7ff"
+          },
+          "bindings": {
+            "value": {
+              "mode": "ts",
+              "entity": {
+                "type": "ASSET",
+                "id": "03520f30-aa6e-11f1-88c6-2b21f8c26565",
+                "name": "xianrenshan-agg"
+              },
+              "key": "calc_pdrInP"
+            }
+          }
+        },
+        {
+          "id": "r3",
+          "slot": "r3",
+          "type": "status-light",
+          "props": {
+            "title": "进线 ATS",
+            "onValue": "1",
+            "onLabel": "主供",
+            "offLabel": "备供",
+            "sub": "switch_state"
+          },
+          "bindings": {
+            "state": {
+              "mode": "ts",
+              "entity": {
+                "type": "DEVICE",
+                "id": "5dd9ae40-528e-11f1-90ba-53cf2ab0fe96",
+                "name": "PDR4_LP1_ATS1"
+              },
+              "key": "switch_state"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "rules": {
+    "schema": "tbsite/v2",
+    "site": {
+      "name": "xianrenshan",
+      "label": "仙人山服务区"
+    },
+    "outputPrefix": "calc_",
+    "devices": [
+      {
+        "name": "SSP1_GP1_IED1",
+        "label": "一级开闭所 · 进线 1 测控",
+        "type": "IED",
+        "profile": "IED",
+        "keys": [
+          {
+            "key": "Uab",
+            "label": "线电压 Uab",
+            "unit": "V"
+          },
+          {
+            "key": "Ubc",
+            "label": "线电压 Ubc",
+            "unit": "V"
+          },
+          {
+            "key": "Uca",
+            "label": "线电压 Uca",
+            "unit": "V"
+          },
+          {
+            "key": "P",
+            "label": "有功功率",
+            "unit": "kW"
+          },
+          {
+            "key": "Q",
+            "label": "无功功率",
+            "unit": "kvar"
+          },
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          },
+          {
+            "key": "Ia",
+            "label": "A 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ib",
+            "label": "B 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ic",
+            "label": "C 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "F",
+            "label": "频率",
+            "unit": "Hz"
+          },
+          {
+            "key": "CB",
+            "label": "断路器位置",
+            "unit": ""
+          },
+          {
+            "key": "COM",
+            "label": "通讯计数",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "SSP1_GP8_IED1",
+        "label": "一级开闭所 · 出线 8 测控",
+        "type": "IED",
+        "profile": "IED",
+        "keys": [
+          {
+            "key": "Uab",
+            "label": "线电压 Uab",
+            "unit": "V"
+          },
+          {
+            "key": "Ubc",
+            "label": "线电压 Ubc",
+            "unit": "V"
+          },
+          {
+            "key": "Uca",
+            "label": "线电压 Uca",
+            "unit": "V"
+          },
+          {
+            "key": "P",
+            "label": "有功功率",
+            "unit": "kW"
+          },
+          {
+            "key": "Q",
+            "label": "无功功率",
+            "unit": "kvar"
+          },
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          },
+          {
+            "key": "Ia",
+            "label": "A 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ib",
+            "label": "B 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ic",
+            "label": "C 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "F",
+            "label": "频率",
+            "unit": "Hz"
+          },
+          {
+            "key": "CB",
+            "label": "断路器位置",
+            "unit": ""
+          },
+          {
+            "key": "COM",
+            "label": "通讯计数",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "SSP1_GP12_IED1",
+        "label": "一级开闭所 · 出线 12 测控",
+        "type": "IED",
+        "profile": "IED",
+        "keys": [
+          {
+            "key": "P",
+            "label": "有功功率",
+            "unit": "kW"
+          },
+          {
+            "key": "Q",
+            "label": "无功功率",
+            "unit": "kvar"
+          },
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          },
+          {
+            "key": "Ia",
+            "label": "A 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ib",
+            "label": "B 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ic",
+            "label": "C 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "CB",
+            "label": "断路器位置",
+            "unit": ""
+          },
+          {
+            "key": "COM",
+            "label": "通讯计数",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "SSP2_GP1_IED1",
+        "label": "二级开闭所 · 进线 1 测控",
+        "type": "IED",
+        "profile": "IED",
+        "keys": [
+          {
+            "key": "Uca",
+            "label": "线电压 Uca",
+            "unit": "V"
+          },
+          {
+            "key": "P",
+            "label": "有功功率",
+            "unit": "kW"
+          },
+          {
+            "key": "Q",
+            "label": "无功功率",
+            "unit": "kvar"
+          },
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          },
+          {
+            "key": "Uab",
+            "label": "线电压 Uab",
+            "unit": "V"
+          },
+          {
+            "key": "Ubc",
+            "label": "线电压 Ubc",
+            "unit": "V"
+          }
+        ]
+      },
+      {
+        "name": "SSP2_GP5_IED1",
+        "label": "二级开闭所 · 出线 5 测控",
+        "type": "IED",
+        "profile": "IED",
+        "keys": [
+          {
+            "key": "P",
+            "label": "有功功率",
+            "unit": "kW"
+          },
+          {
+            "key": "Q",
+            "label": "无功功率",
+            "unit": "kvar"
+          },
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "PDR1_LP1_IED1",
+        "label": "北区配电房 · 进线 1 保护测控",
+        "type": "IED",
+        "profile": "IED",
+        "keys": [
+          {
+            "key": "P",
+            "label": "有功功率",
+            "unit": "kW"
+          },
+          {
+            "key": "Q",
+            "label": "无功功率",
+            "unit": "kvar"
+          },
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          },
+          {
+            "key": "Ua",
+            "label": "A 相电压",
+            "unit": "V"
+          },
+          {
+            "key": "Ub",
+            "label": "Ub",
+            "unit": "V"
+          },
+          {
+            "key": "Uc",
+            "label": "Uc",
+            "unit": "V"
+          },
+          {
+            "key": "Ia",
+            "label": "A 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ib",
+            "label": "B 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ic",
+            "label": "C 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "CB",
+            "label": "断路器位置",
+            "unit": ""
+          },
+          {
+            "key": "COM",
+            "label": "通讯计数",
+            "unit": ""
+          },
+          {
+            "key": "Ua1",
+            "label": "Ua1",
+            "unit": ""
+          },
+          {
+            "key": "Ub1",
+            "label": "Ub1",
+            "unit": ""
+          },
+          {
+            "key": "Uc1",
+            "label": "Uc1",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "PDR1_LP9_IED1",
+        "label": "北区配电房 · 进线 2 保护测控",
+        "type": "IED",
+        "profile": "IED",
+        "keys": [
+          {
+            "key": "P",
+            "label": "有功功率",
+            "unit": "kW"
+          },
+          {
+            "key": "Q",
+            "label": "无功功率",
+            "unit": "kvar"
+          },
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          },
+          {
+            "key": "Ua",
+            "label": "A 相电压",
+            "unit": "V"
+          },
+          {
+            "key": "Ub",
+            "label": "Ub",
+            "unit": "V"
+          },
+          {
+            "key": "Uc",
+            "label": "Uc",
+            "unit": "V"
+          },
+          {
+            "key": "Ia",
+            "label": "A 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ib",
+            "label": "B 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ic",
+            "label": "C 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "CB",
+            "label": "断路器位置",
+            "unit": ""
+          },
+          {
+            "key": "COM",
+            "label": "通讯计数",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "PDR4_T3_IED1",
+        "label": "南区配电房 · 3 号变测控",
+        "type": "IED",
+        "profile": "IED",
+        "keys": [
+          {
+            "key": "P",
+            "label": "有功功率",
+            "unit": "kW"
+          },
+          {
+            "key": "Q",
+            "label": "无功功率",
+            "unit": "kvar"
+          },
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          },
+          {
+            "key": "QE",
+            "label": "QE",
+            "unit": "kvarh"
+          },
+          {
+            "key": "CB",
+            "label": "断路器位置",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "PDR4_LP1_IED1",
+        "label": "南区配电房 · 进线 1 保护测控",
+        "type": "IED",
+        "profile": "IED",
+        "keys": [
+          {
+            "key": "P",
+            "label": "有功功率",
+            "unit": "kW"
+          },
+          {
+            "key": "Q",
+            "label": "无功功率",
+            "unit": "kvar"
+          },
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          },
+          {
+            "key": "Ua",
+            "label": "A 相电压",
+            "unit": "V"
+          },
+          {
+            "key": "Ub",
+            "label": "Ub",
+            "unit": "V"
+          },
+          {
+            "key": "Uc",
+            "label": "Uc",
+            "unit": "V"
+          },
+          {
+            "key": "Ia",
+            "label": "A 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ib",
+            "label": "B 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ic",
+            "label": "C 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "CB",
+            "label": "断路器位置",
+            "unit": ""
+          },
+          {
+            "key": "COM",
+            "label": "通讯计数",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "PDR4_LP9_IED1",
+        "label": "南区配电房 · 进线 2 保护测控",
+        "type": "IED",
+        "profile": "IED",
+        "keys": [
+          {
+            "key": "P",
+            "label": "有功功率",
+            "unit": "kW"
+          },
+          {
+            "key": "Q",
+            "label": "无功功率",
+            "unit": "kvar"
+          },
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          },
+          {
+            "key": "Ua",
+            "label": "A 相电压",
+            "unit": "V"
+          },
+          {
+            "key": "Ub",
+            "label": "Ub",
+            "unit": "V"
+          },
+          {
+            "key": "Uc",
+            "label": "Uc",
+            "unit": "V"
+          },
+          {
+            "key": "Ia",
+            "label": "A 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ib",
+            "label": "B 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "Ic",
+            "label": "C 相电流",
+            "unit": "A"
+          },
+          {
+            "key": "CB",
+            "label": "断路器位置",
+            "unit": ""
+          },
+          {
+            "key": "COM",
+            "label": "通讯计数",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "PDR1_PGC1_METER1",
+        "label": "北区配电房 · 关口电表",
+        "type": "METER",
+        "profile": "METER",
+        "keys": [
+          {
+            "key": "P",
+            "label": "有功功率",
+            "unit": "kW"
+          },
+          {
+            "key": "Q",
+            "label": "无功功率",
+            "unit": "kvar"
+          },
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          },
+          {
+            "key": "QE",
+            "label": "QE",
+            "unit": "kvarh"
+          },
+          {
+            "key": "总功率",
+            "label": "总功率",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "PDR4_LP1_ATS1",
+        "label": "南区配电房 · 进线 ATS",
+        "type": "ATS",
+        "profile": "ATS",
+        "keys": [
+          {
+            "key": "switch_state",
+            "label": "开关状态",
+            "unit": ""
+          },
+          {
+            "key": "temperature",
+            "label": "temperature",
+            "unit": "℃"
+          }
+        ]
+      }
+    ],
+    "deviceTemplates": [
+      {
+        "name": "IED 功率监控",
+        "selector": {
+          "profiles": [
+            "IED"
+          ],
+          "prefixes": []
+        },
+        "items": [
+          {
+            "template": "alarm.threshold",
+            "name": "功率越限告警",
+            "key": "P",
+            "condition": {
+              "op": "gt",
+              "value": 45
+            },
+            "severity": "WARNING",
+            "trigger": "edge",
+            "message": "有功功率越限:{value} kW"
+          },
+          {
+            "template": "expr.add",
+            "inputs": {
+              "a": {
+                "key": "P"
+              },
+              "b": {
+                "key": "Q"
+              }
+            },
+            "output": "pqSum"
+          }
+        ]
+      },
+      {
+        "name": "配电房进线电压监视",
+        "selector": {
+          "profiles": [
+            "IED"
+          ],
+          "prefixes": [
+            "PDR1_LP",
+            "PDR4_LP"
+          ]
+        },
+        "items": [
+          {
+            "template": "alarm.threshold",
+            "name": "400V 电压越下限",
+            "key": "Uab",
+            "condition": {
+              "op": "lt",
+              "value": 380
+            },
+            "severity": "MAJOR",
+            "trigger": "level",
+            "message": "进线电压偏低:{value} V"
+          },
+          {
+            "template": "alarm.threshold",
+            "name": "400V 电压越上限",
+            "key": "Uab",
+            "condition": {
+              "op": "gt",
+              "value": 420
+            },
+            "severity": "MAJOR",
+            "trigger": "level",
+            "message": "进线电压偏高:{value} V"
+          }
+        ]
+      },
+      {
+        "name": "IED 多级归档(代表间隔)",
+        "selector": {
+          "profiles": [
+            "IED"
+          ],
+          "prefixes": [
+            "SSP1_GP1_",
+            "SSP1_GP8_"
+          ]
+        },
+        "items": [
+          {
+            "template": "window.cascade",
+            "keys": [
+              "P"
+            ],
+            "aggs": [
+              "avg",
+              "max"
+            ]
+          }
+        ]
+      }
+    ],
+    "computations": [
+      {
+        "template": "aggregate.crossEntity",
+        "name": "全站总有功功率",
+        "selector": {
+          "profiles": [
+            "IED"
+          ],
+          "prefixes": []
+        },
+        "key": "P",
+        "agg": "sum",
+        "asset": "xianrenshan-agg",
+        "output": "totalP"
+      },
+      {
+        "template": "aggregate.crossEntity",
+        "name": "配电房进线总有功",
+        "selector": {
+          "profiles": [
+            "IED"
+          ],
+          "prefixes": [
+            "PDR1_LP",
+            "PDR4_LP"
+          ]
+        },
+        "key": "P",
+        "agg": "sum",
+        "asset": "xianrenshan-agg",
+        "output": "pdrInP"
+      }
+    ],
+    "rollup": {},
+    "alarm": {
+      "propagate": true
+    }
+  },
+  "published": {
+    "仙人山服务区 · 运营总览": {
+      "assetId": "8c435790-aa82-11f1-88c6-2b21f8c26565",
+      "version": 3,
+      "at": 1788833561000,
+      "by": "YY"
+    },
+    "仙人山服务区 · 南区配电房": {
+      "assetId": "9e0b6a20-8c5d-11f1-88c6-2b21f8c26565",
+      "version": 1,
+      "at": 1788833645000,
+      "by": "YY"
+    }
+  }
+}
