@@ -1,6 +1,7 @@
 <script setup>
 // 分组折叠式下拉选择器:关闭态显示当前选中项;打开后 关键字过滤 + 按组折叠(点组头展开)。
 // pinned 组默认展开(用于置顶「本站声明的运算」),其余组默认折叠;过滤时命中组强制展开。
+// 没有 pinned 组、且只有一组或总项数不多(≤ 40)时全部默认展开——否则单设备的「遥测(6)」也折着,像空的一样。
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const props = defineProps({
@@ -56,7 +57,13 @@ const filtered = computed(() => {
     }))
     .filter(g => g.items.length)
 })
-const isExpanded = g => (q.value.trim() ? true : g.label in openMap.value ? openMap.value[g.label] : !!g.pinned)
+const autoExpand = computed(
+  () =>
+    !props.groups.some(g => g.pinned) &&
+    (props.groups.length === 1 || props.groups.reduce((n, g) => n + g.items.length, 0) <= 40)
+)
+const isExpanded = g =>
+  q.value.trim() ? true : g.label in openMap.value ? openMap.value[g.label] : !!g.pinned || autoExpand.value
 const toggleG = g => {
   openMap.value[g.label] = !isExpanded(g)
 }
@@ -150,6 +157,19 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* 令牌自带兜底:面板 Teleport 到 body,拿不到宿主容器上的变量;editor.html 入口也不加载 style.css 的 --bg/--ink 令牌,
+   只有 EditorApp 自己的 --ed-*。三层回退:向导主题 → 编辑器主题 → 常量,任一入口都不会画成透明。 */
+.kp,
+.kp-panel {
+  --kp-bg-0: var(--bg-0, var(--ed-bg-0, #061024));
+  --kp-bg-1: var(--bg-1, var(--ed-bg-1, #0b1a33));
+  --kp-line-0: var(--line-0, var(--ed-line, rgba(83, 196, 255, 0.14)));
+  --kp-line-1: var(--line-1, var(--ed-line, rgba(83, 196, 255, 0.32)));
+  --kp-ink-0: var(--ink-0, #ecf9ff);
+  --kp-ink-1: var(--ink-1, #c9d8ee);
+  --kp-ink-2: var(--ink-2, #8197b8);
+  --kp-accent: var(--accent, var(--ed-accent, #19b7ff));
+}
 .kp {
   position: relative;
   min-width: 240px;
@@ -160,18 +180,18 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg-0);
-  border: 1px solid var(--line-1);
+  background: var(--kp-bg-0);
+  border: 1px solid var(--kp-line-1);
   border-radius: 4px;
   padding: 8px 12px;
-  color: var(--ink-0);
+  color: var(--kp-ink-0);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
   text-align: left;
 }
 .kp-btn:hover {
-  border-color: var(--accent);
+  border-color: var(--kp-accent);
 }
 .kp-sel {
   flex: 1;
@@ -180,19 +200,20 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .kp-sel.ph {
-  color: var(--ink-2);
+  color: var(--kp-ink-2);
 }
 .kp-caret {
-  color: var(--ink-2);
+  color: var(--kp-ink-2);
   font-size: 11px;
 }
 .kp-panel {
-  /* 定位与尺寸由 place() 以 fixed 内联样式给出;Teleport 到 body,需盖过弹窗遮罩 */
-  z-index: 220;
+  /* 定位与尺寸由 place() 以 fixed 内联样式给出;Teleport 到 body,要盖过向导弹窗遮罩(160 / 300)
+     和嵌入向导时的全屏编辑覆盖层 .ed-fs-host(1000)——之前是 220,在全屏编辑里面板开在覆盖层底下,看起来像点不开 */
+  z-index: 1200;
   display: flex;
   flex-direction: column;
-  background: var(--bg-1, var(--bg-0));
-  border: 1px solid var(--line-1);
+  background: var(--kp-bg-1);
+  border: 1px solid var(--kp-line-1);
   border-radius: 6px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   padding: 8px;
@@ -214,34 +235,34 @@ onBeforeUnmount(() => {
   padding: 6px 8px;
   cursor: pointer;
   user-select: none;
-  color: var(--ink-1);
+  color: var(--kp-ink-1);
   font-size: 12.5px;
   font-weight: 600;
   border-radius: 4px;
 }
 .kp-group:hover {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: color-mix(in srgb, var(--kp-accent) 10%, transparent);
 }
 .kp-group.pinned .kp-gname {
-  color: var(--accent);
+  color: var(--kp-accent);
 }
 .kp-fold {
-  color: var(--ink-2);
+  color: var(--kp-ink-2);
   font-size: 9px;
   width: 12px;
 }
 .kp-cnt {
   margin-left: auto;
-  color: var(--ink-2);
+  color: var(--kp-ink-2);
   font-size: 11px;
-  border: 1px solid var(--line-0);
+  border: 1px solid var(--kp-line-0);
   border-radius: 8px;
   padding: 0 7px;
 }
 .kp-item {
   padding: 5px 8px 5px 26px;
   cursor: pointer;
-  color: var(--ink-1);
+  color: var(--kp-ink-1);
   font-size: 12.5px;
   border-radius: 4px;
   overflow: hidden;
@@ -249,19 +270,19 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .kp-item:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--kp-accent) 14%, transparent);
 }
 .kp-item.on {
-  color: var(--accent);
+  color: var(--kp-accent);
   font-weight: 600;
 }
 .kp-item.top {
   padding-left: 8px;
-  color: var(--ink-0);
+  color: var(--kp-ink-0);
 }
 .kp-empty {
   padding: 10px;
-  color: var(--ink-2);
+  color: var(--kp-ink-2);
   font-size: 12px;
   text-align: center;
 }
