@@ -237,9 +237,7 @@
                   "id": "03520f30-aa6e-11f1-88c6-2b21f8c26565",
                   "name": "xianrenshan-agg"
                 },
-                "keys": [
-                  "calc_totalP"
-                ],
+                "keys": ["calc_totalP"],
                 "window": "24h",
                 "agg": "AVG"
               },
@@ -250,9 +248,7 @@
                   "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96",
                   "name": "REALTIME_TOTAL_LOAD_POWER"
                 },
-                "keys": [
-                  "tsLoadPowerTotal"
-                ],
+                "keys": ["tsLoadPowerTotal"],
                 "window": "24h",
                 "agg": "AVG"
               }
@@ -282,9 +278,7 @@
                     "id": "95bf2370-527c-11f1-90ba-53cf2ab0fe96",
                     "name": "REALTIME_TOTAL_PV_POWER"
                   },
-                  "keys": [
-                    "tsPvPowerTotal"
-                  ],
+                  "keys": ["tsPvPowerTotal"],
                   "agg": "AVG"
                 }
               },
@@ -299,9 +293,7 @@
                     "id": "e6d97bb0-5250-11f1-90ba-53cf2ab0fe96",
                     "name": "SITE_OVERVIEW"
                   },
-                  "keys": [
-                    "totalGenerationPower"
-                  ],
+                  "keys": ["totalGenerationPower"],
                   "agg": "AVG"
                 }
               }
@@ -500,11 +492,11 @@
           "slot": "l2",
           "type": "gauge",
           "props": {
-            "title": "进线 1 线电压",
-            "subtitle": "Uab",
+            "title": "进线 1 A 相电压",
+            "subtitle": "Ua",
             "unit": "V",
-            "min": 340,
-            "max": 460,
+            "min": 180,
+            "max": 260,
             "decimals": 1
           },
           "bindings": {
@@ -515,7 +507,7 @@
                 "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
                 "name": "PDR4_LP1_IED1"
               },
-              "key": "Uab"
+              "key": "Ua"
             }
           }
         },
@@ -562,9 +554,7 @@
                   "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_LP1_IED1"
                 },
-                "keys": [
-                  "P"
-                ],
+                "keys": ["P"],
                 "window": "24h",
                 "agg": "AVG"
               },
@@ -575,9 +565,7 @@
                   "id": "5c9c2b20-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_LP9_IED1"
                 },
-                "keys": [
-                  "P"
-                ],
+                "keys": ["P"],
                 "window": "24h",
                 "agg": "AVG"
               }
@@ -604,9 +592,7 @@
                   "id": "5d3e7c30-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_T3_IED1"
                 },
-                "keys": [
-                  "P"
-                ],
+                "keys": ["P"],
                 "window": "24h",
                 "agg": "AVG"
               }
@@ -619,9 +605,7 @@
                   "id": "5d3e7c30-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_T3_IED1"
                 },
-                "keys": [
-                  "Q"
-                ],
+                "keys": ["Q"],
                 "window": "24h",
                 "agg": "AVG"
               }
@@ -1409,9 +1393,7 @@
       {
         "name": "IED 功率监控",
         "selector": {
-          "profiles": [
-            "IED"
-          ],
+          "profiles": ["IED"],
           "prefixes": []
         },
         "items": [
@@ -1444,22 +1426,17 @@
       {
         "name": "配电房进线电压监视",
         "selector": {
-          "profiles": [
-            "IED"
-          ],
-          "prefixes": [
-            "PDR1_LP",
-            "PDR4_LP"
-          ]
+          "profiles": ["IED"],
+          "prefixes": ["PDR1_LP", "PDR4_LP"]
         },
         "items": [
           {
             "template": "alarm.threshold",
             "name": "400V 电压越下限",
-            "key": "Uab",
+            "key": "Ua",
             "condition": {
               "op": "lt",
-              "value": 380
+              "value": 200
             },
             "severity": "MAJOR",
             "trigger": "level",
@@ -1468,10 +1445,10 @@
           {
             "template": "alarm.threshold",
             "name": "400V 电压越上限",
-            "key": "Uab",
+            "key": "Ua",
             "condition": {
               "op": "gt",
-              "value": 420
+              "value": 240
             },
             "severity": "MAJOR",
             "trigger": "level",
@@ -1482,24 +1459,14 @@
       {
         "name": "IED 多级归档(代表间隔)",
         "selector": {
-          "profiles": [
-            "IED"
-          ],
-          "prefixes": [
-            "SSP1_GP1_",
-            "SSP1_GP8_"
-          ]
+          "profiles": ["IED"],
+          "prefixes": ["SSP1_GP1_", "SSP1_GP8_"]
         },
         "items": [
           {
             "template": "window.cascade",
-            "keys": [
-              "P"
-            ],
-            "aggs": [
-              "avg",
-              "max"
-            ]
+            "keys": ["P"],
+            "aggs": ["avg", "max"]
           }
         ]
       }
@@ -1509,9 +1476,7 @@
         "template": "aggregate.crossEntity",
         "name": "全站总有功功率",
         "selector": {
-          "profiles": [
-            "IED"
-          ],
+          "profiles": ["IED"],
           "prefixes": []
         },
         "key": "P",
@@ -1523,13 +1488,8 @@
         "template": "aggregate.crossEntity",
         "name": "配电房进线总有功",
         "selector": {
-          "profiles": [
-            "IED"
-          ],
-          "prefixes": [
-            "PDR1_LP",
-            "PDR4_LP"
-          ]
+          "profiles": ["IED"],
+          "prefixes": ["PDR1_LP", "PDR4_LP"]
         },
         "key": "P",
         "agg": "sum",
