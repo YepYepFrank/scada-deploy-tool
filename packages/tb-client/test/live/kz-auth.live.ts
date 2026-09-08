@@ -1,13 +1,11 @@
 // live:kz `tskv/**` 的 token 校验(联调环境待办 ⑤)。
-// 2026-09-07 实测 tskv/** 只判 header 非空(biz/** 正常);高潮同日确认是配置错误、会改成与 /biz 相同策略。
-// 修复前这组必然红,所以只在 KZ_AUTH_FIXED=1 时跑:KZ_AUTH_FIXED=1 pnpm -F @grid/tb-client test:live
+// 2026-09-07 实测 tskv/** 只判 header 非空(biz/** 正常);高潮改成与 /biz 相同策略,2026-09-08 新 jar 部署到镜像后本组 4/4 通过。
+// 现在随 test:live 常跑;若现场 kz 是旧版本,这组会红——那就是部署错了版本。
 import { beforeAll, describe, expect, it } from 'vitest'
 import { LegacyDataSource } from '../../src/index'
 import { entityId, hasCreds, KZ_BASE, loginToken, MIRROR, TB_BASE } from './env'
 
-const enabled = hasCreds && process.env.KZ_AUTH_FIXED === '1'
-
-describe.skipIf(!enabled)(`kz tskv/** 鉴权(live @ ${KZ_BASE},KZ_AUTH_FIXED=1)`, () => {
+describe.skipIf(!hasCreds)(`kz tskv/** 鉴权(live @ ${KZ_BASE})`, () => {
   let ied: { type: 'DEVICE'; id: string }
   let token: string
   const query = () => ({
@@ -49,6 +47,6 @@ describe.skipIf(!enabled)(`kz tskv/** 鉴权(live @ ${KZ_BASE},KZ_AUTH_FIXED=1)`
     await expect(ds(() => expired).ext(query())).rejects.toThrow(/token|401/i)
   })
 
-  // 第二步(按实体归属过滤:客户 token 读未分配的设备应被拒)高潮未承诺,先记 todo
+  // 第二步(按实体归属过滤):2026-09-08 实测新版仍不做——客户 token 读未分配设备返回 code 200(见 docs/联调记录/kz-更新部署-2026-09-08.md);高潮未承诺,先记 todo
   it.todo('客户 token 读未分配给它的设备 → 拒绝(实体归属过滤)')
 })
