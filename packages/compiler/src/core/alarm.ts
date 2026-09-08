@@ -63,7 +63,7 @@ export function alarmMetadata(
         alarmType,
         severity: a.severity,
         propagate: !!opts.propagate,
-        ...(opts.propagate ? { propagateRelationTypes: ['Contains'] } : {}),
+        ...(opts.propagate ? { relationTypes: ['Contains'] } : {}),
         useMessageAlarmData: false,
         overwriteAlarmDetails: false,
         dynamicSeverity: false,

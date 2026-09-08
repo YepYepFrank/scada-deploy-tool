@@ -70,7 +70,7 @@ pnpm tbsite alarm-export sites/xx.tbsite.json --write   # 再写到资产 JIZHAN
 - 迁移表:`renameTable(prev, next)` 列出「上一版没前缀、新版带前缀的同实体同名 key」;CLI `publish` 在 TB 上有旧版配置时写 `migrations/<站点>.rename.json`(与声明文件同目录),**只生成不执行**。
 - 再发布清理旧输出:`publish` 的 cf 步骤先读站点资产上的上一版 `siteConfig`,删除它声明过、这一版不再有的设备 / 汇聚 CF(只删本站点自己写过的名字,不碰存量;也给单实体 5 个 CF 的上限腾位)。
 - 汇聚 / 收益资产随站点:asset 步骤把 `tbsite-agg` 资产分给站点资产所属 Customer,并建 `站点 Contains 资产` 关系(编辑器资产树、Customer 视角都靠这两条)。
-- `alarm.propagate: true`:建告警节点 `propagate + propagateRelationTypes: ['Contains']`,设备告警沿 `汇聚资产 Contains 设备`、`站点 Contains 汇聚资产` 上传到站点资产,页面「告警列表」绑站点资产即见全站告警。默认 false(parity 不变);向导新建站点默认开。
+- `alarm.propagate: true`:建告警节点 `propagate + relationTypes: ['Contains']`(TB 4.3.1 的字段名;曾误写成 `propagateRelationTypes`,节点会启动失败、告警静默不建,2026-09-08 修),设备告警沿 `汇聚资产 Contains 设备`、`站点 Contains 汇聚资产` 上传到站点资产,页面「告警列表」绑站点资产即见全站告警。默认 false(parity 不变);向导新建站点默认开。
 - 站点声明文件放 `dev/sites/<站点>.tbsite.json`(入库,可重放);镜像仙人山:`sites/xrs-mirror-test.tbsite.json`(2026-09-06)。
 
 ## 严格 PagePayload、漂移检测与迁移表执行(2026-09-08)

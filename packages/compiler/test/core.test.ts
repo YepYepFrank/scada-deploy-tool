@@ -431,11 +431,13 @@ describe('ADR-003 输出前缀', () => {
     }
     const off = alarmMetadata('c', [a]).nodes.find(n => n.name === '告警: x')!
     expect(off.configuration.propagate).toBe(false)
-    expect(off.configuration.propagateRelationTypes).toBeUndefined()
+    expect(off.configuration.relationTypes).toBeUndefined()
     const on = compile(base({ alarm: { propagate: true }, computations: [a] })).alarm!.metadata.nodes.find(
       n => n.name === '告警: x'
     )!
-    expect(on.configuration).toMatchObject({ propagate: true, propagateRelationTypes: ['Contains'] })
+    expect(on.configuration).toMatchObject({ propagate: true, relationTypes: ['Contains'] })
+    // TB 4.3.1 的 TbCreateAlarmNodeConfiguration 没有 propagateRelationTypes 字段,写了会让节点启动失败(2026-09-08 镜像实测)
+    expect(on.configuration).not.toHaveProperty('propagateRelationTypes')
   })
 
   it('校验:前缀必须是字母开头的标识', () => {
