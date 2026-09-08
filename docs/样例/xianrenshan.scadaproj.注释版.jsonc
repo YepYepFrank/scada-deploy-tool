@@ -1,0 +1,568 @@
+// ============================================================================
+// 仙人山服务区 · 站点声明项目文件(.scadaproj)· 注释版
+// ----------------------------------------------------------------------------
+// 这是 xianrenshan.scadaproj 的逐段注释版(JSONC:把 // 注释删掉就是原文件)。
+// 为了可读,12 台设备只展开前 3 台,其余用「…」表示——完整内容看同目录的 xianrenshan.scadaproj。
+//
+// 术语:
+//   TB  = ThingsBoard CE 4.3(镜像 http://192.168.20.61:8080),REST 接口都在 /api/**,
+//         实时推送走 WebSocket /api/ws/plugins/telemetry?token=<JWT>
+//   kz  = 同事的扩展服务(同机 :8099,前缀 /kzserver),归档历史(分钟 / 5 分钟 / 小时 / 天 / 月 / 年桶)
+//   id  = TB 里实体的 UUID。本文件里所有 id 都是「上次解析的提示」,发布 / 打开时按 name 重新查一遍(ADR-002),
+//         所以换一套 TB 也能重放;这里的 id 全部是镜像上的真实值。
+// ============================================================================
+{
+  // 项目文件格式版本,固定 1(向导 / 编辑器只认这个值,parseProject 校验)
+  "version": 1,
+
+  // ── 连接信息 ────────────────────────────────────────────────────────────
+  // 第 1 步「连接与站点」填的 TB 地址与账号。永远不含密码(parseProject 见到 password 字段直接报错)。
+  // 登录接口:POST /api/auth/login {username, password} → {token, refreshToken};之后所有请求带 X-Authorization: Bearer <token>
+  "connection": {
+    "base": "http://192.168.20.61:8080",
+    "user": "tenant@thingsboard.org" // 必须是租户管理员(TENANT_ADMIN):向导要建资产 / 规则链 / 计算字段
+  },
+
+  // 站点标识(英文短名)。三处必须一致:这里、rules.site.name、TB 里站点资产(type=tbsite)的 name。
+  // 大屏地址就用它:site.html?site=xianrenshan
+  "siteName": "xianrenshan",
+
+  // ── 元数据快照 ──────────────────────────────────────────────────────────
+  // 第 1 步点「连接并发现设备」时抓的名单,只是离线打开项目文件时的候选列表,不是权威数据(权威永远是 TB 当前状态)。
+  // 来源接口:GET /api/tenant/devices?pageSize=1000&page=0(设备)、GET /api/tenant/assets?pageSize=1000&page=0(资产)
+  "metaSnapshot": {
+    "takenAt": 1788831000000, // 抓取时刻,毫秒时间戳(2026-09-08 09:30 +08:00)
+    "devices": [
+      { "name": "SSP1_GP1_IED1", "type": "IED" }, // name = TB 设备名(网关上报名),type = TB 设备类型 / Profile 名
+      { "name": "SSP1_GP8_IED1", "type": "IED" },
+      { "name": "SSP1_GP12_IED1", "type": "IED" },
+      { "name": "SSP2_GP1_IED1", "type": "IED" },
+      { "name": "SSP2_GP5_IED1", "type": "IED" },
+      { "name": "PDR1_LP1_IED1", "type": "IED" },
+      { "name": "PDR1_LP9_IED1", "type": "IED" },
+      { "name": "PDR4_T3_IED1", "type": "IED" },
+      { "name": "PDR4_LP1_IED1", "type": "IED" },
+      { "name": "PDR4_LP9_IED1", "type": "IED" },
+      { "name": "PDR1_PGC1_METER1", "type": "METER" },
+      { "name": "PDR4_LP1_ATS1", "type": "ATS" }
+    ],
+    "assets": [
+      { "name": "xianrenshan", "type": "tbsite" }, // 站点资产:工具创建,siteConfig 属性存 rules
+      { "name": "xianrenshan-agg", "type": "tbsite-agg" }, // 汇聚资产:工具创建,calc_* 的跨设备汇聚结果写在它上面
+      { "name": "SITE_OVERVIEW", "type": "报表" }, // ↓ 以下 7 个是后端同事(高潮)已有的站点级资产,页面直接引用它们的遥测
+      { "name": "REALTIME_TOTAL_LOAD_POWER", "type": "RT-负荷总功率类型" },
+      { "name": "REALTIME_TOTAL_PV_POWER", "type": "RT-光伏出力总功率" },
+      { "name": "REALTIME_TOTAL_WIND_POWER", "type": "RT-风电出力总功率" },
+      { "name": "REALTIME_TOTAL_GREEN_POWER", "type": "RT-绿电出力总功率" },
+      { "name": "REALTIME_TOTAL_EV_CHARGING_POWER", "type": "RT-EV 充电总功率" },
+      { "name": "HIST_TOTAL_POWER_CONSUMPTION", "type": "HIS-总用电量" }
+    ]
+  },
+
+  // ── 页面组态 pages[] ─────────────────────────────────────────────────────
+  // 前端真正消费的部分。每一项 = 一张页面 = TB 里一个 type=ScadaPage 的资产,页面 JSON 原样存在该资产的
+  // 服务端属性 pageConfig 里(字符串);pageConfigHistory 存最近 10 版;资产 additionalInfo.version 是当前版本号。
+  //
+  // 宿主 / 大屏读页面的接口链:
+  //   ① 列页面:GET /api/tenant/assets?type=ScadaPage(租户)或 GET /api/customer/{customerId}/assets?type=ScadaPage(客户账号,只列分给它的)
+  //     只列某站点的页面:GET /api/relations?fromId=<站点资产id>&fromType=ASSET&relationType=Contains → 取 to.entityType=ASSET 且 type=ScadaPage 的
+  //   ② 读配置:GET /api/plugins/telemetry/ASSET/{页面资产id}/values/attributes/SERVER_SCOPE?keys=pageConfig → [{key:"pageConfig", value:"<JSON 字符串>"}]
+  //   ③ JSON.parse 后过 validatePageConfig(),交给 <ScadaPage :config>
+  "pages": [
+    // ========== 页面 1:运营总览(态势总览台模板)==========
+    {
+      "schemaVersion": 1, // PageConfig 的 schema 版本(契约 §3),固定 1
+      "template": "overview-a", // 页面模板 id:overview-a = 态势总览台,槽位 banner / s1–s4(数字卡)/ g1–g4(图表)
+      "title": "仙人山服务区 · 运营总览", // 页面标题;也是发布时页面资产的默认名(可用 --name 覆盖)
+      "widgets": [
+        // 每个组件:{ id 页内唯一, slot 放在哪个槽位, type 组件类型, props 外观参数, bindings 数据来源 }
+        {
+          "id": "banner-alarms",
+          "slot": "banner",
+          "type": "alarm-list", // 告警列表
+          "props": { "title": "全站告警", "compact": true, "maxRows": 5 }, // compact = 横幅模式(一行滚动)
+          "bindings": {
+            // mode "alarm":读该实体的活动告警。因为 rules.alarm.propagate=true,设备上的告警会沿 Contains 关系传播到站点资产,
+            // 所以绑站点资产一处就能看到全站告警。
+            // 接口:GET /api/alarm/ASSET/{id}?pageSize=100&page=0&searchStatus=ACTIVE&sortProperty=createdTime&sortOrder=DESC,每 10 秒轮询;
+            // 客户账号无权访问该实体时 TB 回 403 → 组件显示「不可用」
+            "alarms": {
+              "mode": "alarm",
+              "entity": { "type": "ASSET", "id": "22e38540-a2c1-11f1-b6b5-f5e88fe257c3", "name": "xianrenshan" } // 站点资产(工具创建;镜像上这个 id 是 xrs-mirror-test)
+            }
+          }
+        },
+        {
+          "id": "kpi-load",
+          "slot": "s1",
+          "type": "number-card", // 数字卡:一个数 + 单位
+          "props": {
+            "title": "全站负荷总功率",
+            "subtitle": "TOTAL LOAD",
+            "unit": "kW",
+            "decimals": 1,
+            "sub": "REALTIME_TOTAL_LOAD_POWER · tsLoadPowerTotal" // 卡片底部小字,纯展示
+          },
+          "bindings": {
+            // mode "ts":实时遥测最新值。走 WebSocket:连接 /api/ws/plugins/telemetry?token=…,发
+            //   { "tsSubCmds": [{ "entityType":"ASSET", "entityId":"8ac7…", "cmdId":1, "keys":"tsLoadPowerTotal", "scope":"LATEST_TELEMETRY" }] }
+            // TB 先推一次当前值,之后值变化即推 { subscriptionId:1, data:{ tsLoadPowerTotal:[[ts, "1257.9"]] } }。
+            // 首屏兜底也可 GET /api/plugins/telemetry/ASSET/{id}/values/timeseries?keys=tsLoadPowerTotal(最新一点)。
+            // 这个资产和 key 是后端同事算好的全站负荷(他们的规则链写入),工具只读。
+            "value": {
+              "mode": "ts",
+              "entity": { "type": "ASSET", "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_LOAD_POWER" },
+              "key": "tsLoadPowerTotal"
+            }
+          }
+        },
+        {
+          "id": "kpi-gen",
+          "slot": "s2",
+          "type": "number-card",
+          "props": { "title": "全站发电功率", "subtitle": "GENERATION", "unit": "kW", "decimals": 1, "sub": "SITE_OVERVIEW · totalGenerationPower", "color": "#199e70" },
+          "bindings": {
+            // 同上,ts 订阅;SITE_OVERVIEW 是后端的「站内概况」报表资产,totalGenerationPower 是其中的全站发电功率
+            "value": {
+              "mode": "ts",
+              "entity": { "type": "ASSET", "id": "e6d97bb0-5250-11f1-90ba-53cf2ab0fe96", "name": "SITE_OVERVIEW" },
+              "key": "totalGenerationPower"
+            }
+          }
+        },
+        {
+          "id": "kpi-ied-total",
+          "slot": "s3",
+          "type": "number-card",
+          "props": { "title": "IED 进线总有功", "subtitle": "IED · 工具汇聚", "unit": "kW", "decimals": 1, "sub": "xianrenshan-agg · calc_totalP", "color": "#19b7ff" },
+          "bindings": {
+            // 这一项的数据是**工具自己算的**:rules.computations 里「全站总有功功率」= 所有 IED 的 P 求和,
+            // 编译成 TB 计算字段(Calculated Field)写到汇聚资产 xianrenshan-agg 的遥测 calc_totalP 上(calc_ 前缀 = ADR-003)。
+            // 读法和别的遥测完全一样(ts 订阅),前端不用区分是谁算的。
+            "value": {
+              "mode": "ts",
+              "entity": { "type": "ASSET", "id": "03520f30-aa6e-11f1-88c6-2b21f8c26565", "name": "xianrenshan-agg" }, // 汇聚资产(工具创建;镜像上此 id 是 xrs-mirror-test-agg)
+              "key": "calc_totalP"
+            }
+          }
+        },
+        {
+          "id": "kpi-pv",
+          "slot": "s4",
+          "type": "number-card",
+          "props": { "title": "光伏出力总功率", "subtitle": "PV OUTPUT", "unit": "kW", "decimals": 1, "sub": "REALTIME_TOTAL_PV_POWER · tsPvPowerTotal", "color": "#f2b134" },
+          "bindings": {
+            "value": {
+              "mode": "ts",
+              "entity": { "type": "ASSET", "id": "95bf2370-527c-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_PV_POWER" }, // 后端资产:光伏出力
+              "key": "tsPvPowerTotal"
+            }
+          }
+        },
+        {
+          "id": "chart-24h",
+          "slot": "g1", // g1 是模板里的必填槽位(required),空着不能发布
+          "type": "line", // 曲线;chartStyle: line | area | bar
+          "props": { "title": "IED 总有功 / 全站负荷", "subtitle": "24H · 5 分钟均值(TB)", "unit": "kW", "chartStyle": "area", "smooth": true },
+          "bindings": {
+            // mode "ts-history":TB 短历史(≤ 3 天;生产 TB 的秒级原始数据 3–7 天后被 kz 清掉,所以更长的窗口要走 ext)。
+            // 接口:GET /api/plugins/telemetry/{type}/{id}/values/timeseries?keys=calc_totalP&startTs=<now-24h>&endTs=<now>&interval=300000&agg=AVG&limit=…
+            //   interval 由 window 自动选:≤2h 原始点,2h–24h 5 分钟桶,24h–3d 1 小时桶(可用 interval 字段覆盖)
+            // 返回 { calc_totalP:[{ts, value:"12862.1"}, …] };之后再叠加 ts 订阅让曲线尾部实时增长。
+            // series 是数组:一条线一项;图例名 = key(同事 KEY 清单里的名字)
+            "series": [
+              {
+                "mode": "ts-history",
+                "entity": { "type": "ASSET", "id": "03520f30-aa6e-11f1-88c6-2b21f8c26565", "name": "xianrenshan-agg" },
+                "keys": ["calc_totalP"],
+                "window": "24h",
+                "agg": "AVG"
+              },
+              {
+                "mode": "ts-history",
+                "entity": { "type": "ASSET", "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_LOAD_POWER" },
+                "keys": ["tsLoadPowerTotal"],
+                "window": "24h",
+                "agg": "AVG"
+              }
+            ]
+          }
+        },
+        {
+          "id": "chart-30d",
+          "slot": "g2",
+          "type": "line",
+          "props": { "title": "光伏出力 / 全站发电", "subtitle": "30 天 · 日均值(kz 归档)", "unit": "kW", "chartStyle": "bar" },
+          "bindings": {
+            // mode "ext" + source "kz":长窗口走同事的归档服务(ADR-004 路线 A)。
+            // 接口:GET {kz}/kzserver/tskv/{桶}/telemetry/{type}/{id}/values/timeseries?keys=tsPvPowerTotal&startTs=&endTs=&interval=86400000&agg=AVG
+            //   桶由 interval 决定:1m→minute 5m→minutefive 1h→hour 1d→day 1M→month 1y→year(不给 interval 时按窗口自动选)
+            //   头:X-Authorization: Bearer <同一个 TB token>(2026-09-08 起 kz 校验它;无 / 假 token → code 500 / 401)
+            //   返回 { code:200, data:{ tsPvPowerTotal:[{ts, value, zdValue}, …] } };code≠200 时 msg 是错误文字(如「key不存在」)
+            // 同域部署时 {kz} 就是 /kz(nginx 反代);单文件大屏用 URL 参数 ?kz=http://主机:8099
+            "series": [
+              {
+                "mode": "ext",
+                "source": "kz",
+                "window": "30d",
+                "interval": "1d",
+                "params": {
+                  "entity": { "type": "ASSET", "id": "95bf2370-527c-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_PV_POWER" },
+                  "keys": ["tsPvPowerTotal"],
+                  "agg": "AVG" // kz 支持 AVG / MAX / MIN / ZD(ZD = 最后值)
+                }
+              },
+              {
+                "mode": "ext",
+                "source": "kz",
+                "window": "30d",
+                "interval": "1d",
+                "params": {
+                  "entity": { "type": "ASSET", "id": "e6d97bb0-5250-11f1-90ba-53cf2ab0fe96", "name": "SITE_OVERVIEW" },
+                  "keys": ["totalGenerationPower"],
+                  "agg": "AVG"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "table-areas",
+          "slot": "g3",
+          "type": "table", // 表格;mode "latest" = 每行一个最新值(另有 "history" 模式列时间序列)
+          "props": {
+            "title": "分区负荷",
+            "mode": "latest",
+            "columns": [
+              // columns[i] 与 bindings.rows[i] 一一对应:第 i 行显示第 i 个绑定的值
+              { "label": "一级开闭所 SSP1", "unit": "kW", "decimals": 1 },
+              { "label": "二级开闭所 SSP2", "unit": "kW", "decimals": 1 },
+              { "label": "配电房 PDR", "unit": "kW", "decimals": 1 },
+              { "label": "全站(绝对值)", "unit": "kW", "decimals": 1 }
+            ]
+          },
+          "bindings": {
+            // 四行都来自同一个后端资产的四个 key(分区负荷是他们按区域汇总好的);ts 订阅时四个 key 会合并成一条 tsSubCmds
+            "rows": [
+              { "mode": "ts", "entity": { "type": "ASSET", "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_LOAD_POWER" }, "key": "tsLoadPowerTotalSSP1" },
+              { "mode": "ts", "entity": { "type": "ASSET", "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_LOAD_POWER" }, "key": "tsLoadPowerTotalSSP2" },
+              { "mode": "ts", "entity": { "type": "ASSET", "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_LOAD_POWER" }, "key": "tsLoadPowerTotalPDR" },
+              { "mode": "ts", "entity": { "type": "ASSET", "id": "8ac72990-5277-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_LOAD_POWER" }, "key": "tsLoadPowerTotalABS" }
+            ]
+          }
+        },
+        {
+          "id": "overview-green",
+          "slot": "g4",
+          "type": "overview-card", // 概览卡:若干「标签 + 数值」行
+          "props": {
+            "title": "新能源与充电",
+            "items": [
+              // items[i] 与 bindings.items[i] 一一对应
+              { "label": "光伏出力", "unit": "kW" },
+              { "label": "风电出力", "unit": "kW" },
+              { "label": "绿电出力合计", "unit": "kW" },
+              { "label": "EV 充电总功率", "unit": "kW" }
+            ]
+          },
+          "bindings": {
+            // 四个不同的后端 RT 资产,各取一个 key
+            "items": [
+              { "mode": "ts", "entity": { "type": "ASSET", "id": "95bf2370-527c-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_PV_POWER" }, "key": "tsPvPowerTotal" },
+              { "mode": "ts", "entity": { "type": "ASSET", "id": "a815cf60-527c-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_WIND_POWER" }, "key": "tsWindPowerTotal" },
+              { "mode": "ts", "entity": { "type": "ASSET", "id": "cae873d0-527c-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_GREEN_POWER" }, "key": "tsGreenPowerTotal" },
+              { "mode": "ts", "entity": { "type": "ASSET", "id": "dcf14de0-527c-11f1-90ba-53cf2ab0fe96", "name": "REALTIME_TOTAL_EV_CHARGING_POWER" }, "key": "tsEvPowerCharging" }
+            ]
+          }
+        }
+      ]
+    },
+
+    // ========== 页面 2:南区配电房(三栏监控屏模板,设备级绑定)==========
+    // monitor-3col 槽位:banner(横幅)、l1–l3(左栏)、main(中央主视区)、c1–c2(主视区下方两图)、r1–r3(右栏)
+    // 这张页面全部绑设备遥测,展示「工具认领的设备」怎么直接上屏。设备 id 就是 TB 设备的 UUID(GET /api/tenant/devices?deviceName=<名> 可查)
+    {
+      "schemaVersion": 1,
+      "template": "monitor-3col",
+      "title": "仙人山服务区 · 南区配电房",
+      "widgets": [
+        {
+          "id": "banner",
+          "slot": "banner",
+          "type": "alarm-list",
+          "props": { "title": "南区配电房告警", "compact": true, "maxRows": 5 },
+          "bindings": {
+            // 仍绑站点资产(告警已传播上来);想只看南区,可以改绑具体设备,一台设备一个 alarm 绑定
+            "alarms": { "mode": "alarm", "entity": { "type": "ASSET", "id": "22e38540-a2c1-11f1-b6b5-f5e88fe257c3", "name": "xianrenshan" } }
+          }
+        },
+        {
+          "id": "l1",
+          "slot": "l1",
+          "type": "number-card",
+          "props": { "title": "进线 1 有功", "subtitle": "PDR4_LP1", "unit": "kW", "decimals": 1, "sub": "南区配电房 · 进线 1 保护测控" },
+          "bindings": {
+            // 设备遥测:网关上报到 TB 设备 PDR4_LP1_IED1 的 key P。ts 订阅 entityType=DEVICE
+            "value": { "mode": "ts", "entity": { "type": "DEVICE", "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP1_IED1" }, "key": "P" }
+          }
+        },
+        {
+          "id": "l2",
+          "slot": "l2",
+          "type": "gauge", // 仪表盘:min / max 是量程
+          "props": { "title": "进线 1 A 相电压", "subtitle": "Ua", "unit": "V", "min": 180, "max": 260, "decimals": 1 },
+          "bindings": {
+            "value": { "mode": "ts", "entity": { "type": "DEVICE", "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP1_IED1" }, "key": "Ua" }
+          }
+        },
+        {
+          "id": "l3",
+          "slot": "l3",
+          "type": "status-light", // 状态灯:绑定值 == onValue(按字符串比)→ on 态,否则 off 态
+          "props": { "title": "进线 1 断路器", "onValue": "1", "onLabel": "合位", "offLabel": "分位", "sub": "CB" },
+          "bindings": {
+            "state": { "mode": "ts", "entity": { "type": "DEVICE", "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP1_IED1" }, "key": "CB" } // CB = 断路器位置遥信
+          }
+        },
+        {
+          "id": "main",
+          "slot": "main", // 主视区(接线图暂缓,一期放曲线 / 表格 / 图片)
+          "type": "line",
+          "props": { "title": "南区配电房进线有功", "subtitle": "24H · 5 分钟均值", "unit": "kW", "chartStyle": "area", "smooth": true },
+          "bindings": {
+            // 两台进线装置各一条 P 的 24 小时历史(TB 短历史接口,同页面 1 的 chart-24h)
+            "series": [
+              { "mode": "ts-history", "entity": { "type": "DEVICE", "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP1_IED1" }, "keys": ["P"], "window": "24h", "agg": "AVG" },
+              { "mode": "ts-history", "entity": { "type": "DEVICE", "id": "c62170b0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP9_IED1" }, "keys": ["P"], "window": "24h", "agg": "AVG" }
+            ]
+          }
+        },
+        {
+          "id": "c1",
+          "slot": "c1",
+          "type": "dual-axis", // 双轴曲线:primary 画左轴,secondary 画右轴
+          "props": { "title": "3 号变有功 / 无功", "subtitle": "24H", "unitL": "kW", "unitR": "kvar", "decimals": 2 },
+          "bindings": {
+            "primary": [{ "mode": "ts-history", "entity": { "type": "DEVICE", "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_T3_IED1" }, "keys": ["P"], "window": "24h", "agg": "AVG" }],
+            "secondary": [{ "mode": "ts-history", "entity": { "type": "DEVICE", "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_T3_IED1" }, "keys": ["Q"], "window": "24h", "agg": "AVG" }]
+          }
+        },
+        {
+          "id": "c2",
+          "slot": "c2",
+          "type": "table",
+          "props": {
+            "title": "进线三相电流",
+            "mode": "latest",
+            "columns": [
+              { "label": "进线 1 Ia", "unit": "A", "decimals": 1 },
+              { "label": "进线 1 Ib", "unit": "A", "decimals": 1 },
+              { "label": "进线 1 Ic", "unit": "A", "decimals": 1 },
+              { "label": "进线 2 Ia", "unit": "A", "decimals": 1 },
+              { "label": "进线 2 Ib", "unit": "A", "decimals": 1 },
+              { "label": "进线 2 Ic", "unit": "A", "decimals": 1 }
+            ]
+          },
+          "bindings": {
+            // 同一台设备的多个 key 合并成一条 tsSubCmds(keys:"Ia,Ib,Ic"),两台设备两条
+            "rows": [
+              { "mode": "ts", "entity": { "type": "DEVICE", "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP1_IED1" }, "key": "Ia" },
+              { "mode": "ts", "entity": { "type": "DEVICE", "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP1_IED1" }, "key": "Ib" },
+              { "mode": "ts", "entity": { "type": "DEVICE", "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP1_IED1" }, "key": "Ic" },
+              { "mode": "ts", "entity": { "type": "DEVICE", "id": "c62170b0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP9_IED1" }, "key": "Ia" },
+              { "mode": "ts", "entity": { "type": "DEVICE", "id": "c62170b0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP9_IED1" }, "key": "Ib" },
+              { "mode": "ts", "entity": { "type": "DEVICE", "id": "c62170b0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP9_IED1" }, "key": "Ic" }
+            ]
+          }
+        },
+        {
+          "id": "r1",
+          "slot": "r1",
+          "type": "number-card",
+          "props": { "title": "进线 2 有功", "subtitle": "PDR4_LP9", "unit": "kW", "decimals": 1, "sub": "南区配电房 · 进线 2 保护测控" },
+          "bindings": {
+            "value": { "mode": "ts", "entity": { "type": "DEVICE", "id": "c62170b0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP9_IED1" }, "key": "P" }
+          }
+        },
+        {
+          "id": "r2",
+          "slot": "r2",
+          "type": "number-card",
+          "props": { "title": "配电房进线总有功", "subtitle": "工具汇聚", "unit": "kW", "decimals": 1, "sub": "xianrenshan-agg · calc_pdrInP", "color": "#19b7ff" },
+          "bindings": {
+            // 工具算的第二个汇聚量:rules.computations「配电房进线总有功」= 前缀 PDR1_LP / PDR4_LP 的 4 台 IED 的 P 求和 → 汇聚资产 calc_pdrInP
+            "value": { "mode": "ts", "entity": { "type": "ASSET", "id": "03520f30-aa6e-11f1-88c6-2b21f8c26565", "name": "xianrenshan-agg" }, "key": "calc_pdrInP" }
+          }
+        },
+        {
+          "id": "r3",
+          "slot": "r3",
+          "type": "status-light",
+          "props": { "title": "进线 ATS", "onValue": "1", "onLabel": "主供", "offLabel": "备供", "sub": "switch_state" },
+          "bindings": {
+            "state": { "mode": "ts", "entity": { "type": "DEVICE", "id": "c654dcc0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_LP1_ATS1" }, "key": "switch_state" } // ATS 设备的开关状态遥信
+          }
+        }
+      ]
+    }
+  ],
+
+  // ── 站点规则声明 rules(tbsite/v2)────────────────────────────────────────
+  // 向导第 2、3 步的产物;发布时(第 5 步「发布并打开大屏」或 CLI `tbsite publish`)编译器把它变成 TB 里的:
+  //   ① 每台设备上的计算字段(Calculated Field):POST /api/calculatedField
+  //   ② 汇聚资产 xianrenshan-agg 及其上的分层计算字段(跨设备求和):POST /api/asset + /api/calculatedField
+  //   ③ 两条规则链:「Site Alarms · xianrenshan」(阈值告警)与「Site Rollups · xianrenshan」(多级归档):POST /api/ruleChain + /api/ruleChain/metadata,
+  //      并在 Root Rule Chain 里加一个转发节点把设备消息送进告警链
+  //   ④ 站点资产 xianrenshan(type=tbsite):POST /api/asset,服务端属性 siteConfig = 这一段的原文、siteConfigHistory = 最近 10 版、calcCascadeKeys = 级联白名单
+  //   ⑤ 站点 / 汇聚 / 页面资产分给站点所属 Customer:POST /api/customer/{customerId}/asset/{assetId};站点资产 Contains 汇聚资产与页面资产:POST /api/relation
+  // 所有写入幂等,重复发布只更新不重复创建;`tbsite cleanup` 只删带 calc_ 前缀 / 工具命名的东西。
+  "rules": {
+    "schema": "tbsite/v2", // 声明格式版本
+    "site": { "name": "xianrenshan", "label": "仙人山服务区" }, // name = 站点资产名(英文);label = 给人看的中文名
+    "outputPrefix": "calc_", // ADR-003:工具算出来的所有 key 统一加这个前缀(totalP → calc_totalP),一眼能认、清理只删自己的
+
+    // 认领的设备与测点(第 2 步)。name = TB 设备名(权威);type / profile 来自 TB;keys 是勾选的测点,label / unit 是工程人员改的中文名与单位,只用于页面选件器显示
+    "devices": [
+      {
+        "name": "SSP1_GP1_IED1", // TB 设备名(网关上报名),id 在镜像上是 bafa3730-528e-11f1-90ba-53cf2ab0fe96,发布时按名解析,文件里不存
+        "label": "一级开闭所 · 进线 1 测控",
+        "type": "IED",
+        "profile": "IED", // Device Profile 名;设备模板的 selector.profiles 按它匹配
+        "keys": [
+          { "key": "Uab", "label": "线电压 Uab", "unit": "V" }, // key = 网关上报的遥测名,必须与 TB 里一致
+          { "key": "Ubc", "label": "线电压 Ubc", "unit": "V" },
+          { "key": "Uca", "label": "线电压 Uca", "unit": "V" },
+          { "key": "P", "label": "有功功率", "unit": "kW" },
+          { "key": "Q", "label": "无功功率", "unit": "kvar" },
+          { "key": "switch_state", "label": "开关状态", "unit": "" },
+          { "key": "Ia", "label": "A 相电流", "unit": "A" },
+          { "key": "Ib", "label": "B 相电流", "unit": "A" },
+          { "key": "Ic", "label": "C 相电流", "unit": "A" },
+          { "key": "F", "label": "频率", "unit": "Hz" },
+          { "key": "CB", "label": "断路器位置", "unit": "" },
+          { "key": "COM", "label": "通讯计数", "unit": "" } // 累加的通讯计数,不是 0/1;通讯中断用 TB 自带的离线判定,工具不处理
+        ]
+      },
+      {
+        "name": "PDR4_LP1_IED1", // id c5aeffd0-528e-11f1-90ba-53cf2ab0fe96;页面 2 大量引用的南区进线 1
+        "label": "南区配电房 · 进线 1 保护测控",
+        "type": "IED",
+        "profile": "IED",
+        "keys": [
+          { "key": "P", "label": "有功功率", "unit": "kW" },
+          { "key": "Q", "label": "无功功率", "unit": "kvar" },
+          { "key": "switch_state", "label": "开关状态", "unit": "" },
+          { "key": "Ua", "label": "A 相电压", "unit": "V" }, // 配电房进线装置报的是相电压 Ua/Ub/Uc,开闭所装置报线电压 Uab/Ubc/Uca
+          { "key": "Ub", "label": "Ub", "unit": "V" },
+          { "key": "Uc", "label": "Uc", "unit": "V" },
+          { "key": "Ia", "label": "A 相电流", "unit": "A" },
+          { "key": "Ib", "label": "B 相电流", "unit": "A" },
+          { "key": "Ic", "label": "C 相电流", "unit": "A" },
+          { "key": "CB", "label": "断路器位置", "unit": "" },
+          { "key": "COM", "label": "通讯计数", "unit": "" }
+        ]
+      },
+      {
+        "name": "PDR4_LP1_ATS1", // id c654dcc0-528e-11f1-90ba-53cf2ab0fe96;ATS 不是 IED,不会被下面的 IED 模板套到
+        "label": "南区配电房 · 进线 ATS",
+        "type": "ATS",
+        "profile": "ATS",
+        "keys": [
+          { "key": "switch_state", "label": "开关状态", "unit": "" },
+          { "key": "temperature", "label": "temperature", "unit": "℃" }
+        ]
+      }
+      // … 其余 9 台(SSP1_GP8 / SSP1_GP12 / SSP2_GP1 / SSP2_GP5 / PDR1_LP1 / PDR1_LP9 / PDR4_LP9 / PDR4_T3 各 IED,PDR1_PGC1_METER1)同结构,见完整文件
+    ],
+
+    // 设备模板(第 3 步「按设备类型批量配」):selector 选中哪些设备,items 对每台都套一遍;新认领的设备只要匹配就自动套用
+    "deviceTemplates": [
+      {
+        "name": "IED 功率监控",
+        "selector": { "profiles": ["IED"], "prefixes": [] }, // profiles 按 Profile 名匹配;prefixes 按设备名前缀匹配(空 = 不限)
+        "items": [
+          {
+            // 阈值告警 → 告警链里的一组节点:相关性过滤 → 阈值判断 → 建告警 / 清告警,结果写 TB 告警表(页面 alarm-list 读的就是它)
+            "template": "alarm.threshold",
+            "name": "功率越限告警", // = TB 告警的 alarmType
+            "key": "P",
+            "condition": { "op": "gt", "value": 45 }, // op: gt / lt / gte / lte / eq / ne
+            "severity": "WARNING", // TB 告警级别:CRITICAL / MAJOR / MINOR / WARNING / INDETERMINATE
+            "trigger": "edge", // edge = 状态翻转才动作(值变了才报一次;上次状态存设备服务端属性 almState_P_gt);level = 每条消息都判
+            "message": "有功功率越限:{value} kW" // 告警 details.message,{value} 触发时替换成实时值
+          },
+          {
+            // 表达式运算 → 每台设备一个计算字段(TB Calculated Field,SIMPLE 类型):输出遥测 calc_pqSum = P + Q
+            "template": "expr.add",
+            "inputs": { "a": { "key": "P" }, "b": { "key": "Q" } }, // 模板里不带 device,展开时绑定到每台被选中的设备自身
+            "output": "pqSum" // 实际 key = outputPrefix + output = calc_pqSum,写回该设备自己的遥测
+          }
+        ]
+      },
+      {
+        "name": "配电房进线电压监视",
+        "selector": { "profiles": ["IED"], "prefixes": ["PDR1_LP", "PDR4_LP"] }, // 只套 4 台配电房进线装置(它们才有 Ua)
+        "items": [
+          // 与高潮给的告警模板样例同义(Ua < 200 / Ua > 240):同一个 key 两条规则,分别报「偏低 / 偏高」
+          { "template": "alarm.threshold", "name": "400V 电压越下限", "key": "Ua", "condition": { "op": "lt", "value": 200 }, "severity": "MAJOR", "trigger": "level", "message": "进线电压偏低:{value} V" },
+          { "template": "alarm.threshold", "name": "400V 电压越上限", "key": "Ua", "condition": { "op": "gt", "value": 240 }, "severity": "MAJOR", "trigger": "level", "message": "进线电压偏高:{value} V" }
+        ]
+      },
+      {
+        "name": "IED 多级归档(代表间隔)",
+        "selector": { "profiles": ["IED"], "prefixes": ["SSP1_GP1_", "SSP1_GP8_"] },
+        "items": [
+          // 多级归档 → 归档链(Site Rollups)里每台设备一条流水线:P 每 5 分钟 avg/max → 每小时 → 每天,
+          // 产出 calc_PAvg5m / calc_PMax5m / calc_PAvg1h / calc_PMax1h / …,写回设备自己的遥测(ADR-003 级联白名单 calcCascadeKeys 就是这些 key)
+          { "template": "window.cascade", "keys": ["P"], "aggs": ["avg", "max"] }
+        ]
+      }
+    ],
+
+    // 单项运算(第 3 步「对具体设备或整站配一条」)
+    "computations": [
+      {
+        // 跨设备汇聚 → 汇聚资产上的分层计算字段(每 5 台一组求和,再总和,绕开 TB 单实体 5 个 CF 的上限)
+        "template": "aggregate.crossEntity",
+        "name": "全站总有功功率",
+        "selector": { "profiles": ["IED"], "prefixes": [] }, // 参与求和的设备:全部 IED(本样例 10 台)
+        "key": "P",
+        "agg": "sum", // sum / avg
+        "asset": "xianrenshan-agg", // 结果写到哪个资产(工具按名找,没有就建,type=tbsite-agg,并分给站点 Customer)
+        "output": "totalP" // → calc_totalP;页面 1 的 kpi-ied-total 与 chart-24h 读的就是它
+      },
+      {
+        "template": "aggregate.crossEntity",
+        "name": "配电房进线总有功",
+        "selector": { "profiles": ["IED"], "prefixes": ["PDR1_LP", "PDR4_LP"] }, // 4 台配电房进线
+        "key": "P",
+        "agg": "sum",
+        "asset": "xianrenshan-agg",
+        "output": "pdrInP" // → calc_pdrInP;页面 2 的 r2 读它
+      }
+    ],
+
+    "rollup": {}, // 归档链参数(链名等),空 = 用默认名「Site Rollups · <站点>」
+    "alarm": {
+      "propagate": true // 告警沿 Contains 关系向上传播(设备 → 汇聚 / 站点资产),页面的告警列表绑站点资产即可看全站
+    }
+  },
+
+  // ── 发布记录 published ────────────────────────────────────────────────────
+  // key = 页面资产名(默认 = 页面 title);每张页面最近一次发布的结果。编辑器用它做漂移检测:
+  // 再次发布前读 GET /api/asset/{assetId} 的 additionalInfo.version,与这里的 version 不一致 → 提示「线上版本与本地不一致」(覆盖 / 保留 / 取消)
+  "published": {
+    "仙人山服务区 · 运营总览": {
+      "assetId": "8c435790-aa82-11f1-88c6-2b21f8c26565", // 该页面的 ScadaPage 资产 id(镜像上真实存在,当前线上为 v1;样例假设发到了 v3)
+      "version": 3, // 发布后 additionalInfo.version;pageConfigHistory 里保留最近 10 版可回滚
+      "at": 1788833561000, // 发布时刻(毫秒时间戳)
+      "by": "YY" // 操作者(--by 或登录账号),同时写进 pageConfigHistory 条目
+    },
+    "仙人山服务区 · 南区配电房": {
+      "assetId": "9e0b6a20-8c5d-11f1-88c6-2b21f8c26565", // 样例值:这张页面没有真的发布,镜像上不存在此资产
+      "version": 1,
+      "at": 1788833645000,
+      "by": "YY"
+    }
+  }
+}

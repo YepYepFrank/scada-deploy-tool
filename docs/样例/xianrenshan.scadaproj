@@ -175,7 +175,7 @@
           "type": "number-card",
           "props": {
             "title": "IED 进线总有功",
-            "subtitle": "32 IED · 工具汇聚",
+            "subtitle": "IED · 工具汇聚",
             "unit": "kW",
             "decimals": 1,
             "sub": "xianrenshan-agg · calc_totalP",
@@ -488,7 +488,7 @@
               "mode": "ts",
               "entity": {
                 "type": "DEVICE",
-                "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96",
                 "name": "PDR4_LP1_IED1"
               },
               "key": "P"
@@ -512,7 +512,7 @@
               "mode": "ts",
               "entity": {
                 "type": "DEVICE",
-                "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96",
                 "name": "PDR4_LP1_IED1"
               },
               "key": "Ua"
@@ -535,7 +535,7 @@
               "mode": "ts",
               "entity": {
                 "type": "DEVICE",
-                "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96",
                 "name": "PDR4_LP1_IED1"
               },
               "key": "CB"
@@ -559,7 +559,7 @@
                 "mode": "ts-history",
                 "entity": {
                   "type": "DEVICE",
-                  "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                  "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_LP1_IED1"
                 },
                 "keys": [
@@ -572,7 +572,7 @@
                 "mode": "ts-history",
                 "entity": {
                   "type": "DEVICE",
-                  "id": "5c9c2b20-528e-11f1-90ba-53cf2ab0fe96",
+                  "id": "c62170b0-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_LP9_IED1"
                 },
                 "keys": [
@@ -601,7 +601,7 @@
                 "mode": "ts-history",
                 "entity": {
                   "type": "DEVICE",
-                  "id": "5d3e7c30-528e-11f1-90ba-53cf2ab0fe96",
+                  "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_T3_IED1"
                 },
                 "keys": [
@@ -616,7 +616,7 @@
                 "mode": "ts-history",
                 "entity": {
                   "type": "DEVICE",
-                  "id": "5d3e7c30-528e-11f1-90ba-53cf2ab0fe96",
+                  "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_T3_IED1"
                 },
                 "keys": [
@@ -674,7 +674,7 @@
                 "mode": "ts",
                 "entity": {
                   "type": "DEVICE",
-                  "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                  "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_LP1_IED1"
                 },
                 "key": "Ia"
@@ -683,7 +683,7 @@
                 "mode": "ts",
                 "entity": {
                   "type": "DEVICE",
-                  "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                  "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_LP1_IED1"
                 },
                 "key": "Ib"
@@ -692,7 +692,7 @@
                 "mode": "ts",
                 "entity": {
                   "type": "DEVICE",
-                  "id": "5c1f0a10-528e-11f1-90ba-53cf2ab0fe96",
+                  "id": "c5aeffd0-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_LP1_IED1"
                 },
                 "key": "Ic"
@@ -701,7 +701,7 @@
                 "mode": "ts",
                 "entity": {
                   "type": "DEVICE",
-                  "id": "5c9c2b20-528e-11f1-90ba-53cf2ab0fe96",
+                  "id": "c62170b0-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_LP9_IED1"
                 },
                 "key": "Ia"
@@ -710,7 +710,7 @@
                 "mode": "ts",
                 "entity": {
                   "type": "DEVICE",
-                  "id": "5c9c2b20-528e-11f1-90ba-53cf2ab0fe96",
+                  "id": "c62170b0-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_LP9_IED1"
                 },
                 "key": "Ib"
@@ -719,7 +719,7 @@
                 "mode": "ts",
                 "entity": {
                   "type": "DEVICE",
-                  "id": "5c9c2b20-528e-11f1-90ba-53cf2ab0fe96",
+                  "id": "c62170b0-528e-11f1-90ba-53cf2ab0fe96",
                   "name": "PDR4_LP9_IED1"
                 },
                 "key": "Ic"
@@ -743,7 +743,7 @@
               "mode": "ts",
               "entity": {
                 "type": "DEVICE",
-                "id": "5c9c2b20-528e-11f1-90ba-53cf2ab0fe96",
+                "id": "c62170b0-528e-11f1-90ba-53cf2ab0fe96",
                 "name": "PDR4_LP9_IED1"
               },
               "key": "P"
@@ -790,7 +790,7 @@
               "mode": "ts",
               "entity": {
                 "type": "DEVICE",
-                "id": "5dd9ae40-528e-11f1-90ba-53cf2ab0fe96",
+                "id": "c654dcc0-528e-11f1-90ba-53cf2ab0fe96",
                 "name": "PDR4_LP1_ATS1"
               },
               "key": "switch_state"

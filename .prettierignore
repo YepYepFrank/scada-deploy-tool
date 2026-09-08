@@ -12,3 +12,5 @@ apps/deploy-tool/src/provisioner/
 apps/deploy-tool/src/components/
 apps/deploy-tool/src/api/
 apps/deploy-tool/src/style.css
+# 注释版样例(JSONC)手工排版,注释与字段并排
+*.jsonc
