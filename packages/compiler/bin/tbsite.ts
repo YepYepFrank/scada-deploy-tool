@@ -4,11 +4,17 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
+  ALARM_CONFIG_ASSET,
+  ALARM_CONFIG_ATTR,
+  ALARM_DEVICES_ATTR,
   cleanup,
   compile,
   ConfigError,
   expandConfig,
+  exportAlarmConfig,
   findAsset,
+  findDevice,
+  writeAlarmConfig,
   listSitePages,
   renameTable,
   publish,
@@ -28,6 +34,10 @@ const USAGE = `用法:
   tbsite cleanup  <站点.tbsite.json> [连接参数]
   tbsite page     <页面.pageconfig.json> --site <站点资产名> [--name 页面资产名] [--by 操作者] [连接参数]
   tbsite pages    --site <站点资产名> [连接参数]        列出站点下的 ScadaPage 资产与 version
+  tbsite alarm-export <站点.tbsite.json> [--out 文件] [--offline] [--write [--force] [--asset 资产名]] [连接参数]
+                  把站点的阈值告警导出成同事的 JSON(alarm_config 模板数组 + alarm_devices 设备清单,ADR-001 二期)。
+                  默认连 TB 解析设备 id / label 并写文件(缺省 sites/exports/<站点>.alarm_config.json);--offline 不连;
+                  --write 再写到资产 JIZHAN_ALARM_CONFIG(没有则建)的服务端属性,已有非空内容时拒绝,--force 覆盖并把旧值存到 .prev.json
 
 连接参数(都可以省略,默认从环境变量取):
   --base URL           TB 地址,默认 $TB_BASE,再默认镜像 http://192.168.20.61:8080
@@ -232,6 +242,61 @@ async function main(argv: string[]) {
     console.log(
       `\n完成:ScadaPage「${r.pageName}」version ${r.version} · 历史 ${r.historyLength} 版 · 资产 ${r.assetId}`
     )
+    return 0
+  }
+  if (cmd === 'alarm-export') {
+    const cfg = readConfig(file)
+    const errs = validateConfig(cfg)
+    if (errs.length) throw new ConfigError(errs)
+    const { computations } = expandConfig(cfg)
+    const deviceIds: Record<string, string> = {}
+    const labels: Record<string, string> = {}
+    let conn: Awaited<ReturnType<typeof connect>> | null = null
+    if (!flags.offline) {
+      conn = await connect(flags)
+      console.log(`✓ 已登录 ${conn.base}(${conn.user})`)
+      const names = new Set<string>()
+      for (const c of computations)
+        if (c.template === 'alarm.threshold')
+          for (const d of c.devices?.length ? c.devices : c.device ? [c.device] : []) names.add(d)
+      for (const name of names) {
+        const d = await findDevice(conn.api, name)
+        if (d) {
+          deviceIds[name] = d.id.id
+          if (typeof d.label === 'string' && d.label) labels[name] = d.label
+        }
+      }
+    }
+    const exp = exportAlarmConfig(cfg, computations, { deviceIds, labels })
+    const out =
+      typeof flags.out === 'string'
+        ? resolve(flags.out)
+        : resolve(file, '..', 'exports', `${cfg.site.name}.alarm_config.json`)
+    mkdirSync(resolve(out, '..'), { recursive: true })
+    writeFileSync(
+      out,
+      JSON.stringify({ alarm_config: exp.alarm_config, alarm_devices: exp.alarm_devices }, null, 2) + '\n'
+    )
+    console.log(`导出 ${exp.alarm_config.length} 条模板 · ${exp.alarm_devices.length} 台设备 → ${out}`)
+    for (const n of exp.notes) console.log('  ~', n)
+    if (!flags.write) return 0
+    if (!conn) throw new Error('--write 需要连接 TB,不能与 --offline 同用')
+    const r = await writeAlarmConfig(conn.api, exp, {
+      assetName: typeof flags.asset === 'string' ? flags.asset : undefined,
+      force: !!flags.force,
+    })
+    if (!r.ok) {
+      console.log(
+        `✗ 资产 ${typeof flags.asset === 'string' ? flags.asset : ALARM_CONFIG_ASSET}(${r.assetId})已有非空 ${ALARM_CONFIG_ATTR},未覆盖;加 --force 覆盖(旧值会存到 ${out.replace(/\.json$/, '.prev.json')})`
+      )
+      return 1
+    }
+    if (r.previous) {
+      const prev = out.replace(/\.json$/, '.prev.json')
+      writeFileSync(prev, JSON.stringify(r.previous, null, 2) + '\n')
+      console.log(`  旧值已存 ${prev}`)
+    }
+    console.log(`✓ 已写入资产 ${r.assetId}${r.created ? '(新建)' : ''} 的 ${ALARM_CONFIG_ATTR} / ${ALARM_DEVICES_ATTR}`)
     return 0
   }
   console.error(`未知命令 ${cmd}\n\n${USAGE}`)

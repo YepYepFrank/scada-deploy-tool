@@ -57,6 +57,8 @@ pnpm tbsite validate sites/xx.tbsite.json
 pnpm tbsite plan sites/xx.tbsite.json            # 只打印计划;--json 输出整份计划
 pnpm tbsite publish sites/xx.tbsite.json         # TB_BASE / TB_USER / TB_PASSWORD 来自 dev/.env.local
 pnpm tbsite cleanup sites/xx.tbsite.json
+pnpm tbsite alarm-export sites/xx.tbsite.json           # 阈值告警 → 同事 JSON 文件 sites/exports/<站点>.alarm_config.json(ADR-001 二期)
+pnpm tbsite alarm-export sites/xx.tbsite.json --write   # 再写到资产 JIZHAN_ALARM_CONFIG 的 alarm_config / alarm_devices;已有非空内容拒绝,--force 覆盖并留 .prev.json
 ```
 
 ## 输出前缀 `calc_`、级联白名单与迁移表(ADR-003,2026-09-06)
@@ -68,6 +70,13 @@ pnpm tbsite cleanup sites/xx.tbsite.json
 - 汇聚 / 收益资产随站点:asset 步骤把 `tbsite-agg` 资产分给站点资产所属 Customer,并建 `站点 Contains 资产` 关系(编辑器资产树、Customer 视角都靠这两条)。
 - `alarm.propagate: true`:建告警节点 `propagate + propagateRelationTypes: ['Contains']`,设备告警沿 `汇聚资产 Contains 设备`、`站点 Contains 汇聚资产` 上传到站点资产,页面「告警列表」绑站点资产即见全站告警。默认 false(parity 不变);向导新建站点默认开。
 - 站点声明文件放 `dev/sites/<站点>.tbsite.json`(入库,可重放);镜像仙人山:`sites/xrs-mirror-test.tbsite.json`(2026-09-06)。
+
+## 告警导出成同事格式(ADR-001 决定 3,2026-09-08)
+
+- `exportAlarmConfig(cfg, computations, { deviceIds?, labels? })`(`src/core/alarm-export.ts`,纯函数):把展开后的 `alarm.threshold` 运算导出成同事第二轮回填给的样例格式——模板数组 `alarm_config: [{ title, alarm_severity, operator, key, value }]` + 设备清单 `alarm_devices: [{ entityId, entityName, labelName }]`。`title` 取告警名(没有则 `key op value`),`operator` 用 `> < >= <= == !=`,同一模板去重,设备按首次出现排序,`labelName` 优先 TB label → 声明里的 `label` → 设备名。
+- 对不上的地方只提示不阻塞(`notes`):边沿触发(他们的格式没有字段)、文案(不带)、离线导出没有 id、某条规则只覆盖部分设备(他们是「模板 × 清单」全乘,会对清单里全部设备生效)。
+- `writeAlarmConfig(api, exp, { assetName?, assetType?, force? })`(`src/writer/alarm-export.ts`):资产 `JIZHAN_ALARM_CONFIG`(第三轮回填定的名字,没有则以 type `default` 新建,不分配 Customer)的 SERVER_SCOPE 属性 `alarm_config` / `alarm_devices`,以 JSON 值写入。这是他们引擎读的属性,**默认不覆盖已有非空内容**,`force` 才覆盖并把旧值带回(CLI 存成 `.prev.json`)。
+- 一期仍由工具的站点规则链产生告警;导出只是给同事导入 / 核对。切到他们引擎时:`tbsite alarm-export --write` + 删掉我们的告警链(`cleanup`),两套引擎不要同时写告警表。镜像上 2026-09-08 已写过一次(资产 `691a45c0-ab32-11f1-88c6-2b21f8c26565`,1 条模板 + 32 台 IED)。
 
 ## 与旧 publisher.js 的差异
 

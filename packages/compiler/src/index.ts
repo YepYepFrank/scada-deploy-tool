@@ -25,6 +25,17 @@ export {
 } from './core/prefix'
 export { revenueMetadata } from './core/revenue'
 export {
+  exportAlarmConfig,
+  ALARM_CONFIG_ASSET,
+  ALARM_CONFIG_ATTR,
+  ALARM_DEVICES_ATTR,
+  type AlarmExport,
+  type AlarmExportOptions,
+  type JizhanAlarmTemplate,
+  type JizhanAlarmDevice,
+} from './core/alarm-export'
+export { writeAlarmConfig, type WriteAlarmConfigOptions, type WriteAlarmConfigResult } from './writer/alarm-export'
+export {
   compile,
   expandConfig,
   placeholderIds,
