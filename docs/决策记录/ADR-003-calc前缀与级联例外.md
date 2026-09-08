@@ -44,3 +44,7 @@ YY:YY 日期:2026-09-06
 ## 落地(2026-09-06)
 
 `packages/compiler/src/core/prefix.ts`:决定 1(`outputPrefix`,向导新站点默认 `calc_`,旧站点不改名)、决定 2(白名单由配置推导,写入告警链入口过滤 `cascadeGuardScript` 与站点资产属性 `calcCascadeKeys`)、决定 3(`renameTable` → CLI 写 `migrations/<站点>.rename.json`,只生成不执行)。首个带前缀站点:镜像 `xrs-mirror-test`(`sites/xrs-mirror-test.tbsite.json`),`calc_totalP` / `calc_pqSum` / `calc_PAvg5m…` 已在跑。见 compiler README「输出前缀」一节。
+
+## 执行(2026-09-08)
+
+决定 3 的「执行」(原列二期 backlog)已实现:`tbsite migrate <站点> [--apply] [--from] [--delete-old] [--rewrite-pages]`——按迁移表把旧 key 的历史复制到新 key(只补新 key 首点之前,`from` 可限起点),可选删旧 CF 与旧数据、改页面文件里的绑定。镜像上对 `SSP1_GP1_IED1` 跑通(Phase 3 旧 `pqSum` → `calc_pqSum`,12.2 万点 25 秒,再 dry-run 为 0 点,随后删旧);事后发现 `pqSum` 其实是模拟器原始测点、并非工具旧输出(手写迁移表的前提错了,误拷的历史已撤销)——**迁移表必须来自 `renameTable`,不能手写**;`migrate` 的行为本身按设计工作。记录 `docs/联调记录/迁移执行-2026-09-08.md`。同日 `tbsite drift` 落地(本地 vs 线上的漂移)。

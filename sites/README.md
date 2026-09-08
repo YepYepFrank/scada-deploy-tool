@@ -3,7 +3,8 @@
 | 目录 / 文件 | 内容 | 发布命令 |
 |---|---|---|
 | `<站点>.tbsite.json` | 站点声明:认领的设备与测点、设备模板、运算 / 告警、`outputPrefix`、`alarm.propagate`(tbsite/v2) | `node packages/compiler/bin/tbsite.mjs publish sites/<站点>.tbsite.json --by <人>` |
-| `migrations/<站点>.rename.json` | ADR-003 迁移表(发布时自动生成,只记录不执行) | — |
+| `migrations/<站点>.rename.json` | ADR-003 迁移表(发布时自动生成;也可按同格式手写,如 `xrs-mirror-test` 的 Phase 3 旧 `pqSum`) | `tbsite migrate sites/<站点>.tbsite.json [--apply]`(缺省 dry-run;记录 `docs/联调记录/迁移执行-2026-09-08.md`) |
+| — | 本地文件 vs 线上的漂移(声明 + `pages/<站点>-*.pageconfig.json`) | `tbsite drift sites/<站点>.tbsite.json` |
 | `exports/<站点>.alarm_config.json` | ADR-001 二期:阈值告警导出成同事的 JSON(`tbsite alarm-export`;`--write` 写入资产 `JIZHAN_ALARM_CONFIG`) | `tbsite alarm-export sites/<站点>.tbsite.json` |
 | `pages/<站点>-<页面>.pageconfig.json` | 页面配置(渲染器契约 `PageConfig`,实体带 `name`,发布时按名重解析 id) | `node packages/compiler/bin/tbsite.mjs page sites/pages/<文件> --site <站点> --name "<页面名>" --by <人>` |
 
