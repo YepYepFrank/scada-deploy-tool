@@ -36,6 +36,44 @@ export {
 } from './core/alarm-export'
 export { writeAlarmConfig, type WriteAlarmConfigOptions, type WriteAlarmConfigResult } from './writer/alarm-export'
 export {
+  diffJson,
+  normalizeEntityRefs,
+  summarizeDiff,
+  readSiteState,
+  detectSiteDrift,
+  type DiffEntry,
+  type LocalPage,
+  type PageDrift,
+  type SiteDriftReport,
+} from './writer/drift'
+export {
+  applyRenameTable,
+  rewritePageKeys,
+  type ApplyRenameOptions,
+  type MigrateRowResult,
+  type PageKeyChange,
+} from './writer/migrate'
+export {
+  eachBinding,
+  extEntityOf,
+  hasEntity,
+  type EntityRef,
+  type Aggregation,
+  type ExtInterval,
+  type AttrScope,
+  type Binding,
+  type BindingMode,
+  type TsBinding,
+  type TsHistoryBinding,
+  type AttrBinding,
+  type AlarmBinding,
+  type ConstBinding,
+  type ExtBinding,
+  type EntityBinding,
+  type Action,
+  type WidgetConfig,
+} from './page/types'
+export {
   compile,
   expandConfig,
   placeholderIds,

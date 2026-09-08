@@ -57,6 +57,8 @@ pnpm tbsite validate sites/xx.tbsite.json
 pnpm tbsite plan sites/xx.tbsite.json            # 只打印计划;--json 输出整份计划
 pnpm tbsite publish sites/xx.tbsite.json         # TB_BASE / TB_USER / TB_PASSWORD 来自 dev/.env.local
 pnpm tbsite cleanup sites/xx.tbsite.json
+pnpm tbsite drift sites/xx.tbsite.json                  # 本地声明 / pages/ 文件 vs 线上 siteConfig / pageConfig 的差异(只读;--strict 给 CI)
+pnpm tbsite migrate sites/xx.tbsite.json [--apply] [--from 2026-09-06] [--delete-old] [--rewrite-pages]   # 执行 ADR-003 迁移表,缺省 dry-run
 pnpm tbsite alarm-export sites/xx.tbsite.json           # 阈值告警 → 同事 JSON 文件 sites/exports/<站点>.alarm_config.json(ADR-001 二期)
 pnpm tbsite alarm-export sites/xx.tbsite.json --write   # 再写到资产 JIZHAN_ALARM_CONFIG 的 alarm_config / alarm_devices;已有非空内容拒绝,--force 覆盖并留 .prev.json
 ```
@@ -70,6 +72,12 @@ pnpm tbsite alarm-export sites/xx.tbsite.json --write   # 再写到资产 JIZHAN
 - 汇聚 / 收益资产随站点:asset 步骤把 `tbsite-agg` 资产分给站点资产所属 Customer,并建 `站点 Contains 资产` 关系(编辑器资产树、Customer 视角都靠这两条)。
 - `alarm.propagate: true`:建告警节点 `propagate + propagateRelationTypes: ['Contains']`,设备告警沿 `汇聚资产 Contains 设备`、`站点 Contains 汇聚资产` 上传到站点资产,页面「告警列表」绑站点资产即见全站告警。默认 false(parity 不变);向导新建站点默认开。
 - 站点声明文件放 `dev/sites/<站点>.tbsite.json`(入库,可重放);镜像仙人山:`sites/xrs-mirror-test.tbsite.json`(2026-09-06)。
+
+## 严格 PagePayload、漂移检测与迁移表执行(2026-09-08)
+
+- `src/page/types.ts`:契约 §1–§3 的 TS 镜像(`PagePayload = PageConfig`、`WidgetConfig`、六种 `Binding`、`EntityRef`),不再用索引签名;`eachBinding / hasEntity / extEntityOf` 是遍历工具。`collectEntityRefs` 因此也把 `ext.params.entity` 纳入按名解析。向导传入时仍可 `as never`,发布器只读它认识的字段。
+- `src/writer/drift.ts`:`diffJson`(对象按键、数组按 name / key / id 对齐、叶子按值)、`normalizeEntityRefs`(`{type,id,name} → {type,name}`,去掉发布回填 id 的假差异)、`readSiteState`、`detectSiteDrift(api, cfg, pages)`。CLI `tbsite drift`;`publish` 前打印线上 vs 本地的差异摘要(仍以本地为准)。
+- `src/writer/migrate.ts`:`applyRenameTable(api, rows, { apply, from, deleteOld, report })` 把旧 key 历史复制到新 key(只补新 key 首点之前;`from` 再限起点;5000 点分页读、1000 点一批写),`deleteOld` 删同名 CF 与旧数据;`rewritePageKeys(page, rows)` 改页面文件里的绑定。CLI `tbsite migrate` 缺省 dry-run。镜像首跑记录 `docs/联调记录/迁移执行-2026-09-08.md`。
 
 ## 告警导出成同事格式(ADR-001 决定 3,2026-09-08)
 

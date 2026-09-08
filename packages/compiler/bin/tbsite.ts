@@ -1,12 +1,20 @@
 #!/usr/bin/env node
 // tbsite CLI:validate | plan | publish | cleanup | page | pages
 // 凭据只从环境变量 / --env-file 读(默认 TB_USER / TB_PASSWORD),不接受命令行明文,不写日志。
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { basename, resolve } from 'node:path'
 import {
   ALARM_CONFIG_ASSET,
   ALARM_CONFIG_ATTR,
   ALARM_DEVICES_ATTR,
+  applyRenameTable,
+  detectSiteDrift,
+  diffJson,
+  normalizeEntityRefs,
+  rewritePageKeys,
+  summarizeDiff,
+  type LocalPage,
+  type RenameEntry,
   cleanup,
   compile,
   ConfigError,
@@ -34,6 +42,11 @@ const USAGE = `用法:
   tbsite cleanup  <站点.tbsite.json> [连接参数]
   tbsite page     <页面.pageconfig.json> --site <站点资产名> [--name 页面资产名] [--by 操作者] [连接参数]
   tbsite pages    --site <站点资产名> [连接参数]        列出站点下的 ScadaPage 资产与 version
+  tbsite drift    <站点.tbsite.json> [--pages 目录] [--strict] [连接参数]
+                  本地声明 / 页面文件 vs 线上 siteConfig / pageConfig 的差异(只读;--strict 有差异时退出码 1,给 CI 用)
+  tbsite migrate  <站点.tbsite.json> [--table 迁移表] [--apply] [--from 时刻] [--delete-old] [--rewrite-pages] [--pages 目录] [连接参数]
+                  执行 ADR-003 迁移表:旧 key 的历史复制到新 key(只补新 key 首点之前的区间;--from 再限定起点);缺省 dry-run;
+                  --delete-old 复制后删旧 key 数据与同名 CF;--rewrite-pages 把页面文件里对旧 key 的绑定改名
   tbsite alarm-export <站点.tbsite.json> [--out 文件] [--offline] [--write [--force] [--asset 资产名]] [连接参数]
                   把站点的阈值告警导出成同事的 JSON(alarm_config 模板数组 + alarm_devices 设备清单,ADR-001 二期)。
                   默认连 TB 解析设备 id / label 并写文件(缺省 sites/exports/<站点>.alarm_config.json);--offline 不连;
@@ -85,6 +98,25 @@ function findEnvFile(): string {
     dir = parent
   }
   return resolve('.env.local')
+}
+
+/** --from:ISO 日期 / 时间或毫秒;非法即报错 */
+function parseTs(s: string): number {
+  const n = /^\d{12,}$/.test(s) ? Number(s) : Date.parse(s)
+  if (!Number.isFinite(n)) throw new Error(`--from 无法解析:${s}(用 2026-09-01 或 2026-09-01T00:00:00+08:00 或毫秒)`)
+  return n
+}
+
+/** 站点的本地页面文件:<pages 目录>/<站点名>-*.pageconfig.json(缺省 与声明文件同级的 pages/) */
+function loadLocalPages(file: string, siteName: string, flags: Args['flags']): LocalPage[] {
+  const dir = typeof flags.pages === 'string' ? resolve(flags.pages) : resolve(file, '..', 'pages')
+  if (!existsSync(dir)) return []
+  return readdirSync(dir)
+    .filter(f => f.startsWith(`${siteName}-`) && f.endsWith('.pageconfig.json'))
+    .map(f => {
+      const p = resolve(dir, f)
+      return { file: p, config: JSON.parse(readFileSync(p, 'utf8')) as PagePayload }
+    })
 }
 
 function readConfig(file: string): TbsiteConfig {
@@ -187,6 +219,17 @@ async function main(argv: string[]) {
         return null
       }
     })()
+    // 漂移提示(架构 §10 变更单向):线上 siteConfig 与本地文件不同时列出来;发布仍以本地为准
+    if (prevCfg) {
+      const d = diffJson(normalizeEntityRefs(cfg), normalizeEntityRefs(prevCfg), {
+        ignore: ['publishedAt', 'publishedBy', '_meta'],
+      })
+      if (d.length) {
+        console.log(`~ 线上 siteConfig 与本地有 ${d.length} 处差异(发布以本地为准;明细 tbsite drift):`)
+        for (const l of summarizeDiff(d).slice(0, 8)) console.log('   ', l)
+        if (d.length > 8) console.log(`    … 还有 ${d.length - 8} 处`)
+      }
+    }
     const failures = await publish(cfg, devIds, api, report, {
       publishedBy: typeof flags.by === 'string' ? flags.by : user,
     })
@@ -243,6 +286,75 @@ async function main(argv: string[]) {
       `\n完成:ScadaPage「${r.pageName}」version ${r.version} · 历史 ${r.historyLength} 版 · 资产 ${r.assetId}`
     )
     return 0
+  }
+  if (cmd === 'drift') {
+    const cfg = readConfig(file)
+    const pages = loadLocalPages(file, cfg.site.name, flags)
+    const { api, user, base } = await connect(flags)
+    console.log(`✓ 已登录 ${base}(${user})`)
+    const r = await detectSiteDrift(api, cfg, pages)
+    if (!r.remoteExists) console.log(`站点「${r.siteName}」线上没有 siteConfig(未发布过)`)
+    else if (!r.siteDiff.length) console.log(`✓ 站点声明与线上一致(资产 ${r.assetId},历史 ${r.historyLength} 版)`)
+    else {
+      console.log(`~ 站点声明与线上有 ${r.siteDiff.length} 处差异(资产 ${r.assetId}):`)
+      for (const l of summarizeDiff(r.siteDiff)) console.log('   ', l)
+    }
+    for (const p of r.pages) {
+      const f = basename(p.file)
+      if (!p.pageName) console.log(`~ 页面 ${f}「${p.title}」线上没有对应资产(未发布或已删)`)
+      else if (!p.diff) console.log(`~ 页面 ${f} ↔ ${p.pageName}:线上 pageConfig 为空`)
+      else if (!p.diff.length) console.log(`✓ 页面 ${f} ↔ ${p.pageName} version ${p.remoteVersion} 一致`)
+      else {
+        console.log(`~ 页面 ${f} ↔ ${p.pageName} version ${p.remoteVersion}:${p.diff.length} 处差异`)
+        for (const l of summarizeDiff(p.diff).slice(0, 20)) console.log('   ', l)
+        if (p.diff.length > 20) console.log(`    … 还有 ${p.diff.length - 20} 处`)
+      }
+    }
+    for (const n of r.remoteOnlyPages) console.log(`~ 线上页面「${n}」本地 pages/ 里没有文件`)
+    const drifted =
+      r.siteDiff.length > 0 ||
+      r.pages.some(p => !p.pageName || (p.diff?.length ?? 0) > 0) ||
+      r.remoteOnlyPages.length > 0
+    return flags.strict && drifted ? 1 : 0
+  }
+  if (cmd === 'migrate') {
+    const cfg = readConfig(file)
+    const table =
+      typeof flags.table === 'string'
+        ? resolve(flags.table)
+        : resolve(file, '..', 'migrations', `${cfg.site.name}.rename.json`)
+    if (!existsSync(table)) throw new Error(`没有迁移表 ${table}(publish 在旧 key 于新版带前缀出现时生成)`)
+    const rows = JSON.parse(readFileSync(table, 'utf8')) as RenameEntry[]
+    console.log(`迁移表 ${table}:${rows.length} 行${flags.apply ? '' : '(dry-run,加 --apply 执行)'}`)
+    const pages = loadLocalPages(file, cfg.site.name, flags)
+    let pageChanges = 0
+    for (const p of pages) {
+      const { page, changes } = rewritePageKeys(p.config, rows)
+      if (!changes.length) continue
+      pageChanges += changes.length
+      for (const c of changes)
+        console.log(
+          `  ${flags['rewrite-pages'] ? '✓' : '·'} 页面 ${basename(p.file)} ${c.at}:${c.entity}.${c.old} → ${c.new}`
+        )
+      if (flags['rewrite-pages']) writeFileSync(p.file, JSON.stringify(page, null, 2) + '\n')
+    }
+    if (pages.length && !pageChanges) console.log('  页面文件里没有对旧 key 的绑定')
+    else if (pageChanges && !flags['rewrite-pages'])
+      console.log(`  (${pageChanges} 处页面绑定要改名,加 --rewrite-pages 改文件;改完用 tbsite page 重新发布)`)
+    const { api, user, base } = await connect(flags)
+    console.log(`✓ 已登录 ${base}(${user})`)
+    const res = await applyRenameTable(api, rows, {
+      apply: !!flags.apply,
+      deleteOld: !!flags['delete-old'],
+      from: typeof flags.from === 'string' ? parseTs(flags.from) : undefined,
+      report: l => console.log('  ' + l),
+    })
+    const total = res.reduce((n, r) => n + r.points, 0)
+    console.log(
+      `${flags.apply ? '完成' : '计划'}:${res.filter(r => !r.skipped).length}/${rows.length} 行 · ${total} 点` +
+        (flags['delete-old'] && flags.apply ? ' · 旧 key 数据与同名 CF 已删' : '')
+    )
+    return res.some(r => r.skipped) ? 1 : 0
   }
   if (cmd === 'alarm-export') {
     const cfg = readConfig(file)
