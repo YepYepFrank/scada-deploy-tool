@@ -162,7 +162,7 @@ const conn = reactive({
   token: null,
   progress: '',
 })
-/* 记住登录(30 天):按环境存 localStorage(base64 混淆;内网工具场景) */
+/* 记住账号(30 天):按环境存 localStorage,只存账号名,密码每次都要输(2026-09-08 起;之前版本连密码一起 base64 存,读到旧格式时只取账号并立即改写) */
 const rememberLogin = ref(false)
 const LS_LOGIN = () => `gridops_login_${conn.env}`
 function loadSavedLogin() {
@@ -170,25 +170,26 @@ function loadSavedLogin() {
   try {
     const raw = localStorage.getItem(LS_LOGIN())
     if (!raw) return
-    const s = JSON.parse(decodeURIComponent(escape(atob(raw))))
-    if (Date.now() - s.ts > 30 * 86400000) {
+    let s
+    try {
+      s = JSON.parse(raw)
+    } catch {
+      s = JSON.parse(decodeURIComponent(escape(atob(raw)))) // 旧格式(base64,含密码)
+    }
+    if (!s || typeof s.u !== 'string' || Date.now() - s.ts > 30 * 86400000) {
       localStorage.removeItem(LS_LOGIN())
       return
     }
     conn.username = s.u
-    conn.password = s.p
     rememberLogin.value = true
+    if ('p' in s) persistLogin() // 旧格式:立刻用不含密码的新格式覆盖
   } catch {
     /* 存储损坏时按未保存处理 */
   }
 }
 function persistLogin() {
   try {
-    if (rememberLogin.value)
-      localStorage.setItem(
-        LS_LOGIN(),
-        btoa(unescape(encodeURIComponent(JSON.stringify({ u: conn.username, p: conn.password, ts: Date.now() }))))
-      )
+    if (rememberLogin.value) localStorage.setItem(LS_LOGIN(), JSON.stringify({ u: conn.username, ts: Date.now() }))
     else localStorage.removeItem(LS_LOGIN())
   } catch {
     /* 隐私模式等存储不可用时静默 */
@@ -1789,7 +1790,7 @@ function openFrontend() {
         </button>
       </div>
       <label class="remember-check">
-        <input type="checkbox" v-model="rememberLogin" />记住登录(30 天,保存在本机浏览器,勿在公用电脑勾选)
+        <input type="checkbox" v-model="rememberLogin" />记住账号(30 天,只记账号名不记密码,保存在本机浏览器)
       </label>
       <p v-if="conn.status === 'ok'" class="ok-msg">
         已发现 {{ devices.length }} 台设备({{ dataDeviceCount }} 台有数据
