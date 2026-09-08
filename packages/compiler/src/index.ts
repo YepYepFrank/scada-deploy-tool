@@ -97,6 +97,14 @@ export {
   listCfs,
 } from './writer/api'
 export { publish, wireRootChain, type PublishOptions } from './writer/publish'
+export {
+  checkChainHealth,
+  summarizeNodeError,
+  type ChainTarget,
+  type ChainHealthReport,
+  type HealthOptions,
+  type NodeHealthProblem,
+} from './writer/health'
 export { cleanup } from './writer/cleanup'
 export {
   publishPage,

@@ -1538,6 +1538,7 @@ const PUB_STEPS = [
   { id: 'rollup', label: '定时聚合链' },
   { id: 'alarm', label: '告警链 + Root 接线' },
   { id: 'asset', label: '站点配置写入 TB' },
+  { id: 'health', label: '规则节点自检' },
 ]
 const pub = reactive({ running: false, done: false, steps: {}, failures: [] })
 const STEP_CN = Object.fromEntries(PUB_STEPS.map(s => [s.id, s.label]))

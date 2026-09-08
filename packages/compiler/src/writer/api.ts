@@ -4,7 +4,8 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type TbApi = (url: string, data?: unknown, method?: 'GET' | 'POST' | 'DELETE') => Promise<any>
 
-export type StepId = 'validate' | 'devices' | 'cf' | 'agg' | 'revenue' | 'rollup' | 'alarm' | 'asset' | 'cleanup'
+export type StepId =
+  'validate' | 'devices' | 'cf' | 'agg' | 'revenue' | 'rollup' | 'alarm' | 'asset' | 'health' | 'cleanup'
 export type StepStatus = 'run' | 'ok' | 'err'
 export type Reporter = (step: StepId, status: StepStatus, detail?: string) => void
 

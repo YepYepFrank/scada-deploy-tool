@@ -20,7 +20,8 @@ src/
   migrate/              T3.1:旧 siteConfig.layout → PageConfig(migrateSiteConfig,纯函数;向导 src/migrate 只做转发)
   writer/               把计划落到 TB,注入 TbApi(与向导的 api(url, data, method) 同签名,可 mock)
     api.ts                TbApi / Reporter / RetryScope;findDevice / resolveDeviceIds / ensureAsset / ensureChain
-    publish.ts            publish(cfg, devIds, api, report, {publishedBy, retry, layeredSettleMs})
+    publish.ts            publish(cfg, devIds, api, report, {publishedBy, retry, layeredSettleMs, checkHealth})
+    health.ts             发布后自检:核对刚写的规则节点是否真的启动(checkChainHealth)
     cleanup.ts            cleanup(cfg, devIds, api, report)
 bin/tbsite.ts           CLI(tsup 打到 dist/bin,bin/tbsite.mjs 是启动壳)
 scripts/regen-python-plans.mjs   用冻结的 Python 版重生成 parity 快照(本机需 python)
@@ -29,7 +30,8 @@ src/page/publish-page.ts         页面发布器(T3.7):PageConfig → ScadaPage 
 test/
   parity.test.ts        TS 版 vs Python 版写入计划(快照 fixtures/*.plan.py.json 已入库,CI 不需要 Python)
   core.test.ts          校验 / 展开 / CF / 汇聚分层 / 聚合链 / 告警链 / compile
-  writer.test.ts        内存版 TB:二次发布幂等、retry 只重跑失败步骤、cleanup 不碰存量
+  writer.test.ts        内存版 TB:二次发布幂等、retry 只重跑失败步骤、cleanup 不碰存量、发布后自检
+  health.test.ts        自检判据:最近一次 STARTED、异常摘要、读不到事件不误判
   migrate.test.ts       T3.1 迁移函数:两份样本过 schema + 注册表,每种 card 映射、丢弃项、unresolved
   publish-page.test.ts  T3.7 页面发布器:六步、幂等、按名解析、注入失败逆序回滚、漂移
   live/                 连镜像的 live 用例(pnpm test:live,CI 不跑),见 live/README.md
@@ -55,7 +57,8 @@ CLI(先 `pnpm build`;凭据只从环境变量 / `.env.local` 读,不接受 `--pa
 ```bash
 pnpm tbsite validate sites/xx.tbsite.json
 pnpm tbsite plan sites/xx.tbsite.json            # 只打印计划;--json 输出整份计划
-pnpm tbsite publish sites/xx.tbsite.json         # TB_BASE / TB_USER / TB_PASSWORD 来自 dev/.env.local
+pnpm tbsite publish sites/xx.tbsite.json         # TB_BASE / TB_USER / TB_PASSWORD 来自 dev/.env.local;发布后自检节点,有起不来的即退出 1
+pnpm tbsite publish sites/xx.tbsite.json --no-health     # 跳过自检
 pnpm tbsite cleanup sites/xx.tbsite.json
 pnpm tbsite drift sites/xx.tbsite.json                  # 本地声明 / pages/ 文件 vs 线上 siteConfig / pageConfig 的差异(只读;--strict 给 CI)
 pnpm tbsite migrate sites/xx.tbsite.json [--apply] [--from 2026-09-06] [--delete-old] [--rewrite-pages]   # 执行 ADR-003 迁移表,缺省 dry-run
@@ -78,6 +81,19 @@ pnpm tbsite alarm-export sites/xx.tbsite.json --write   # 再写到资产 JIZHAN
 - `src/page/types.ts`:契约 §1–§3 的 TS 镜像(`PagePayload = PageConfig`、`WidgetConfig`、六种 `Binding`、`EntityRef`),不再用索引签名;`eachBinding / hasEntity / extEntityOf` 是遍历工具。`collectEntityRefs` 因此也把 `ext.params.entity` 纳入按名解析。向导传入时仍可 `as never`,发布器只读它认识的字段。
 - `src/writer/drift.ts`:`diffJson`(对象按键、数组按 name / key / id 对齐、叶子按值)、`normalizeEntityRefs`(`{type,id,name} → {type,name}`,去掉发布回填 id 的假差异)、`readSiteState`、`detectSiteDrift(api, cfg, pages)`。CLI `tbsite drift`;`publish` 前打印线上 vs 本地的差异摘要(仍以本地为准)。
 - `src/writer/migrate.ts`:`applyRenameTable(api, rows, { apply, from, deleteOld, report })` 把旧 key 历史复制到新 key(只补新 key 首点之前;`from` 再限起点;5000 点分页读、1000 点一批写),`deleteOld` 删同名 CF 与旧数据;`rewritePageKeys(page, rows)` 改页面文件里的绑定。CLI `tbsite migrate` 缺省 dry-run。镜像首跑记录 `docs/联调记录/迁移执行-2026-09-08.md`。
+
+## 发布后自检(2026-09-08)
+
+TB 的规则节点如果配置字段名不对,`init` 抛异常、actor 起不来,之后进入该节点的消息被**静默丢弃**:非调试模式下 TB 不记事件、节点错误计数也是 0。镜像上「建告警节点」因为写了 `propagateRelationTypes`(TB CE 4.3.1 只认 `relationTypes`)就这样失败了一天多,直到里程碑 C 做 24 小时采样才发现。
+
+唯一的痕迹是节点的 `LC_EVENT` 里一条 `STARTED success=false`。`publish` 写完链之后把它读回来核对(`writer/health.ts`):
+
+- 查本站点这次该有的链(告警 / 聚合 / 收益)的全部节点,外加 Root 链上**只查我们那条转发节点** —— 别人的节点不归我们判定。
+- 判据只有一条:某节点**最近一次** `STARTED` 的 `success === false`。修好重发后新的成功事件会覆盖旧的失败记录。
+- 报出链名、节点名、节点类型和摘要过的异常:首行 + 最后一层 `Caused by`(它通常直接点名错的字段,并列出该配置类认得的全部字段,照着改就行),几十行 Java 栈帧丢掉。
+- 有节点起不来 → 进 `failures`(step `health`),CLI 退出 1;站点配置照写(声明是真相,自检只是报告,改完编译器重发即可)。
+- **读不到事件一律不算失败**:接口报错、取不到 tenantId、事件还没落库,都只报「跳过 / 未判定」。宁可漏报也不能误报把发布挡住。链没被改动时(如「转发已就位」)不会有新事件,计入「暂无事件」属正常。
+- `--no-health` / `publish(..., { checkHealth: false })` 关掉。
 
 ## 告警导出成同事格式(ADR-001 决定 3,2026-09-08)
 

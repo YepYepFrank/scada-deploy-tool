@@ -6,8 +6,11 @@ import { cleanup, compile, publish, resolveDeviceIds, type StepId, type TbApi, t
 
 type Ent = { id: { id: string; entityType: string }; name: string; type?: string; root?: boolean; [k: string]: unknown }
 
-/** 极简 TB:设备 / 资产 / 规则链 / CF / 关系 / 属性 / 公开标记,按 publisher 用到的接口实现 */
-function fakeTb(deviceNames: string[]) {
+/**
+ * 极简 TB:设备 / 资产 / 规则链 / CF / 关系 / 属性 / 公开标记 / 节点生命周期事件,按 publisher 用到的接口实现。
+ * startFailures:节点名 → 异常文本,模拟「配置字段不对导致节点 init 失败」(2026-09-08 P0-1)。
+ */
+function fakeTb(deviceNames: string[], startFailures: Record<string, string> = {}) {
   let seq = 0
   const uid = () => `00000000-0000-0000-0000-${String(++seq).padStart(12, '0')}`
   const devices: Ent[] = deviceNames.map(name => ({ id: { id: uid(), entityType: 'DEVICE' }, name }))
@@ -15,7 +18,7 @@ function fakeTb(deviceNames: string[]) {
   const chains: Ent[] = [{ id: { id: uid(), entityType: 'RULE_CHAIN' }, name: 'Root Rule Chain', root: true }]
   type Meta = {
     ruleChainId: { id: string }
-    nodes: { type: string; name: string; configuration: Record<string, unknown> }[]
+    nodes: { type: string; name: string; configuration: Record<string, unknown>; id?: { id: string } }[]
     connections: unknown[]
     firstNodeIndex: number | null
   }
@@ -92,8 +95,19 @@ function fakeTb(deviceNames: string[]) {
     }
     if (p === '/api/ruleChain/metadata') {
       const md = data as Meta
+      // 真实 TB 保存时给每个节点分配 id,并重启这些节点的 actor(于是产生一条 LC_EVENT STARTED)
+      for (const n of md.nodes) n.id ||= { id: uid() }
       metadata[md.ruleChainId.id] = md
       return md
+    }
+    if (p === '/api/auth/user') return { tenantId: { id: 'tenant-0' } }
+    if ((m = p.match(/^\/api\/events\/RULE_NODE\/([^/]+)\/LC_EVENT$/))) {
+      const node = Object.values(metadata)
+        .flatMap(md => md.nodes)
+        .find(n => n.id?.id === m![1])
+      if (!node) return { data: [] }
+      const error = startFailures[node.name]
+      return { data: [{ createdTime: Date.now(), body: { event: 'STARTED', success: !error, error } }] }
     }
     if ((m = p.match(/^\/api\/(DEVICE|ASSET)\/(.+)\/calculatedFields$/)))
       return { data: cfs.filter(c => c.entityId.id === m![2]) }
@@ -209,7 +223,9 @@ describe('publish(写入器)', () => {
       'alarm',
       'asset',
     ])
-    expect(tb.calls.length - before).toBeLessThan(10)
+    // 跳过的步骤一次写入都不做(自检是只读的,不计在内;它在 retry 时照跑——正好是最需要确认节点起没起来的时候)
+    expect(tb.calls.slice(before).filter(c => !c.startsWith('GET '))).toEqual(['POST /api/calculatedField'])
+    expect(r2.log.filter(l => /^health:(ok|err)/.test(l)).at(-1)).toMatch(/^health:ok/)
   })
 
   it('设备不存在时在 devices 步骤终止;校验失败抛错', async () => {
@@ -328,5 +344,71 @@ describe('cleanup', () => {
     expect(tb.assets.map(a => a.name)).toEqual(['other'])
     expect(tb.cfs.map(c => c.name)).toEqual(['manual_cf'])
     expect(tb.metadata[tb.chains[0]!.id.id]!.nodes).toHaveLength(1)
+  })
+})
+
+describe('publish · 发布后自检(2026-09-08 P0-1)', () => {
+  const load = async (startFailures: Record<string, string> = {}) => {
+    const cfg = fixture('xrs-mirror-test.tbsite.json')
+    const tb = fakeTb(
+      cfg.devices.map(d => d.name),
+      startFailures
+    )
+    const { devIds } = await resolveDeviceIds(
+      tb.api,
+      cfg.devices.map(d => d.name)
+    )
+    return { cfg, tb, devIds }
+  }
+  const opts = { layeredSettleMs: 0, healthWaitMs: 0 }
+
+  it('全部节点起来了:health 步骤报节点数,发布无失败', async () => {
+    const { cfg, tb, devIds } = await load()
+    const r = collect()
+    expect(await publish(cfg, devIds, tb.api, r.report, opts)).toEqual([])
+    const line = r.log.filter(l => /^health:(ok|err)/.test(l)).at(-1)!
+    expect(line).toMatch(/^health:ok \d+ 个节点已启动$/)
+    // 三条站点链的节点 + Root 上我们那条转发节点都查了
+    expect(Number(line.match(/(\d+)/)![1])).toBeGreaterThan(10)
+  })
+
+  it('建告警节点因配置字段名不对起不来:发布返回 health 失败,错误里带根因', async () => {
+    const err =
+      'org.thingsboard.rule.engine.api.TbNodeException: init failed\n' +
+      '\tat org.thingsboard.server.actors.TbActorMailbox.tryInit(TbActorMailbox.java:69)\n' +
+      'Caused by: com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException: ' +
+      'Unrecognized field "propagateRelationTypes" (class TbCreateAlarmNodeConfiguration), ' +
+      'not marked as ignorable (12 known properties: "propagate", "relationTypes")'
+    const { cfg, tb, devIds } = await load({ '告警: 功率越限告警': err })
+    const r = collect()
+    const failures = await publish(cfg, devIds, tb.api, r.report, opts)
+    expect(failures).toHaveLength(1)
+    expect(failures[0]!.step).toBe('health')
+    expect(failures[0]!.output).toBe(`Site Alarms · ${cfg.site.name} · 告警: 功率越限告警`)
+    expect(failures[0]!.error).toContain('TbCreateAlarmNode')
+    expect(failures[0]!.error).toContain('propagateRelationTypes')
+    expect(failures[0]!.error).toContain('"relationTypes"')
+    expect(failures[0]!.error).not.toContain('TbActorMailbox') // 栈帧不带进来
+    expect(r.log.filter(l => /^health:(ok|err)/.test(l)).at(-1)).toMatch(/^health:err 1 个节点没能启动/)
+    // 站点配置照写:声明是真相,自检只是报告;修好编译器重发即可
+    expect(r.log.find(l => l.startsWith('asset:ok'))).toBeTruthy()
+  })
+
+  it('checkHealth: false 时完全不查(离线 / 不支持事件接口的环境)', async () => {
+    const { cfg, tb, devIds } = await load({ '告警: 功率越限告警': 'boom' })
+    const r = collect()
+    expect(await publish(cfg, devIds, tb.api, r.report, { ...opts, checkHealth: false })).toEqual([])
+    expect(r.log.some(l => l.startsWith('health:'))).toBe(false)
+  })
+
+  it('事件接口报错不挡发布:记为跳过', async () => {
+    const { cfg, tb, devIds } = await load()
+    const api: TbApi = async (url, data, method) => {
+      if (url.includes('/LC_EVENT')) throw new Error('HTTP 403 权限不足')
+      return tb.api(url, data, method)
+    }
+    const r = collect()
+    expect(await publish(cfg, devIds, api, r.report, opts)).toEqual([])
+    expect(r.log.filter(l => /^health:(ok|err)/.test(l)).at(-1)).toContain('跳过')
   })
 })

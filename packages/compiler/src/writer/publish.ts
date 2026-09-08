@@ -10,6 +10,7 @@ import { ConfigError, expandConfig, siteChainNames } from '../core/plan'
 import { revenueMetadata } from '../core/revenue'
 import { rollupGroups, rollupMetadata } from '../core/rollup'
 import { validateConfig } from '../core/validate'
+import { checkChainHealth, type ChainTarget } from './health'
 import {
   findAsset,
   findDevice,
@@ -29,6 +30,10 @@ export interface PublishOptions {
   retry?: RetryScope | null
   /** 分层汇聚时等分组遥测落库的毫秒数(测试可设 0) */
   layeredSettleMs?: number
+  /** 发布后核对规则节点是否真的起来了(默认开;见 writer/health.ts) */
+  checkHealth?: boolean
+  /** 自检等事件落库的毫秒数(测试可设 0) */
+  healthWaitMs?: number
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -146,7 +151,8 @@ export async function publish(
   report: Reporter,
   opts: PublishOptions = {}
 ): Promise<PublishFailure[]> {
-  const { publishedBy = '', retry = null, layeredSettleMs = 3000 } = opts
+  const { publishedBy = '', retry = null, layeredSettleMs = 3000, checkHealth = true, healthWaitMs } = opts
+  const startedAt = Date.now()
   const failures: PublishFailure[] = []
   const stepOn = (id: RetryScope['steps'][number]) => !retry || retry.steps.includes(id)
   const fail = (step: PublishFailure['step'], e: unknown, extra: Partial<PublishFailure> = {}) => {
@@ -359,43 +365,77 @@ export async function publish(
 
   // 6. 站点配置写入(保存原始声明,不含展开产物;不再设为 Public,T3.7)
   report('asset', 'run')
-  if (!stepOn('asset')) {
-    report('asset', 'ok', '跳过(上次已成功)')
-    return failures
-  }
-  try {
-    const { id } = await ensureAsset(api, cfg.site.name, SITE_ASSET_TYPE)
-    // 发布历史:上一版配置入栈,保留最近 10 版(约 <300KB,属性存储可承受)
-    let history: unknown[] = []
+  if (!stepOn('asset')) report('asset', 'ok', '跳过(上次已成功)')
+  else
     try {
-      const attrs: { key: string; value: unknown }[] =
-        (await api(
-          `/api/plugins/telemetry/ASSET/${id}/values/attributes/SERVER_SCOPE?keys=siteConfig,siteConfigHistory`
-        )) || []
-      const prev = attrs.find(a => a.key === 'siteConfig')?.value
-      const rawHist = attrs.find(a => a.key === 'siteConfigHistory')?.value
-      history = ((typeof rawHist === 'string' ? JSON.parse(rawHist) : rawHist) as unknown[]) || []
-      if (prev) {
-        const prevCfg = typeof prev === 'string' ? JSON.parse(prev) : prev
-        history.unshift({ ts: Date.now(), by: publishedBy, cfg: prevCfg })
-        history = history.slice(0, 10)
+      const { id } = await ensureAsset(api, cfg.site.name, SITE_ASSET_TYPE)
+      // 发布历史:上一版配置入栈,保留最近 10 版(约 <300KB,属性存储可承受)
+      let history: unknown[] = []
+      try {
+        const attrs: { key: string; value: unknown }[] =
+          (await api(
+            `/api/plugins/telemetry/ASSET/${id}/values/attributes/SERVER_SCOPE?keys=siteConfig,siteConfigHistory`
+          )) || []
+        const prev = attrs.find(a => a.key === 'siteConfig')?.value
+        const rawHist = attrs.find(a => a.key === 'siteConfigHistory')?.value
+        history = ((typeof rawHist === 'string' ? JSON.parse(rawHist) : rawHist) as unknown[]) || []
+        if (prev) {
+          const prevCfg = typeof prev === 'string' ? JSON.parse(prev) : prev
+          history.unshift({ ts: Date.now(), by: publishedBy, cfg: prevCfg })
+          history = history.slice(0, 10)
+        }
+      } catch {
+        /* 历史读取失败不阻塞发布 */
       }
-    } catch {
-      /* 历史读取失败不阻塞发布 */
+      const attrBody: Record<string, unknown> = { siteConfig: original, siteConfigHistory: history }
+      if (prefix) attrBody.calcCascadeKeys = cascadeWhitelist(cfg, computations, prefix)
+      await api(`/api/plugins/telemetry/ASSET/${id}/attributes/SERVER_SCOPE`, attrBody)
+      // 不再「设为 Public」(T3.7 移除):页面资产由 publishPage 分给站点所属 Customer,站点资产按 T3.8 处理。
+      // 汇聚 / 收益资产跟随站点资产:同一 Customer 可见 + 站点 Contains 关系(编辑器资产树、Customer 视角都靠这两条)
+      const followed = await followSiteAsset(cfg, computations, id, api)
+      report(
+        'asset',
+        'ok',
+        `资产 ${cfg.site.name} · 历史 ${history.length} 版` + (followed ? ` · 汇聚资产随站点 ${followed}` : '')
+      )
+    } catch (e) {
+      fail('asset', e)
     }
-    const attrBody: Record<string, unknown> = { siteConfig: original, siteConfigHistory: history }
-    if (prefix) attrBody.calcCascadeKeys = cascadeWhitelist(cfg, computations, prefix)
-    await api(`/api/plugins/telemetry/ASSET/${id}/attributes/SERVER_SCOPE`, attrBody)
-    // 不再「设为 Public」(T3.7 移除):页面资产由 publishPage 分给站点所属 Customer,站点资产按 T3.8 处理。
-    // 汇聚 / 收益资产跟随站点资产:同一 Customer 可见 + 站点 Contains 关系(编辑器资产树、Customer 视角都靠这两条)
-    const followed = await followSiteAsset(cfg, computations, id, api)
-    report(
-      'asset',
-      'ok',
-      `资产 ${cfg.site.name} · 历史 ${history.length} 版` + (followed ? ` · 汇聚资产随站点 ${followed}` : '')
-    )
-  } catch (e) {
-    fail('asset', e)
+
+  // 7. 发布后自检:刚写进去的规则节点是不是真的起来了(配置字段名不对时 TB 只在 LC_EVENT 里留痕,
+  //    消息会被静默丢弃 —— 2026-09-08 建告警节点就这样悄悄失败了一天多)
+  if (checkHealth) {
+    report('health', 'run')
+    const alarms = computations.filter(c => c.template === 'alarm.threshold')
+    const cascades = computations.filter(c => c.template === 'window.cascade')
+    const revs = computations.filter(c => c.template === 'revenue.periodic')
+    const targets: ChainTarget[] = []
+    if (alarms.length) {
+      targets.push({ name: names.alarm })
+      // Root 链上只查我们加的那条转发节点,别人的节点不归我们管、也不该由我们的发布来判定
+      targets.push({ root: true, nodes: [chainNames.rootFlow(cfg.site.name)] })
+    }
+    if (Object.keys(rollupGroups(computations)).length || cascades.length) targets.push({ name: names.rollup })
+    if (revs.length) targets.push({ name: names.revenue })
+    const h = await checkChainHealth(api, targets, {
+      since: startedAt,
+      ...(healthWaitMs !== undefined ? { waitMs: healthWaitMs } : {}),
+    })
+    if (h.problems.length) {
+      for (const p of h.problems)
+        failures.push({
+          step: 'health',
+          output: `${p.chain} · ${p.node}`,
+          error: `节点没能启动(${p.nodeType}):${p.error}`,
+        })
+      report('health', 'err', `${h.problems.length} 个节点没能启动,进入它们的消息会被静默丢弃`)
+    } else if (h.skipped) report('health', 'ok', `跳过(${h.skipped})`)
+    else
+      report(
+        'health',
+        'ok',
+        `${h.checked} 个节点已启动` + (h.pending.length ? `,${h.pending.length} 个暂无事件(未判定)` : '')
+      )
   }
   return failures
 }

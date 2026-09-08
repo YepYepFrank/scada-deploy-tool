@@ -113,6 +113,8 @@ describe.skipIf(!hasCreds)(`规则链路径(live @ ${TB_BASE})`, () => {
     const failures = await publish(cfg, devIds, api, report, { publishedBy: 'live-test' })
     expect(failures).toEqual([])
     expect(log.filter(l => l.includes(':err'))).toEqual([])
+    // 发布后自检:临时站点的链在 TB 上真的起来了(节点配置字段不对时这里会红)
+    expect(log.filter(l => /^health:(ok|err)/.test(l)).at(-1)).toMatch(/^health:ok \d+ 个节点已启动/)
 
     const snap = await snapshotSite(api, cfg.site.name, devIds)
     // 设备 CF:计划里每个 device.output 都在

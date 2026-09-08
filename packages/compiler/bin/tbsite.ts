@@ -38,7 +38,9 @@ import type { StepId, StepStatus, TbApi } from '../src/writer/api'
 const USAGE = `用法:
   tbsite validate <站点.tbsite.json>
   tbsite plan     <站点.tbsite.json> [--json] [--out 计划.json] [--ids ids.json]
-  tbsite publish  <站点.tbsite.json> [连接参数] [--by 操作者]   带 outputPrefix 且 TB 上有旧版配置时,把「旧 key → 新 key」写到 migrations/<站点>.rename.json(只生成不执行,ADR-003)
+  tbsite publish  <站点.tbsite.json> [连接参数] [--by 操作者] [--no-health]
+                  带 outputPrefix 且 TB 上有旧版配置时,把「旧 key → 新 key」写到 migrations/<站点>.rename.json(只生成不执行,ADR-003);
+                  发布后核对规则节点是否真的启动(配置字段不对时 TB 会静默丢消息),有节点起不来即退出非 0;--no-health 跳过
   tbsite cleanup  <站点.tbsite.json> [连接参数]
   tbsite page     <页面.pageconfig.json> --site <站点资产名> [--name 页面资产名] [--by 操作者] [连接参数]
   tbsite pages    --site <站点资产名> [连接参数]        列出站点下的 ScadaPage 资产与 version
@@ -232,6 +234,7 @@ async function main(argv: string[]) {
     }
     const failures = await publish(cfg, devIds, api, report, {
       publishedBy: typeof flags.by === 'string' ? flags.by : user,
+      checkHealth: !flags['no-health'],
     })
     if (prevCfg && cfg.outputPrefix) {
       const rows = renameTable(

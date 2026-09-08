@@ -11,6 +11,7 @@ pnpm -F @grid/tbsite-compiler test:live
 | 文件 | 内容 | 状态 |
 |---|---|---|
 | `rule-chain.live.ts` | 规则链路径:把 `xrs-mirror-test` 的配置改成临时站点(站点名、输出 key、告警名、汇聚 / 收益资产名全部加前缀)→ publish → 断言 CF / 链名与节点数 / Root 转发 / 站点资产 → 再 publish 幂等(快照相等、历史 +1)→ cleanup 全清;前后 `xrs-mirror-test` 快照零差异。`afterAll` 兜底 cleanup,断言失败也不留垃圾 | 可跑 |
+| `health.live.ts` | 发布后自检:自建一条临时链承载故障(不碰任何站点的链),写一个带 `propagateRelationTypes` 的建告警节点 → 断言自检抓到、报出节点类型与根因、同链正常节点不误报;把字段名改成 `relationTypes` 再存一次 → 断言通过(证明判据取最近一次 STARTED);链不存在时给跳过原因。`afterAll` 删临时链 | 可跑 |
 | ~~Profile 告警双轨(ADR-001)~~ | 取消(2026-09-06):ADR-001 定稿 Profile 一律不写 | — |
 
 元数据读取那两项(Asset 树按 `Contains` 递归、属性 key 列表)在 `apps/deploy-tool/src/meta/MetaNode.ts`,单元测试在 `apps/deploy-tool/test/meta-tree.test.ts`(Asset 树)与 `apps/deploy-tool/test/meta-attr-keys.test.ts`(属性 key 按 scope、遥测 key 带最新值与类型;2026-09-08),镜像验收记录见开发计划 T2.5。T3.11 于 2026-09-08 收尾:本 live 用例 3/3 重跑通过。
