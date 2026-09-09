@@ -24,7 +24,7 @@ provideDataSource(ds) // 之后换成 provideDataSource(new TbClient(...)),渲�
 
 ```
 src/testing/fake-tb.ts        内存版 TB:REST(timeseries / alarm)+ WS(tsSubCmds / attrSubCmds)+ kz 收益趋势,含真实 TB 的怪脾气
-src/testing/conformance.ts    describeDataSourceConformance(name, setup) —— 任何 DataSource 实现共用的 15 条用例
+src/testing/conformance.ts    describeDataSourceConformance(name, setup) —— 任何 DataSource 实现共用的 11 条用例(含断线重连重放)
 test/legacy-adapter.test.ts   LegacyDataSource 跑上面这套 + 自己的细节
 ```
 
