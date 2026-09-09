@@ -8,12 +8,15 @@ import type { Binding, WidgetConfig, WidgetDefinition } from '@grid/scada-render
 import BindingRow from './BindingRow.vue'
 import { checkSlot, defaultMode, emptyBinding, type BindingFlag } from './binding-check'
 import type { MetaClient, MetaNode, ValueKind } from '../meta/MetaNode'
+import type { Declared } from './declared-keys'
 
 const props = defineProps<{
   def: WidgetDefinition
   widget: WidgetConfig
   tree: MetaNode | null
   client: MetaClient | null
+  /** 第 3 步已声明、可能还没发布的输出(向导嵌入时由向导给;独立编辑器为空) */
+  declared?: Declared | null
 }>()
 const emit = defineEmits<{
   update: [bindings: WidgetConfig['bindings']]
@@ -136,6 +139,7 @@ watch(flags, f => emit('flags', f), { immediate: true })
             :model-value="b"
             :tree="tree"
             :client="client"
+            :declared="declared"
             @update:model-value="setAt(s.name, i, $event ?? null)"
             @split="splitAt(s.name, i, $event)"
           />
@@ -148,6 +152,7 @@ watch(flags, f => emit('flags', f), { immediate: true })
         :model-value="single(s.name)"
         :tree="tree"
         :client="client"
+        :declared="declared"
         @update:model-value="set(s.name, $event)"
       />
     </div>

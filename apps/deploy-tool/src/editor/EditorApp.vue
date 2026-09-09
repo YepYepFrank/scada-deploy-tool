@@ -28,6 +28,7 @@ import { ProjectParseError } from '../project/scadaproj'
 import { detectDrift, pageNameOf, readPageState, type DriftItem, type PublishedRecord } from '../publish/publishPage'
 import { useEditorState } from './useEditorState'
 import { useMeta, type EditorSession } from '../meta/useMeta'
+import type { Declared } from './declared-keys'
 import { serializeProject } from '../project/scadaproj'
 import { LAYER_TITLE, sortIssues, validateBindingsLayer, validateStatic, type PageIssue } from './validate'
 import type { BindingFlag } from './binding-check'
@@ -38,7 +39,12 @@ import type { BindingFlag } from './binding-check'
  * 同一个组件实例,撤销栈 / 选中槽位 / 未保存改动全部保留;Esc 或「返回向导」退出。
  * 独立页(editor.html)不传这两个 prop。
  */
-const props = defineProps<{ embedded?: boolean; session?: EditorSession | null }>()
+const props = defineProps<{
+  embedded?: boolean
+  session?: EditorSession | null
+  /** 向导第 3 步声明、可能还没发布的输出;独立编辑器不传(见 editor/declared-keys.ts) */
+  declared?: Declared | null
+}>()
 
 registerBuiltins()
 const templates = listTemplates()
@@ -613,6 +619,7 @@ defineExpose({
                 :widget="selectedWidget"
                 :tree="meta.tree.value"
                 :client="meta.client.value"
+                :declared="declared"
                 @update="onBindings"
                 @flags="bindingFlags = $event"
               />

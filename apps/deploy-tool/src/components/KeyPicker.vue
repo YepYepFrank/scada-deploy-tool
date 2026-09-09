@@ -6,7 +6,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
-  groups: { type: Array, default: () => [] }, // [{ label, items: [{value, label}], pinned? }]
+  groups: { type: Array, default: () => [] }, // [{ label, items: [{value, label, badge?}], pinned? }]
   topItems: { type: Array, default: () => [] }, // 不分组的固定项(如【常数】)
   placeholder: { type: String, default: '请选择…' },
 })
@@ -145,7 +145,8 @@ onBeforeUnmount(() => {
                 :class="{ on: it.value === modelValue }"
                 @mousedown.prevent="pick(it)"
               >
-                {{ it.label }}
+                <span class="kp-item-label">{{ it.label }}</span>
+                <span v-if="it.badge" class="kp-badge">{{ it.badge }}</span>
               </div>
             </template>
           </template>
@@ -271,6 +272,26 @@ onBeforeUnmount(() => {
 }
 .kp-item:hover {
   background: color-mix(in srgb, var(--kp-accent) 14%, transparent);
+}
+.kp-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kp-item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 「待发布」:本次配置声明、TB 上还没有的输出 */
+.kp-badge {
+  flex: none;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 8px;
+  border: 1px dashed var(--kp-line-1);
+  color: var(--kp-ink-2);
 }
 .kp-item.on {
   color: var(--kp-accent);

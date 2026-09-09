@@ -14,6 +14,7 @@ import KeyPicker from '../components/KeyPicker.vue'
 import EntityTree from './EntityTree.vue'
 import type { KeyInfo, MetaClient, MetaNode } from '../meta/MetaNode'
 import { emptyBinding } from './binding-check'
+import { declaredAlarmsFor, declaredKeysFor, type Declared } from './declared-keys'
 import {
   aggLabel,
   emptyExtParams,
@@ -35,6 +36,12 @@ const props = defineProps<{
   modelValue: Binding | null
   tree: MetaNode | null
   client: MetaClient | null
+  /**
+   * 向导第 3 步声明、可能还没发布的输出。绑定选择器原来只列 TB 上**已存在**的 key,
+   * 而向导是「先配运算 → 再绑组件 → 最后发布」,第一次走流程时刚配的 calc_ 一个都选不到。
+   * 这里把声明的输出并进来并标「待发布」,见 editor/declared-keys.ts。
+   */
+  declared?: Declared | null
 }>()
 const emit = defineEmits<{ 'update:modelValue': [b: Binding | null]; split: [keys: string[]] }>()
 
@@ -154,19 +161,53 @@ watch(
   },
   { immediate: true }
 )
+/** 当前实体在本次配置里会产生的 key / 告警类型(可能尚未发布) */
+const declKeys = computed(() => {
+  const e = entity.value
+  return e?.name ? declaredKeysFor(props.declared, e.type, e.name) : []
+})
+const declAlarms = computed(() => {
+  const e = entity.value
+  return e?.name ? declaredAlarmsFor(props.declared, e.type, e.name) : []
+})
+
 const kindMark = (k: KeyInfo) =>
   k.kind === 'number' ? '#' : k.kind === 'boolean' ? '◐' : k.kind === 'string' ? '"' : ''
+type PickItem = { value: string; label: string; badge?: string }
 const keyGroups = computed(() => {
-  const calc = keys.value.filter(k => /^calc_/.test(k.key))
-  const rest = keys.value.filter(k => !/^calc_/.test(k.key))
-  const item = (k: KeyInfo) => ({
+  const item = (k: KeyInfo): PickItem => ({
     value: k.key,
     label: `${k.key}${kindMark(k) ? ' ' + kindMark(k) : ''}${k.latest !== undefined ? ' · ' + String(k.latest) : ''}`,
   })
-  const g: { label: string; items: { value: string; label: string }[]; pinned?: boolean }[] = []
+  const have = new Map(keys.value.map(k => [k.key, k]))
+  const decl = declKeys.value
+  const declSet = new Set(decl.map(d => d.key))
+  const g: { label: string; items: PickItem[]; pinned?: boolean }[] = []
+  // ① 本次配置声明的输出置顶:已发布的照常显示最近值,没发布的标「待发布」也能先绑上
+  if (decl.length)
+    g.push({
+      label: `⭐ 本站配置的运算结果(${decl.length})`,
+      pinned: true,
+      items: decl.map(d => {
+        const k = have.get(d.key)
+        return k ? item(k) : { value: d.key, label: d.key, badge: '待发布' }
+      }),
+    })
+  const rest = keys.value.filter(k => !declSet.has(k.key))
+  // ② TB 上已有、但本次配置没声明的 calc_(上一版配置留下的)
+  const calc = rest.filter(k => /^calc_/.test(k.key))
+  const plain = rest.filter(k => !/^calc_/.test(k.key))
   if (calc.length) g.push({ label: '⭐ 计算结果(calc_)', items: calc.map(item), pinned: true })
-  g.push({ label: `遥测(${rest.length})`, items: rest.map(item) })
+  g.push({ label: `遥测(${plain.length})`, items: plain.map(item) })
   return g
+})
+/** 告警类型:TB 上出现过的 + 本次配置声明的(还没触发过,所以查不到) */
+const alarmChoices = computed<{ type: string; pending: boolean }[]>(() => {
+  const seen = new Set(alarmTypes.value)
+  return [
+    ...alarmTypes.value.map(t => ({ type: t, pending: false })),
+    ...declAlarms.value.filter(t => !seen.has(t)).map(t => ({ type: t, pending: true })),
+  ]
 })
 const attrGroups = computed(() => [
   { label: `属性(${attrKeys.value.length})`, items: attrKeys.value.map(k => ({ value: k, label: k })) },
@@ -341,18 +382,19 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
     <div v-else-if="mode === 'alarm'" class="br-types">
       <span class="br-hint">告警类型(不选 = 全部):</span>
       <button
-        v-for="t in alarmTypes"
-        :key="t"
+        v-for="c in alarmChoices"
+        :key="c.type"
         type="button"
         class="br-chip"
-        :class="{ on: types.includes(t) }"
-        :data-type="t"
-        @click="toggleType(t)"
+        :class="{ on: types.includes(c.type), pending: c.pending }"
+        :data-type="c.type"
+        :title="c.pending ? '本站配置声明的告警,尚未触发过' : ''"
+        @click="toggleType(c.type)"
       >
-        {{ t }}
+        {{ c.type }}<span v-if="c.pending" class="br-chip-badge">待发布</span>
       </button>
       <span
-        v-for="t in types.filter(x => !alarmTypes.includes(x))"
+        v-for="t in types.filter(x => !alarmChoices.some(c => c.type === x))"
         :key="'x' + t"
         class="br-chip on"
         @click="toggleType(t)"
@@ -485,6 +527,14 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
   padding: 8px;
   border: 1px solid var(--ed-line, rgba(83, 196, 255, 0.2));
   border-radius: 6px;
+}
+.br-chip.pending {
+  border-style: dashed;
+}
+.br-chip-badge {
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.75;
 }
 .br-legacy {
   font-size: 12px;

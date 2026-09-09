@@ -13,6 +13,7 @@ import {
 import EditorApp from '../editor/EditorApp.vue'
 import PublishPanel from '../editor/PublishPanel.vue'
 import { listSitePages, readPageState } from '../publish/publishPage'
+import { declaredFromSiteConfig } from '../editor/declared-keys'
 import { publish, cleanup } from './publisher.js'
 import KeyPicker from '../components/KeyPicker.vue'
 
@@ -1520,6 +1521,13 @@ const siteJson = computed(() => ({
   alarm: { propagate: true },
   // T3.7 起不再有 layout / display:页面组态发布为 ScadaPage 资产(见第 4 / 5 步)
 }))
+/*
+ * 第 3 步声明的运算 / 告警输出,交给第 4 步的绑定选择器置顶显示。
+ * 向导是「先配运算 → 再绑组件 → 最后发布」,这些 key 在绑定的时候 TB 上还不存在,
+ * 不给的话第 4 步一个都选不到(见 editor/declared-keys.ts)。
+ */
+const declaredOutputs = computed(() => declaredFromSiteConfig(siteJson.value))
+
 const jsonText = computed(() => JSON.stringify(siteJson.value, null, 2))
 const copied = ref(false)
 
@@ -2103,7 +2111,7 @@ function openFrontend() {
         点击下方缩略图进入全屏编辑;编辑器里「预览」看真数据,「发布」写进 TB。
       </p>
       <p v-if="conn.status !== 'ok'" class="err-msg">尚未连接 ThingsBoard——请先在第 1 步连接。</p>
-      <EditorApp v-else ref="editorRef" embedded :session="editorSession" />
+      <EditorApp v-else ref="editorRef" embedded :session="editorSession" :declared="declaredOutputs" />
     </div>
 
     <!-- 5 发布上线 -->

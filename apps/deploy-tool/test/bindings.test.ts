@@ -232,6 +232,87 @@ describe('BindingRow', () => {
   })
 })
 
+describe('BindingRow · 第 3 步声明的输出(还没发布)', () => {
+  const tree = bigSite()
+  const declared = {
+    keys: [
+      { entityType: 'DEVICE' as const, entity: 'SSP_1', key: 'calc_total_p', kind: 'cf' }, // TB 上已有
+      { entityType: 'DEVICE' as const, entity: 'SSP_1', key: 'calc_pqSum', kind: 'cf' }, // 还没发布
+      { entityType: 'DEVICE' as const, entity: 'SSP_1', key: 'calc_PAvg1d', kind: 'cascade' }, // 还没发布
+      { entityType: 'DEVICE' as const, entity: 'SSP_2', key: 'calc_other', kind: 'cf' }, // 别的设备的
+    ],
+    alarms: [{ entityType: 'DEVICE' as const, entity: 'SSP_1', type: '功率越限告警' }],
+  }
+  const mountRow = (spec: unknown, modelValue: unknown, withDeclared = true) =>
+    mount(BindingRow, {
+      props: {
+        spec: spec as never,
+        modelValue: modelValue as Binding,
+        tree,
+        client: fakeClient(),
+        ...(withDeclared ? { declared } : {}),
+      },
+      global: { stubs: { Teleport: true } },
+    })
+
+  it('声明的输出置顶成一组;TB 上还没有的标「待发布」,照样能选', async () => {
+    const w = mountRow(getWidget('number-card')!.bindingSlots[0]!, { mode: 'ts', entity: D1, key: '' })
+    await new Promise(r => setTimeout(r, 0))
+    await nextTick()
+    await w.find('.kp-btn').trigger('click')
+    // 第一组是本次配置的输出,且默认展开(pinned)
+    expect(w.findAll('.kp-group')[0]!.text()).toContain('本站配置的运算结果(3)')
+    const items = w.findAll('.kp-item').map(i => i.text())
+    // 三条都在:已发布的带最近值,没发布的带「待发布」
+    expect(items.some(t => t.startsWith('calc_total_p') && !t.includes('待发布'))).toBe(true)
+    expect(items).toContain('calc_pqSum待发布')
+    expect(items).toContain('calc_PAvg1d待发布')
+    // 别的设备的输出不串过来
+    expect(items.join(' ')).not.toContain('calc_other')
+
+    // 未发布的也能选中,写进绑定 —— 这正是「先绑后发布」要的
+    await w
+      .findAll('.kp-item')
+      .find(i => i.text().startsWith('calc_PAvg1d'))!
+      .trigger('mousedown')
+    expect((w.emitted('update:modelValue')!.at(-1)![0] as { key: string }).key).toBe('calc_PAvg1d')
+  })
+
+  it('已发布的 calc_ 不重复出现在两组里', async () => {
+    const w = mountRow(getWidget('number-card')!.bindingSlots[0]!, { mode: 'ts', entity: D1, key: '' })
+    await new Promise(r => setTimeout(r, 0))
+    await nextTick()
+    await w.find('.kp-btn').trigger('click')
+    const groups = w.findAll('.kp-group').map(g => g.text())
+    // calc_total_p 已被第一组收编,就不该再有「计算结果(calc_)」那一组
+    expect(groups.some(t => t.includes('计算结果(calc_)'))).toBe(false)
+    expect(groups.some(t => t.includes('遥测(4)'))).toBe(true)
+  })
+
+  it('不传 declared 时行为与从前完全一致(独立编辑器)', async () => {
+    const w = mountRow(getWidget('number-card')!.bindingSlots[0]!, { mode: 'ts', entity: D1, key: '' }, false)
+    await new Promise(r => setTimeout(r, 0))
+    await nextTick()
+    await w.find('.kp-btn').trigger('click')
+    expect(w.findAll('.kp-group').map(g => g.text())).toEqual(['▼⭐ 计算结果(calc_)1', '▶遥测(4)4'])
+    expect(w.findAll('.kp-item').map(i => i.text())).toEqual(['calc_total_p # · 99'])
+  })
+
+  it('告警类型:声明过但还没触发过的也列出来并标「待发布」', async () => {
+    const w = mountRow(getWidget('alarm-list')!.bindingSlots[0]!, { mode: 'alarm', entity: D1 })
+    await new Promise(r => setTimeout(r, 0))
+    await nextTick()
+    const chips = w.findAll('.br-chip').map(c => c.text())
+    expect(chips).toEqual(['过温', '通讯', '功率越限告警待发布'])
+    await w.find('[data-type="功率越限告警"]').trigger('click')
+    expect(w.emitted('update:modelValue')!.at(-1)![0]).toEqual({
+      mode: 'alarm',
+      entity: D1,
+      types: ['功率越限告警'],
+    })
+  })
+})
+
 describe('BindingRow · ext(kz)', () => {
   const tree = bigSite()
   const spec = () => getWidget('line')!.bindingSlots[0]! // series:ts-history / ext / const
