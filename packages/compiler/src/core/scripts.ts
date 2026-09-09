@@ -111,4 +111,35 @@ export const REVENUE_DAILY_TICK_JS =
   'var dayStart = Math.floor((now + tz) / 86400000) * 86400000 - tz; ' +
   "return { msg: {}, metadata: { revenueDaily: 'true', dayStartTs: String(dayStart), dayEndTs: String(now) }, msgType: 'REVENUE_DAILY_TICK' };"
 
+/**
+ * 日级归档不再用 86400 秒的 generator,改由 1h 级算完驱动(2026-09-09 决定,方案 ①)。
+ *
+ * 起因:`TbMsgGeneratorNode` 的首拍在**节点启动后满一个周期**,不对齐自然时刻。日级因此要求
+ * 规则链连续跑满 24 小时才出第一个点,而现场每改一次配置就要重发布——平均每天一次以上,
+ * 日归档就永远为空,且不报任何错(`docs/联调记录/规则链稳定性采样-2026-09-09.md`)。
+ *
+ * 现在:1h 级每拍都问一次「东八区自然日变了没」,变了才算一次日归档,算的是**上一个自然日**
+ * 的完整区间,并把点戳在那一天的 0 点上。判定靠设备上的属性记「上次归档的日序号」,所以
+ * 重发布、漏拍、停机都不会重复算也不会整天丢失(停机跨天时下一拍补上)。时区口径与
+ * REVENUE_DAILY_TICK_JS 一致(东八区)。
+ */
+const TZ_JS = 'var TZ = 8 * 3600000; var day = Math.floor((Date.now() + TZ) / 86400000); '
+
+/** 门:当前东八区日序号 ≠ 属性里记的,才放行 */
+export const cascadeDayGateJs = (attr: string) => TZ_JS + `return String(day) !== String(metadata.ss_${attr});`
+
+/** 放行后:算出「上一个自然日」的取数区间,并把落库时间戳定在那一天的 0 点 */
+export const cascadeDayMarkJs = (attr: string) =>
+  TZ_JS +
+  'var dayStart = day * 86400000 - TZ; var prevStart = dayStart - 86400000; ' +
+  'metadata.dayStartTs = String(prevStart); metadata.dayEndTs = String(dayStart); ' +
+  'metadata.ts = String(prevStart); ' +
+  `metadata.${attr} = String(day); ` +
+  'return { msg: msg, metadata: metadata, msgType: msgType };'
+
+/** 把新的日序号写回设备属性(与取数同一拍,漏写只会多算一次,不会漏算) */
+export const cascadeDayAttrJs = (attr: string) =>
+  `var m = {}; m['${attr}'] = Number(metadata.${attr}); ` +
+  "return { msg: m, metadata: metadata, msgType: 'POST_ATTRIBUTES_REQUEST' };"
+
 export const withSpec = (script: string, spec: unknown) => script.replace('%SPEC%', JSON.stringify(spec))

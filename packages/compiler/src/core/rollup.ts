@@ -10,7 +10,17 @@ import type {
   Window,
 } from '../types'
 import { AGG_SUFFIX, CASCADE_LEVELS, WINDOW_SECONDS } from './constants'
-import { AGG_JS, AGG_JS_PREFIXED, CASCADE_JS, CASCADE_TICK_JS, ROLLUP_TICK_JS, withSpec } from './scripts'
+import {
+  AGG_JS,
+  AGG_JS_PREFIXED,
+  CASCADE_JS,
+  CASCADE_TICK_JS,
+  cascadeDayAttrJs,
+  cascadeDayGateJs,
+  cascadeDayMarkJs,
+  ROLLUP_TICK_JS,
+  withSpec,
+} from './scripts'
 
 const blank = (): RollupGroupSpec => ({ avg: [], min: [], max: [], sum: [], delta: {}, integrate: {} })
 
@@ -57,7 +67,8 @@ const genNode = (
   },
   additionalInfo: { layoutX: x, layoutY: y },
 })
-const fetchNode = (name: string, keys: string[], period: number, x: number, y: number): RuleNode => ({
+/** `byDay`:改用 metadata 里的 dayStartTs / dayEndTs 取整个自然日(与收益日统计同一套写法) */
+const fetchNode = (name: string, keys: string[], period: number, x: number, y: number, byDay = false): RuleNode => ({
   type: 'org.thingsboard.rule.engine.metadata.TbGetTelemetryNode',
   name,
   configuration: {
@@ -66,11 +77,44 @@ const fetchNode = (name: string, keys: string[], period: number, x: number, y: n
     orderBy: 'ASC',
     aggregation: 'NONE',
     limit: 1000,
-    useMetadataIntervalPatterns: false,
+    useMetadataIntervalPatterns: byDay,
+    ...(byDay ? { startIntervalPattern: '${dayStartTs}', endIntervalPattern: '${dayEndTs}' } : {}),
     startInterval: period,
     startIntervalTimeUnit: 'SECONDS',
     endInterval: 1,
     endIntervalTimeUnit: 'SECONDS',
+  },
+  additionalInfo: { layoutX: x, layoutY: y },
+})
+const filterNode = (name: string, jsScript: string, x: number, y: number): RuleNode => ({
+  type: 'org.thingsboard.rule.engine.filter.TbJsFilterNode',
+  name,
+  configuration: { scriptLang: 'JS', jsScript },
+  additionalInfo: { layoutX: x, layoutY: y },
+})
+const getAttrNode = (name: string, attr: string, x: number, y: number): RuleNode => ({
+  type: 'org.thingsboard.rule.engine.metadata.TbGetAttributesNode',
+  name,
+  configuration: {
+    tellFailureIfAbsent: false, // 第一次跑时属性还不存在,不能当失败
+    fetchTo: 'METADATA',
+    clientAttributeNames: [],
+    sharedAttributeNames: [],
+    serverAttributeNames: [attr],
+    latestTsKeyNames: [],
+    getLatestValueWithTs: false,
+  },
+  additionalInfo: { layoutX: x, layoutY: y },
+})
+const putAttrNode = (name: string, x: number, y: number): RuleNode => ({
+  type: 'org.thingsboard.rule.engine.telemetry.TbMsgAttributesNode',
+  name,
+  configuration: {
+    processingSettings: { type: 'ON_EVERY_MESSAGE' },
+    scope: 'SERVER_SCOPE',
+    notifyDevice: false,
+    sendAttributesUpdatedNotification: false,
+    updateAttributesOnlyOnValueChange: true,
   },
   additionalInfo: { layoutX: x, layoutY: y },
 })
@@ -106,6 +150,8 @@ export function rollupMetadata(
   let cy = 900
   for (const c of cascades) {
     const device = c.device as string
+    /** 上一级的汇算节点下标:日级由它驱动,不再自己 tick(见下) */
+    let prevAgg = -1
     CASCADE_LEVELS.forEach((lv, li) => {
       const entries: { src: string; out: string; fn: AggName }[] = []
       for (const k of c.keys || [])
@@ -113,17 +159,43 @@ export function rollupMetadata(
           const src = li === 0 ? k : pfx(`${k}${AGG_SUFFIX[a]}${CASCADE_LEVELS[li - 1]!.id}`)
           entries.push({ src, out: pfx(`${k}${AGG_SUFFIX[a]}${lv.id}`), fn: a })
         }
+      if (!entries.length) return
       const fetchKeys = [...new Set(entries.map(e => e.src))]
-      const g = add(
-        genNode(`tick 级联 ${device} @${lv.id}`, lv.seconds, devIds[device] as string, CASCADE_TICK_JS, 100, cy)
-      )
-      const f = add(fetchNode(`fetch 级联 ${device} @${lv.id}`, fetchKeys, lv.seconds, 400, cy))
+      /**
+       * 日级(period ≥ 1 天)不用 generator:`TbMsgGeneratorNode` 首拍在节点启动后满一个周期,
+       * 规则链一重发布就清零,日点永远出不来(2026-09-09 采样查实,7 天只出 1 个点)。
+       * 改由上一级(1h)每拍驱动,跨东八区自然日才算一次,算的是上一个完整自然日。
+       */
+      const byDay = lv.seconds >= 86400 && prevAgg >= 0
+      let head: number // 取数节点的上游
+      if (byDay) {
+        const dayAttr = `${entries[0]!.out}__day`
+        const ga = add(getAttrNode(`取上次日归档 ${device} @${lv.id}`, dayAttr, 100, cy))
+        const gate = add(filterNode(`跨自然日? ${device} @${lv.id}`, cascadeDayGateJs(dayAttr), 240, cy))
+        const mark = add(transformNode(`日界 ${device} @${lv.id}`, cascadeDayMarkJs(dayAttr), 380, cy))
+        const wr = add(transformNode(`记日序号 ${device} @${lv.id}`, cascadeDayAttrJs(dayAttr), 380, cy + 60))
+        const ws = add(putAttrNode(`存日序号 ${device} @${lv.id}`, 520, cy + 60))
+        connections.push(
+          { fromIndex: prevAgg, toIndex: ga, type: 'Success' },
+          { fromIndex: ga, toIndex: gate, type: 'Success' },
+          { fromIndex: gate, toIndex: mark, type: 'True' },
+          { fromIndex: mark, toIndex: wr, type: 'Success' },
+          { fromIndex: wr, toIndex: ws, type: 'Success' }
+        )
+        head = mark
+      } else {
+        head = add(
+          genNode(`tick 级联 ${device} @${lv.id}`, lv.seconds, devIds[device] as string, CASCADE_TICK_JS, 100, cy)
+        )
+      }
+      const f = add(fetchNode(`fetch 级联 ${device} @${lv.id}`, fetchKeys, lv.seconds, 400, cy, byDay))
       const a = add(transformNode(`级联汇算 ${device} @${lv.id}`, withSpec(CASCADE_JS, { entries }), 700, cy))
       connections.push(
-        { fromIndex: g, toIndex: f, type: 'Success' },
+        { fromIndex: head, toIndex: f, type: 'Success' },
         { fromIndex: f, toIndex: a, type: 'Success' },
         { fromIndex: a, toIndex: saveFor(lv.ttl), type: 'Success' }
       )
+      prevAgg = a
       cy += 120
     })
   }

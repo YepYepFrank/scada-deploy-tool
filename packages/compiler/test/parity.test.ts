@@ -11,6 +11,11 @@
 //   · 告警建 / 清节点名 Python 用测点名,JS/TS 用告警名(alarmType);
 //   · 收益链切换资产节点 Python 叫「切到资产 X」,JS/TS 叫「切到电价资产 / 切到收益资产」;
 //   · 展开提示文案措辞不同,只比较条数。
+//   · **级联归档的日级(节点名以 @1d 结尾)整段不比对**——2026-09-09 有意分歧,不是没对齐:
+//     冻结的 Python 版与 TS 版原来都用 86400 秒的 TbMsgGeneratorNode 驱动日级,而它的首拍在
+//     节点启动后满一个周期,规则链一重发布就清零,日点永远出不来(采样查实 7 天只出 1 个点)。
+//     TS 版改成由 1h 级驱动 + 跨东八区自然日判定,Python 版是冻结件不动,所以这一段两边天然不同。
+//     其余部分(分组流水线、5m / 1h 级、告警链、收益链)仍逐节点比对。
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -49,19 +54,25 @@ function normalize(v: Json, key = ''): Json {
   return v
 }
 
-/** 规则链元数据 → 与下标无关的图 */
-function graph(meta: RuleChainMetadata | null) {
+/** 规则链元数据 → 与下标无关的图;`drop` 命中的节点连同它的连线一起排除 */
+function graph(meta: RuleChainMetadata | null, drop?: (name: string) => boolean) {
   if (!meta) return null
+  const keep = meta.nodes.map(n => !drop?.(n.name))
   const canon = meta.nodes.map(n =>
     JSON.stringify(normalize({ type: n.type, name: n.name, configuration: n.configuration as Json }))
   )
   return {
     ruleChainId: meta.ruleChainId,
     first: meta.firstNodeIndex === null ? null : canon[meta.firstNodeIndex],
-    nodes: [...canon].sort(),
-    edges: meta.connections.map(c => `${canon[c.fromIndex]} -[${c.type}]-> ${canon[c.toIndex]}`).sort(),
+    nodes: canon.filter((_, i) => keep[i]).sort(),
+    edges: meta.connections
+      .filter(c => keep[c.fromIndex] && keep[c.toIndex])
+      .map(c => `${canon[c.fromIndex]} -[${c.type}]-> ${canon[c.toIndex]}`)
+      .sort(),
   }
 }
+/** 日级级联的节点(两边实现已有意分歧,见文件头) */
+const isDailyCascade = (name: string) => /@1d$/.test(name)
 
 function canonPlan(p: WritePlan) {
   return normalize({
@@ -80,7 +91,7 @@ function canonPlan(p: WritePlan) {
       chainName: p.rollup.chainName,
       groups: p.rollup.groups,
       cascades: p.rollup.cascades,
-      graph: graph(p.rollup.metadata),
+      graph: graph(p.rollup.metadata, isDailyCascade),
     },
     alarm: p.alarm && {
       chainName: p.alarm.chainName,

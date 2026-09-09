@@ -247,6 +247,50 @@ describe('rollup', () => {
     const lv2 = meta.nodes.find(n => n.name === '级联汇算 A1 @1h')!
     expect(lv2.configuration.jsScript).toContain('{"src":"pMax5m","out":"pMax1h","fn":"max"}')
   })
+
+  it('5m / 1h 用 generator 定时;日级由 1h 驱动 + 跨自然日判定,不用 generator', () => {
+    const meta = rollupMetadata('c', {}, ids, [
+      { template: 'window.cascade', device: 'A1', keys: ['p'], aggs: ['max'] },
+    ])
+    const name = (n: { name: string }) => n.name
+    const gens = meta.nodes.filter(n => n.type.endsWith('TbMsgGeneratorNode')).map(name)
+    // 关键:日级没有 generator。它的首拍在节点启动后满一个周期,链一重发布就清零,
+    // 日点永远出不来(2026-09-09 采样查实)
+    expect(gens).toEqual(['tick 级联 A1 @5m', 'tick 级联 A1 @1h'])
+    expect(gens.some(n => n.endsWith('@1d'))).toBe(false)
+
+    const idx = (n: string) => meta.nodes.findIndex(x => x.name === n)
+    const edge = (from: string, to: string, type = 'Success') =>
+      meta.connections.some(c => c.fromIndex === idx(from) && c.toIndex === idx(to) && c.type === type)
+    // 1h 汇算 → 取属性 → 跨日? →(True)日界 → 取数 → 汇算 → 保存
+    expect(edge('级联汇算 A1 @1h', '取上次日归档 A1 @1d')).toBe(true)
+    expect(edge('取上次日归档 A1 @1d', '跨自然日? A1 @1d')).toBe(true)
+    expect(edge('跨自然日? A1 @1d', '日界 A1 @1d', 'True')).toBe(true)
+    expect(edge('日界 A1 @1d', 'fetch 级联 A1 @1d')).toBe(true)
+    expect(edge('级联汇算 A1 @1d', 'save ttl=∞')).toBe(true)
+    // 日序号写回设备属性,重发布 / 漏拍都不会重复算
+    expect(edge('日界 A1 @1d', '记日序号 A1 @1d')).toBe(true)
+    expect(edge('记日序号 A1 @1d', '存日序号 A1 @1d')).toBe(true)
+
+    const ga = meta.nodes[idx('取上次日归档 A1 @1d')]!
+    expect(ga.configuration.serverAttributeNames).toEqual(['pMax1d__day'])
+    expect(ga.configuration.tellFailureIfAbsent).toBe(false) // 第一次跑属性还不存在
+    expect(meta.nodes[idx('跨自然日? A1 @1d')]!.configuration.jsScript).toContain('metadata.ss_pMax1d__day')
+
+    // 日级按自然日取数(东八区),不再是「最近 86400 秒」
+    const f = meta.nodes[idx('fetch 级联 A1 @1d')]!
+    expect(f.configuration.useMetadataIntervalPatterns).toBe(true)
+    expect(f.configuration.startIntervalPattern).toBe('${dayStartTs}')
+    expect(f.configuration.endIntervalPattern).toBe('${dayEndTs}')
+    // 5m / 1h 仍按「最近一个周期」取
+    expect(meta.nodes[idx('fetch 级联 A1 @1h')]!.configuration.useMetadataIntervalPatterns).toBe(false)
+
+    // 算的是「上一个自然日」,点戳在那一天的 0 点上,不是触发时刻
+    const mark = meta.nodes[idx('日界 A1 @1d')]!.configuration.jsScript as string
+    expect(mark).toContain('var TZ = 8 * 3600000')
+    expect(mark).toContain('prevStart = dayStart - 86400000')
+    expect(mark).toContain('metadata.ts = String(prevStart)')
+  })
 })
 
 describe('alarmMetadata', () => {
