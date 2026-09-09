@@ -38,7 +38,9 @@ const ieds = cfg.devices.filter(d => d.profile === 'IED').map(d => d.name)
 const P = cfg.outputPrefix
 
 const series = async (type, id, key, agg = 'NONE') => {
-  const r = await get(`/api/plugins/telemetry/${type}/${id}/values/timeseries?keys=${key}&startTs=${start}&endTs=${now}&limit=200000&agg=${agg}&orderBy=ASC`)
+  const r = await get(
+    `/api/plugins/telemetry/${type}/${id}/values/timeseries?keys=${key}&startTs=${start}&endTs=${now}&limit=200000&agg=${agg}&orderBy=ASC`
+  )
   return (r?.[key] ?? []).map(p => p.ts).sort((a, b) => a - b)
 }
 const stat = ts => {
@@ -47,10 +49,25 @@ const stat = ts => {
   for (let i = 1; i < ts.length; i++) gaps.push(ts[i] - ts[i - 1])
   gaps.sort((a, b) => a - b)
   const med = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 0
-  return { n: ts.length, first: ts[0], last: ts[ts.length - 1], med, max: gaps.length ? gaps[gaps.length - 1] : 0, age: now - ts[ts.length - 1] }
+  return {
+    n: ts.length,
+    first: ts[0],
+    last: ts[ts.length - 1],
+    med,
+    max: gaps.length ? gaps[gaps.length - 1] : 0,
+    age: now - ts[ts.length - 1],
+  }
 }
-const s = ms => (ms >= 3600e3 ? (ms / 3600e3).toFixed(1) + 'h' : ms >= 60e3 ? (ms / 60e3).toFixed(1) + 'm' : (ms / 1e3).toFixed(0) + 's')
-const row = (label, st) => (st.n ? `| ${label} | ${st.n} | ${s(st.med)} | ${s(st.max)} | ${s(st.age)} 前 | ${fmt(st.first)} → ${fmt(st.last)} |` : `| ${label} | 0 | — | — | — | 无数据 |`)
+const s = ms =>
+  ms >= 3600e3
+    ? (ms / 3600e3).toFixed(1) + 'h'
+    : ms >= 60e3
+      ? (ms / 60e3).toFixed(1) + 'm'
+      : (ms / 1e3).toFixed(0) + 's'
+const row = (label, st) =>
+  st.n
+    ? `| ${label} | ${st.n} | ${s(st.med)} | ${s(st.max)} | ${s(st.age)} 前 | ${fmt(st.first)} → ${fmt(st.last)} |`
+    : `| ${label} | 0 | — | — | — | 无数据 |`
 const lines = []
 const out = l => {
   lines.push(l)
@@ -85,16 +102,20 @@ for (const name of ieds) {
   worstGap = Math.max(worstGap, spq.max ?? 0)
   worstAge = Math.max(worstAge, spq.age ?? 0)
   if (!spq.n || spq.age > 10 * 60e3) stale.push(name)
-  out(`| ${name} | ${sp.n} | ${spq.n} | ${spq.n ? s(spq.med) : '—'} | ${spq.n ? s(spq.max) : '—'} | ${spq.n ? s(spq.age) + ' 前' : '无'} |`)
+  out(
+    `| ${name} | ${sp.n} | ${spq.n} | ${spq.n ? s(spq.med) : '—'} | ${spq.n ? s(spq.max) : '—'} | ${spq.n ? s(spq.age) + ' 前' : '无'} |`
+  )
 }
 out('')
-out(`合计:P ${sumP} 点,pqSum ${sumPq} 点(比值 ${(sumPq / Math.max(sumP, 1)).toFixed(2)});最大间隔 ${s(worstGap)},最久未更新 ${s(worstAge)};超过 10 分钟没更新的设备:${stale.length ? stale.join(', ') : '无'}`)
+out(
+  `合计:P ${sumP} 点,pqSum ${sumPq} 点(比值 ${(sumPq / Math.max(sumP, 1)).toFixed(2)});最大间隔 ${s(worstGap)},最久未更新 ${s(worstAge)};超过 10 分钟没更新的设备:${stale.length ? stale.join(', ') : '无'}`
+)
 out('')
 
 // 2. 汇聚资产 calc_totalP
 out(`## 2. 汇聚资产 \`xrs-mirror-test-agg\`(分层 CF)`)
 out('')
-const agg = (await get('/api/tenant/assets?assetName=xrs-mirror-test-agg'))
+const agg = await get('/api/tenant/assets?assetName=xrs-mirror-test-agg')
 out('| key | 点数 | 中位间隔 | 最大间隔 | 最近一点 | 范围 |')
 out('|---|---|---|---|---|---|')
 if (agg?.id) {
@@ -111,7 +132,9 @@ out('|---|---|---|---|---|---|')
 for (const name of ['SSP1_GP1_IED1', 'SSP1_GP8_IED1']) {
   const id = devIds[name]
   if (!id) continue
-  const keys = ((await get(`/api/plugins/telemetry/DEVICE/${id}/keys/timeseries`)) ?? []).filter(k => k.startsWith(P) && k !== `${P}pqSum`).sort()
+  const keys = ((await get(`/api/plugins/telemetry/DEVICE/${id}/keys/timeseries`)) ?? [])
+    .filter(k => k.startsWith(P) && k !== `${P}pqSum`)
+    .sort()
   for (const k of keys) out(row(`${name} · \`${k}\``, stat(await series('DEVICE', id, k))))
 }
 out('')
@@ -119,22 +142,36 @@ out('')
 // 4. 告警
 out(`## 4. 告警「功率越限告警」(\`P > 45\` 边沿,窗口内)`)
 out('')
-const al = await get(`/api/v2/alarms?pageSize=1000&page=0&startTime=${start}&endTime=${now}&sortProperty=createdTime&sortOrder=DESC`)
+const al = await get(
+  `/api/v2/alarms?pageSize=1000&page=0&startTime=${start}&endTime=${now}&sortProperty=createdTime&sortOrder=DESC`
+)
 const alarms = (al?.data ?? []).filter(a => a.type === '功率越限告警')
 const created = alarms.filter(a => a.createdTime >= start)
 const cleared = alarms.filter(a => a.cleared || a.clearTs > 0)
 const active = alarms.filter(a => !(a.cleared || a.clearTs > 0))
 const prop = alarms.filter(a => a.propagate)
 const byDev = {}
-for (const a of alarms) byDev[a.originatorName ?? a.originator?.id] = (byDev[a.originatorName ?? a.originator?.id] ?? 0) + 1
-out(`- 窗口内命中的告警 ${alarms.length} 条(新建 ${created.length},已清除 ${cleared.length},仍激活 ${active.length},propagate=true ${prop.length});全租户窗口内告警总数 ${al?.totalElements ?? '?'}`)
-out(`- 按设备:${Object.entries(byDev).map(([k, v]) => `${k} ${v}`).join(', ') || '无'}`)
+for (const a of alarms)
+  byDev[a.originatorName ?? a.originator?.id] = (byDev[a.originatorName ?? a.originator?.id] ?? 0) + 1
+out(
+  `- 窗口内命中的告警 ${alarms.length} 条(新建 ${created.length},已清除 ${cleared.length},仍激活 ${active.length},propagate=true ${prop.length});全租户窗口内告警总数 ${al?.totalElements ?? '?'}`
+)
+out(
+  `- 按设备:${
+    Object.entries(byDev)
+      .map(([k, v]) => `${k} ${v}`)
+      .join(', ') || '无'
+  }`
+)
 const lastAlarms = alarms.slice(0, 5)
 if (lastAlarms.length) {
   out('')
   out('| 设备 | 严重度 | 创建 | 清除 | 详情 |')
   out('|---|---|---|---|---|')
-  for (const a of lastAlarms) out(`| ${a.originatorName ?? ''} | ${a.severity} | ${fmt(a.startTs ?? a.createdTime)} | ${a.clearTs ? fmt(a.clearTs) : '—'} | ${JSON.stringify(a.details ?? {}).slice(0, 80)} |`)
+  for (const a of lastAlarms)
+    out(
+      `| ${a.originatorName ?? ''} | ${a.severity} | ${fmt(a.startTs ?? a.createdTime)} | ${a.clearTs ? fmt(a.clearTs) : '—'} | ${JSON.stringify(a.details ?? {}).slice(0, 80)} |`
+    )
 }
 out('')
 
@@ -147,7 +184,9 @@ const rootChain = chains.find(c => c.root)
 out('| 规则链 | 节点 | 处理消息 | 节点错误 | ERROR 事件 | STATS 条数 | 最忙节点 |')
 out('|---|---|---|---|---|---|---|')
 const events = async (id, type) => {
-  const r = await get(`/api/events/RULE_NODE/${id}/${type}?tenantId=${tenantId}&pageSize=1000&page=0&startTime=${start}&endTime=${now}`)
+  const r = await get(
+    `/api/events/RULE_NODE/${id}/${type}?tenantId=${tenantId}&pageSize=1000&page=0&startTime=${start}&endTime=${now}`
+  )
   return r?.data ?? []
 }
 const chainRows = []
@@ -172,7 +211,9 @@ for (const c of [...mine, rootChain]) {
     if (m > busiest[1]) busiest = [n.name, m]
   }
   const label = c.root ? `${c.name}(Root,只计与本站相关不可分,列全链)` : c.name
-  out(`| ${label} | ${meta.nodes.length} | ${msgs} | ${errs} | ${errEvents} | ${statsN} | ${busiest[0]} ${busiest[1]} |`)
+  out(
+    `| ${label} | ${meta.nodes.length} | ${msgs} | ${errs} | ${errEvents} | ${statsN} | ${busiest[0]} ${busiest[1]} |`
+  )
   chainRows.push({ name: c.name, nodeStats })
 }
 out('')
@@ -187,5 +228,7 @@ for (const cr of chainRows.filter(x => !x.name.startsWith('Root'))) {
   out('')
 }
 // 设备上报速率对照:窗口内 32 台 P 点数合计 vs 告警链入口节点处理消息
-out(`设备上报(P)合计 ${sumP} 点 / ${HOURS}h ≈ ${(sumP / HOURS / 60).toFixed(1)} 条/分钟;告警链处理消息见上表(同量级即无回环)。`)
+out(
+  `设备上报(P)合计 ${sumP} 点 / ${HOURS}h ≈ ${(sumP / HOURS / 60).toFixed(1)} 条/分钟;告警链处理消息见上表(同量级即无回环)。`
+)
 if (OUT) writeFileSync(OUT, lines.join('\n') + '\n')
