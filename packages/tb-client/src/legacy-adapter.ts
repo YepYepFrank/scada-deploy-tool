@@ -75,7 +75,8 @@ export function defaultKzInterval(windowMs: number): ExtInterval {
   if (windowMs <= 90 * 86_400_000) return '1d'
   return '1M'
 }
-const KZ_AGGS = new Set(['AVG', 'MAX', 'MIN', 'ZD'])
+/** kz 归档历史支持的聚合(编辑器的下拉也用这一份,免得两边枚举漂移) */
+export const KZ_AGGS = new Set(['AVG', 'MAX', 'MIN', 'ZD'])
 
 /** TB 推的值是字符串:数值串转 number,true/false 转 boolean,其余原样;null 透传 */
 export function normalizeValue(raw: unknown): TsPoint['value'] {

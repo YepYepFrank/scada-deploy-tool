@@ -232,6 +232,111 @@ describe('BindingRow', () => {
   })
 })
 
+describe('BindingRow · ext(kz)', () => {
+  const tree = bigSite()
+  const spec = () => getWidget('line')!.bindingSlots[0]! // series:ts-history / ext / const
+  // KeyPicker 的面板是 Teleport 出去的,测试里拉回本地才找得到
+  const mountExt = (modelValue: unknown) =>
+    mount(BindingRow, {
+      props: { spec: spec(), modelValue: modelValue as Binding, tree, client: fakeClient() },
+      global: { stubs: { Teleport: true } },
+    })
+  const last = (w: ReturnType<typeof mountExt>) => w.emitted('update:modelValue')!.at(-1)![0] as Record<string, unknown>
+
+  it('选 ext 就开出归档历史的表单(不再是空 params 让人手写 JSON)', async () => {
+    const w = mount(BindingRow, { props: { spec: spec(), modelValue: null, tree, client: fakeClient() } })
+    await w.find('select[data-role="mode"]').setValue('ext')
+    expect(last(w)).toEqual({
+      mode: 'ext',
+      source: 'kz',
+      window: '30d',
+      interval: '1d',
+      params: { entity: { type: 'DEVICE', id: '', name: '' }, keys: [] },
+    })
+  })
+
+  it('归档历史:实体点树、测点点 KeyPicker、聚合选下拉 —— 全程不碰 JSON', async () => {
+    const w = mountExt({ mode: 'ext', source: 'kz', window: '30d', interval: '1d', params: { entity: D1, keys: [] } })
+    // params JSON 默认收起
+    expect(w.find('textarea').exists()).toBe(false)
+    // 实体按钮显示的是当前实体,点开就是同一棵元数据树
+    expect(w.find('[data-role="entity"]').text()).toContain('SSP_1')
+    await w.find('[data-role="entity"]').trigger('click')
+    await w.find('[data-id="id-SSP_2"]').trigger('click')
+    expect(last(w).params).toEqual({ entity: { type: 'DEVICE', id: 'id-SSP_2', name: 'SSP_2' }, keys: [] })
+
+    // 测点:等 tsKeys 回来后 KeyPicker 里就是该实体的 key
+    await new Promise(r => setTimeout(r, 0))
+    await nextTick()
+    await w.find('.kp-btn').trigger('click')
+    // 分组与 ts / ts-history 一样:calc_ 结果置顶展开,遥测组点开
+    expect(w.findAll('.kp-group').map(g => g.text())).toEqual(['▼⭐ 计算结果(calc_)1', '▶遥测(4)4'])
+    await w.findAll('.kp-group')[1]!.trigger('mousedown')
+    await w
+      .findAll('.kp-item')
+      .find(i => i.text().startsWith('P '))!
+      .trigger('mousedown')
+    expect((last(w).params as { keys: string[] }).keys).toEqual(['P'])
+
+    await w.setProps({ modelValue: { mode: 'ext', source: 'kz', params: { entity: D1, keys: ['P'] } } as Binding })
+    await w.find('select[data-role="ext-agg"]').setValue('MAX')
+    expect(last(w).params).toEqual({ entity: D1, keys: ['P'], agg: 'MAX' })
+  })
+
+  it('换成收益趋势:params 整套换掉,站点在树里点(kz 的站点 = 网关设备),指标是下拉', async () => {
+    const w = mountExt({
+      mode: 'ext',
+      source: 'kz',
+      window: '30d',
+      interval: '1d',
+      params: { entity: D1, keys: ['P'] },
+    })
+    await w.find('select[data-role="ext-kind"]').setValue('revenue')
+    // 当前实体是设备,顺手带成站点
+    expect(last(w).params).toEqual({ stationId: 'id-SSP_1' })
+
+    await w.setProps({
+      modelValue: { mode: 'ext', source: 'kz', interval: '1d', params: { stationId: '' } } as Binding,
+    })
+    expect(w.find('[data-role="entity"]').text()).toContain('选择站点')
+    // 归档历史那一套控件都不见了,换成周期 + 指标
+    expect(w.find('select[data-role="ext-agg"]').exists()).toBe(false)
+    expect(w.find('.kp').exists()).toBe(false)
+    await w.find('[data-role="entity"]').trigger('click')
+    await w.find('[data-id="id-GW1"]').trigger('click')
+    expect(last(w).params).toEqual({ stationId: 'id-GW1' })
+
+    await w.setProps({
+      modelValue: { mode: 'ext', source: 'kz', interval: '1d', params: { stationId: 'id-GW1' } } as Binding,
+    })
+    expect(w.find('[data-role="entity"]').text()).toContain('GW1')
+    await w.find('select[data-role="ext-metric"]').setValue('net')
+    expect(last(w).params).toEqual({ stationId: 'id-GW1', metric: 'net' })
+    await w.find('select[data-role="ext-period"]').setValue('1M')
+    expect(last(w).interval).toBe('1M')
+  })
+
+  it('遗留配置:多测点给出口;params 形状不认识时自动展开 JSON 后路', async () => {
+    const multi = mountExt({ mode: 'ext', source: 'kz', params: { entity: D1, keys: ['P', 'Q'] } })
+    const warn = multi.find('[data-role="ext-multi-key-warning"]')
+    expect(warn.exists()).toBe(true)
+    expect(warn.text()).toContain('Q')
+    await warn.find('button').trigger('click')
+    expect((last(multi).params as { keys: string[] }).keys).toEqual(['P'])
+
+    const odd = mountExt({ mode: 'ext', source: 'kz', params: { foo: 1 } })
+    expect(odd.find('textarea').exists()).toBe(true)
+    // 新建绑定时的 ts-history 半成品不该把 JSON 后路顶开(它压根不是 ext)
+    const fresh = mountExt({ mode: 'ts-history', entity: D1, keys: [], window: '24h' })
+    await fresh.find('select[data-role="mode"]').setValue('ext')
+    await fresh.setProps({ modelValue: last(fresh) as unknown as Binding })
+    expect(fresh.find('textarea').exists()).toBe(false)
+    expect(odd.find('[data-role="entity"]').exists()).toBe(false)
+    await odd.find('select[data-role="ext-kind"]').setValue('history')
+    expect(last(odd).params).toEqual({ entity: { type: 'DEVICE', id: '', name: '' }, keys: [] })
+  })
+})
+
 describe('BindingsPanel', () => {
   it('遗留的多测点绑定可以一键拆成多条,每条一个测点(审查 R3)', async () => {
     const def = getWidget('line')!

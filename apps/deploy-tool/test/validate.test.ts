@@ -1,6 +1,6 @@
 // T3.5 校验层:四层各至少 1 个坏配置 + warning,全部定位到 widget id / slot name;error 阻止发布。
 import { describe, expect, it } from 'vitest'
-import { registerBuiltins, type PageConfig } from '@grid/scada-renderer'
+import { registerBuiltins, type Binding, type PageConfig } from '@grid/scada-renderer'
 import { buildMetaTree, type TbDevice } from '../src/meta/MetaNode'
 import {
   canPublish,
@@ -218,5 +218,79 @@ describe('校验层', () => {
     cfg.widgets[0]!.bindings = {}
     const list = validateStatic(cfg)
     expect(list.map(i => i.level)).toEqual(['error', 'warning'])
+  })
+})
+
+// kz 的站点标识实测就是 TB 里 gateway 设备的 id(镜像 bs_1_ems),所以站点也能在树里点选
+const gwTree = buildMetaTree(
+  '仙人山',
+  [dev('SSP_1'), { id: { id: 'id-GW1' }, name: 'GW1', type: 'gateway' }],
+  [{ id: { id: 'a1' }, name: 'xrs-mirror-test' }]
+)
+const gwMeta: MetaLookup = { tree: gwTree, client }
+const extHist = (params: Record<string, unknown>): Binding => ({
+  mode: 'ext',
+  source: 'kz',
+  window: '30d',
+  interval: '1d',
+  params,
+})
+
+describe('校验层 · ext(kz)绑定', () => {
+  it('① 静态:params 形状不连 TB 也要拦,定位到 /params 下的具体字段', () => {
+    const cfg = good()
+    cfg.widgets[0]!.bindings.series = [
+      extHist({ entity: SSP, keys: ['P', 'Q'] }),
+      { mode: 'ext', source: 'kz', params: { foo: 1 } },
+    ]
+    const s = only(validateStatic(cfg), 'schema')
+    expect(s.map(i => [i.level, i.widgetId, i.slot, i.path])).toEqual([
+      ['error', 'w-g1', 'series', '/widgets/w-g1/bindings/series/0/params/keys'],
+      ['error', 'w-g1', 'series', '/widgets/w-g1/bindings/series/1/params'],
+    ])
+    expect(s[0]!.message).toContain('只会用第一个测点「P」')
+    expect(s[1]!.message).toContain('无法分派')
+  })
+
+  it('① 静态:收益趋势没选指标只给 warning(默认画第一条),不挡发布', async () => {
+    const cfg = good()
+    cfg.widgets[0]!.bindings.series = [{ mode: 'ext', source: 'kz', interval: '1d', params: { stationId: 'id-GW1' } }]
+    const r = await validatePage(cfg, gwMeta)
+    expect(r.errors).toBe(0)
+    expect(canPublish(r)).toBe(true)
+    expect(r.issues.map(i => [i.level, i.path])).toEqual([['warning', '/widgets/w-g1/bindings/series/0/params/metric']])
+  })
+
+  it('② 存在性:归档历史的实体与测点照样查 —— kz 只是 TB 同一份遥测的归档', async () => {
+    const cfg = good()
+    cfg.widgets[0]!.bindings.series = [
+      extHist({ entity: { type: 'DEVICE', id: 'x', name: 'GHOST' }, keys: ['P'] }),
+      extHist({ entity: SSP, keys: ['NOPE'] }),
+    ]
+    const b = await validateBindingsLayer(cfg, gwMeta)
+    expect(b.map(i => [i.level, i.widgetId, i.path])).toEqual([
+      ['error', 'w-g1', '/widgets/w-g1/bindings/series/0/params/entity'],
+      ['warning', 'w-g1', '/widgets/w-g1/bindings/series/1/params/keys'],
+    ])
+    expect(b[0]!.message).toContain('GHOST')
+    // TB 侧没有的 key 只给 warning:kz 是独立归档库,停更的点位仍可能有历史
+    expect(b[1]!.message).toContain('只剩归档')
+  })
+
+  it('② 存在性:收益趋势的站点必须是网关设备,否则 kz 只会回「该站点下无设备」', async () => {
+    const cfg = good()
+    cfg.widgets[0]!.bindings.series = [
+      { mode: 'ext', source: 'kz', params: { stationId: 'id-GW1', metric: 'net' } },
+      { mode: 'ext', source: 'kz', params: { stationId: 'id-SSP_1', metric: 'net' } },
+      { mode: 'ext', source: 'kz', params: { stationId: '11111111-2222-3333-4444-555555555555', metric: 'net' } },
+    ]
+    const b = await validateBindingsLayer(cfg, gwMeta)
+    // 第 0 条是网关,通过
+    expect(b.map(i => [i.level, i.path])).toEqual([
+      ['warning', '/widgets/w-g1/bindings/series/1/params/stationId'],
+      ['warning', '/widgets/w-g1/bindings/series/2/params/stationId'],
+    ])
+    expect(b[0]!.message).toContain('不是 gateway')
+    expect(b[1]!.message).toContain('找不到对应设备')
   })
 })

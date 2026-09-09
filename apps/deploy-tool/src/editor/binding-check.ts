@@ -5,6 +5,7 @@
 import type { Binding, BindingMode, BindingSlotSpec } from '@grid/scada-renderer'
 import type { EntityRef } from '@grid/tb-client'
 import type { ValueKind } from '../meta/MetaNode'
+import { emptyExtParams, extComplete } from './ext-params'
 
 /** 某 mode 的最小合法形状(实体可选保留);新建绑定与换 mode 都用它 */
 export function emptyBinding(mode: BindingMode, entity?: EntityRef): Binding {
@@ -21,7 +22,8 @@ export function emptyBinding(mode: BindingMode, entity?: EntityRef): Binding {
     case 'const':
       return { mode, value: '' }
     case 'ext':
-      return { mode, source: 'kz', window: '30d', interval: '1d', params: {} }
+      // 默认按归档历史开表单(现场最常用的那种),站点收益在行内换查询类型即可
+      return { mode, source: 'kz', window: '30d', interval: '1d', params: emptyExtParams('history', entity) }
   }
 }
 
@@ -47,7 +49,7 @@ export function isComplete(b: Binding | null | undefined): boolean {
     case 'const':
       return b.value !== undefined
     case 'ext':
-      return !!b.source
+      return extComplete(b)
   }
   return false
 }

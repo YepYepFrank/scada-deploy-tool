@@ -22,6 +22,7 @@ import type { EntityRef } from '@grid/tb-client'
 import type { KeyInfo, MetaNode } from '../meta/MetaNode'
 import { validateProps } from './props-form'
 import { isComplete } from './binding-check'
+import { checkExt, extEntity, extKeys, extKind, extStationId } from './ext-params'
 
 export type IssueLayer = 'schema' | 'registry' | 'props' | 'binding' | 'template' | 'actions'
 
@@ -227,6 +228,17 @@ export function validateStatic(input: unknown): PageIssue[] {
     }
   }
 
+  // ext(kz)的 params 是自由对象,JSON Schema 表达不了两种查询的形状 —— 在这里按契约 §4.3b 检查。
+  // 与编辑器的绑定表单同一份规则(`ext-params.ts`),免得「表单让填、校验层不认」。
+  for (const w of cfg.widgets) {
+    for (const { slot, index: i, b } of bindingsOf(w)) {
+      if (b.mode !== 'ext') continue
+      const base = `/widgets/${w.id}/bindings/${slot}${i === null ? '' : `/${i}`}`
+      for (const e of checkExt(b))
+        issues.push({ level: e.level, layer: 'schema', path: base + e.sub, widgetId: w.id, slot, message: e.message })
+    }
+  }
+
   // ③ template:模板必填槽位 + 组件必填绑定槽位
   const tpl = getTemplate(cfg.template)
   if (tpl)
@@ -372,6 +384,77 @@ export function indexTree(root: MetaNode): { byName: Map<string, MetaNode>; byId
 }
 
 /** 第 ② 层。`meta.tree` / `meta.client` 任一为空则不检查(返回空数组,由 validatePage 标记 bindingChecked=false)。 */
+/**
+ * ext(kz)绑定的存在性检查。
+ * - 归档历史:`params.entity` 按 ADR-002 解析,`params.keys` 对 TB 的遥测 key 列表核对。
+ *   key 不在列表里只给 **warning**:kz 是独立归档库,TB 侧已停更(或已被清理)的 key 仍可能有历史,
+ *   拿 TB 的 latest key 列表当唯一真相会误杀。
+ * - 收益趋势:`stationId` 实测就是 TB 里 `gateway` 设备的 id;不是网关就 warning ——
+ *   kz 对任何不是站点的 id 一律只回「该站点下无设备」,现场分不出「选错了」还是「真没数据」。
+ */
+async function checkExtExistence(
+  at: Pick<PageIssue, 'path' | 'widgetId' | 'slot'>,
+  b: Binding & { mode: 'ext' },
+  index: { byName: Map<string, MetaNode>; byId: Map<string, MetaNode> },
+  client: NonNullable<MetaLookup['client']>,
+  issues: PageIssue[]
+): Promise<void> {
+  const kind = extKind(b)
+  if (kind === 'revenue') {
+    const id = extStationId(b)
+    const node = index.byId.get(id)
+    if (!node)
+      issues.push({
+        level: 'warning',
+        layer: 'binding',
+        ...at,
+        path: `${at.path}/params/stationId`,
+        message: `站点 id「${id}」在当前连接里找不到对应设备;kz 对不是站点的 id 一律只回「该站点下无设备」,发布后看不出是选错还是没数据`,
+      })
+    else if (node.kind !== 'gateway' && node.profile !== 'gateway')
+      issues.push({
+        level: 'warning',
+        layer: 'binding',
+        ...at,
+        path: `${at.path}/params/stationId`,
+        message: `「${node.name}」不是 gateway 设备,kz 的站点只认网关;多半会返回「该站点下无设备」`,
+      })
+    return
+  }
+  if (kind !== 'history') return
+  const ref = extEntity(b)
+  if (!ref) return
+  const r = resolveEntity(ref, index, { ...at, path: `${at.path}/params/entity` })
+  if ('level' in r) {
+    issues.push(r)
+    return
+  }
+  if (r.issue) issues.push(r.issue)
+  const entity = r.node.entity!
+  let have: Set<string>
+  try {
+    have = new Set((await client.tsKeys(entity)).map(k => k.key))
+  } catch (e) {
+    issues.push({
+      level: 'warning',
+      layer: 'binding',
+      ...at,
+      message: `无法读取「${r.node.name}」的遥测 key 列表(${(e as Error).message ?? e}),kz 归档 key 存在性未检查`,
+    })
+    return
+  }
+  for (const key of extKeys(b)) {
+    if (!key || have.has(key)) continue
+    issues.push({
+      level: 'warning',
+      layer: 'binding',
+      ...at,
+      path: `${at.path}/params/keys`,
+      message: `kz 归档测点「${key}」不在「${r.node.name}」当前的 TB 遥测 key 里 —— 若该点位已停更、只剩归档,属正常;否则多半是选错了`,
+    })
+  }
+}
+
 export async function validateBindingsLayer(cfg: PageConfig, meta: MetaLookup): Promise<PageIssue[]> {
   if (!meta.tree || !meta.client) return []
   const client = meta.client
@@ -419,13 +502,19 @@ export async function validateBindingsLayer(cfg: PageConfig, meta: MetaLookup): 
 
   for (const w of cfg.widgets) {
     for (const { slot, index: i, b } of bindingsOf(w)) {
-      if (b.mode === 'const' || b.mode === 'ext') continue
+      if (b.mode === 'const') continue
       // 没填完的绑定由 schema 层报「未填完整」,这里不再重复报「实体(空)不存在」
       if (!isComplete(b)) continue
       const at = {
         path: `/widgets/${w.id}/bindings/${slot}${i === null ? '' : `/${i}`}`,
         widgetId: w.id,
         slot,
+      }
+      // ext(kz):kz 是 TB 同一份遥测的长期归档,实体与 key 都还是 TB 的,照样查得了存在性。
+      // 形状本身在 validateStatic 的 checkExt 里管,这里只补存在性这一半。
+      if (b.mode === 'ext') {
+        await checkExtExistence(at, b, index, client, issues)
+        continue
       }
       const r = resolveEntity(b.entity, index, at)
       if ('level' in r) {

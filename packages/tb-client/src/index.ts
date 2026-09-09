@@ -21,6 +21,7 @@ export {
   normalizeValue,
   HISTORY_BUCKETS,
   KZ_BUCKETS,
+  KZ_AGGS,
   defaultKzInterval,
   type LegacyDataSourceOptions,
 } from './legacy-adapter'
