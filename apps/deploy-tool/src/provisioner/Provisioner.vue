@@ -715,13 +715,23 @@ const toggleGw = g => {
 /* 第 3 步 方式一/方式二 折叠(默认折叠,组头带摘要) */
 const wayOpen = reactive({ w1: false, w2: false })
 
-/* 第 3 步运算弹窗:测点选择器分组(KeyPicker 组件内置过滤与按设备折叠) */
-const keyPickerGroups = computed(() =>
-  claimedKeyGroups.value.map(g => ({
-    label: g.device,
-    items: g.items.map(k => ({ value: `${k.device}||${k.key}`, label: `${k.key}${k.cn ? ' · ' + k.cn : ''}` })),
+/*
+ * 第 3 步运算弹窗:测点选择器分组(KeyPicker 组件内置过滤与按设备折叠)。
+ * 来源是第 2 步「认领」的测点——没认领就一个都选不到,这是设计如此。
+ * 原来这里经由一个 claimedKeyGroups 中间量,而它在 de6b7d9(T3.7 删旧组态编辑器)被连带删掉、
+ * 引用却留着,导致第 3 步下拉从 2026-09-06 起一直是空的。现在直接用 claimedKeys,不再留中间量。
+ */
+const keyPickerGroups = computed(() => {
+  const by = new Map()
+  for (const k of claimedKeys.value) {
+    if (!by.has(k.device)) by.set(k.device, [])
+    by.get(k.device).push(k)
+  }
+  return [...by.entries()].map(([device, items]) => ({
+    label: device,
+    items: items.map(k => ({ value: `${device}||${k.key}`, label: `${k.key}${k.cn ? ' · ' + k.cn : ''}` })),
   }))
-)
+})
 
 /* ── 设备模板(tbsite/v2 批量配置)───────────────────────── */
 const deviceTemplates = ref([]) // { name, selector: {profiles:[], prefixes:[]}, items: [] }
@@ -918,7 +928,6 @@ function applyPreset(p) {
 const presetMsg = ref('')
 
 /* ── 智能自动填写:选完测点后自动生成名称/文案/输出名(可改)── */
-const OP_CN = { gt: '越上限', lt: '越下限', gte: '越上限', lte: '越下限', eq: '状态', ne: '异常' }
 let autoFill = { alarmName: '', message: '', output: '', asset: '' }
 function keyBase(encoded) {
   return (encoded || '').includes('||') ? encoded.split('||')[1] : encoded

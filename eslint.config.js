@@ -7,13 +7,7 @@ import globals from 'globals'
 
 export default tseslint.config(
   {
-    ignores: [
-      '**/dist/**',
-      '**/dist-site/**',
-      '**/node_modules/**',
-      '**/*.schema.json',
-      'apps/deploy-tool/src/provisioner/Provisioner.vue',
-    ],
+    ignores: ['**/dist/**', '**/dist-site/**', '**/node_modules/**', '**/*.schema.json'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
