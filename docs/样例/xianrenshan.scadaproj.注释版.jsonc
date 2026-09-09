@@ -343,8 +343,8 @@
           "type": "dual-axis", // 双轴曲线:primary 画左轴,secondary 画右轴
           "props": { "title": "3 号变有功 / 无功", "subtitle": "24H", "unitL": "kW", "unitR": "kvar", "decimals": 2 },
           "bindings": {
-            "primary": [{ "mode": "ts-history", "entity": { "type": "DEVICE", "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_T3_IED1" }, "keys": ["P"], "window": "24h", "agg": "AVG" }],
-            "secondary": [{ "mode": "ts-history", "entity": { "type": "DEVICE", "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_T3_IED1" }, "keys": ["Q"], "window": "24h", "agg": "AVG" }]
+            "primary": { "mode": "ts-history", "entity": { "type": "DEVICE", "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_T3_IED1" }, "keys": ["P"], "window": "24h", "agg": "AVG" },
+            "secondary": { "mode": "ts-history", "entity": { "type": "DEVICE", "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96", "name": "PDR4_T3_IED1" }, "keys": ["Q"], "window": "24h", "agg": "AVG" }
           }
         },
         {

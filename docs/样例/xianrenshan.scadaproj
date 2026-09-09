@@ -596,36 +596,34 @@
             "decimals": 2
           },
           "bindings": {
-            "primary": [
-              {
-                "mode": "ts-history",
-                "entity": {
-                  "type": "DEVICE",
-                  "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96",
-                  "name": "PDR4_T3_IED1"
-                },
-                "keys": [
-                  "P"
-                ],
-                "window": "24h",
-                "agg": "AVG"
-              }
-            ],
-            "secondary": [
-              {
-                "mode": "ts-history",
-                "entity": {
-                  "type": "DEVICE",
-                  "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96",
-                  "name": "PDR4_T3_IED1"
-                },
-                "keys": [
-                  "Q"
-                ],
-                "window": "24h",
-                "agg": "AVG"
-              }
-            ]
+            "primary": {
+              "mode": "ts-history",
+              "entity": {
+                "type": "DEVICE",
+                "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96",
+                "name": "PDR4_T3_IED1"
+              },
+              "keys": [
+                "P"
+              ],
+              "window": "24h",
+              "agg": "AVG"
+            }
+            ,
+            "secondary": {
+              "mode": "ts-history",
+              "entity": {
+                "type": "DEVICE",
+                "id": "c57db6a0-528e-11f1-90ba-53cf2ab0fe96",
+                "name": "PDR4_T3_IED1"
+              },
+              "keys": [
+                "Q"
+              ],
+              "window": "24h",
+              "agg": "AVG"
+            }
+            
           }
         },
         {
