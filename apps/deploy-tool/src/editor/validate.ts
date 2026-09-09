@@ -210,6 +210,23 @@ export function validateStatic(input: unknown): PageIssue[] {
       })
   }
 
+  // 一条历史曲线绑定 = 一条序列 = 一个测点:多写的会被渲染器丢掉。纯配置检查,不连 TB 也要拦(审查 R3)
+  for (const w of cfg.widgets) {
+    for (const { slot, index: i, b } of bindingsOf(w)) {
+      if (b.mode !== 'ts-history' || b.keys.length <= 1) continue
+      issues.push({
+        level: 'error',
+        layer: 'registry',
+        path: `/widgets/${w.id}/bindings/${slot}${i === null ? '' : `/${i}`}`,
+        widgetId: w.id,
+        slot,
+        message:
+          `一条历史曲线绑定只画一条序列,只会用第一个测点「${b.keys[0]}」,` +
+          `${b.keys.slice(1).join('、')} 会被丢掉。要画多条曲线,请在这个槽位「+ 添加一条」绑定。`,
+      })
+    }
+  }
+
   // ③ template:模板必填槽位 + 组件必填绑定槽位
   const tpl = getTemplate(cfg.template)
   if (tpl)

@@ -180,7 +180,7 @@ describe('BindingRow', () => {
     })
   })
 
-  it('ts-history:多 key + window + agg;alarm:类型 chip 多选,空则不写 types', async () => {
+  it('ts-history:一条绑定只选一个测点(审查 R3);window + agg;alarm:类型 chip 多选,空则不写 types', async () => {
     const spec = getWidget('line')!.bindingSlots[0]!
     const w = mount(BindingRow, {
       props: {
@@ -190,12 +190,32 @@ describe('BindingRow', () => {
         client: fakeClient(),
       },
     })
-    await w.find('.br-mini').trigger('click') // + 再加一个测点
-    expect((w.emitted('update:modelValue')!.at(-1)![0] as { keys: string[] }).keys).toEqual(['P', ''])
+    // 单 key 时既没有「再加一个测点」,也没有多 key 提示
+    expect(w.find('[data-role="multi-key-warning"]').exists()).toBe(false)
+    expect(w.findAll('.kp')).toHaveLength(1)
     await w.find('select[data-role="window"]').setValue('7d')
     expect((w.emitted('update:modelValue')!.at(-1)![0] as { window: string }).window).toBe('7d')
     await w.find('select[data-role="agg"]').setValue('MAX')
     expect((w.emitted('update:modelValue')!.at(-1)![0] as { agg: string }).agg).toBe('MAX')
+
+    // 早期配置留下的多 key:原样提示,给出「拆成多条」与「只留第一个」两个出口
+    const legacy = mount(BindingRow, {
+      props: {
+        spec,
+        modelValue: { mode: 'ts-history', entity: D1, keys: ['P', 'Q'], window: '24h' } as Binding,
+        tree,
+        client: fakeClient(),
+      },
+    })
+    const warn = legacy.find('[data-role="multi-key-warning"]')
+    expect(warn.exists()).toBe(true)
+    expect(warn.text()).toContain('Q')
+    const btns = warn.findAll('button')
+    expect(btns.map(b => b.text())).toEqual(['拆成 2 条绑定', '只留第一个'])
+    await btns[0]!.trigger('click')
+    expect(legacy.emitted('split')![0]![0]).toEqual(['P', 'Q'])
+    await btns[1]!.trigger('click')
+    expect((legacy.emitted('update:modelValue')!.at(-1)![0] as { keys: string[] }).keys).toEqual(['P'])
 
     const aspec = getWidget('alarm-list')!.bindingSlots[0]!
     const a = mount(BindingRow, {
@@ -213,6 +233,27 @@ describe('BindingRow', () => {
 })
 
 describe('BindingsPanel', () => {
+  it('遗留的多测点绑定可以一键拆成多条,每条一个测点(审查 R3)', async () => {
+    const def = getWidget('line')!
+    const legacy = {
+      mode: 'ts-history',
+      entity: { type: 'DEVICE', id: 'id-SSP_1', name: 'SSP_1' },
+      keys: ['P', 'Q', 'F'],
+      window: '24h',
+      agg: 'AVG',
+    } as Binding
+    const widget: WidgetConfig = { id: 'l', slot: 'g1', type: 'line', bindings: { series: [legacy] } }
+    const w = mount(BindingsPanel, { props: { def, widget, tree: bigSite(), client: fakeClient() } })
+    const warn = w.find('[data-slot="series"] [data-role="multi-key-warning"]')
+    expect(warn.exists()).toBe(true)
+    await warn.findAll('button')[0]!.trigger('click') // 拆成 3 条绑定
+    const series = (w.emitted('update')!.at(-1)![0] as { series: { keys: string[]; window: string; agg: string }[] })
+      .series
+    expect(series.map(b => b.keys)).toEqual([['P'], ['Q'], ['F']])
+    // 其余字段照抄,不用重配
+    expect(series.every(b => b.window === '24h' && b.agg === 'AVG')).toBe(true)
+  })
+
   it('line 的 series 多序列:三条来自不同设备;必填未绑标红;数值槽位选文本 key 标黄', async () => {
     const def = getWidget('line')!
     const widget: WidgetConfig = { id: 'l', slot: 'g1', type: 'line', bindings: {} }

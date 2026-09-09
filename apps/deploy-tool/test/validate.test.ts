@@ -93,7 +93,7 @@ describe('校验层', () => {
     const cfg = good()
     cfg.widgets[1]!.bindings.value = { mode: 'ts', entity: { type: 'DEVICE', id: 'x', name: 'GHOST' }, key: 'P' }
     cfg.widgets[0]!.bindings.series = [
-      { mode: 'ts-history', entity: SSP, keys: ['P', 'NOPE'], window: '24h' },
+      { mode: 'ts-history', entity: SSP, keys: ['NOPE'], window: '24h' },
       { mode: 'ts-history', entity: SSP, keys: ['calc_total_p'], window: '24h' },
     ]
     const b = await validateBindingsLayer(cfg, meta)
@@ -105,6 +105,21 @@ describe('校验层', () => {
     expect(b[0]!.message).toContain('NOPE')
     expect(b[1]!.message).toContain('规则尚未发布')
     expect(b[2]!.message).toContain('GHOST')
+  })
+
+  it('① 注册表:一条历史曲线绑定绑了多个测点 → error;不连 TB 也要拦(审查 R3)', async () => {
+    const cfg = good()
+    cfg.widgets[0]!.bindings.series = [{ mode: 'ts-history', entity: SSP, keys: ['P', 'Q'], window: '24h' }]
+    const b = validateStatic(cfg)
+    const multi = b.filter(i => i.message.includes('只画一条序列'))
+    expect(multi.map(i => [i.level, i.widgetId, i.slot, i.path])).toEqual([
+      ['error', 'w-g1', 'series', '/widgets/w-g1/bindings/series/0'],
+    ])
+    expect(multi[0]!.message).toContain('Q')
+    expect(multi[0]!.message).toContain('添加一条')
+    // 单个测点不报
+    cfg.widgets[0]!.bindings.series = [{ mode: 'ts-history', entity: SSP, keys: ['P'], window: '24h' }]
+    expect(validateStatic(cfg).filter(i => i.message.includes('只画一条序列'))).toEqual([])
   })
 
   it('② 绑定:属性 key 按 scope 查;key 列表读不到(403)降级为 warning;alarm 只查实体', async () => {

@@ -53,6 +53,19 @@ function add(slot: string) {
   const spec = props.def.bindingSlots.find(s => s.name === slot)!
   set(slot, [...list(slot), emptyBinding(defaultMode(spec))])
 }
+/**
+ * 把一条绑了多个测点的历史绑定摊成多条,一条一个测点(审查 R3)。
+ * 渲染器按绑定条数出序列,一条绑定里的多余测点会被丢掉;这里给早期配置一个一键改正的出口。
+ */
+function splitAt(slot: string, i: number, keys: string[]) {
+  const l = [...list(slot)]
+  const base = l[i]
+  if (!base) return
+  const clean = keys.filter(Boolean)
+  if (clean.length < 2) return
+  l.splice(i, 1, ...clean.map(k => ({ ...base, keys: [k] }) as Binding))
+  set(slot, l)
+}
 function move(slot: string, i: number, dir: -1 | 1) {
   const l = [...list(slot)]
   const j = i + dir
@@ -124,6 +137,7 @@ watch(flags, f => emit('flags', f), { immediate: true })
             :tree="tree"
             :client="client"
             @update:model-value="setAt(s.name, i, $event ?? null)"
+            @split="splitAt(s.name, i, $event)"
           />
         </div>
         <button type="button" class="bp-add" @click="add(s.name)">+ 添加一条</button>

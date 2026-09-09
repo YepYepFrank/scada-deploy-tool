@@ -19,7 +19,7 @@ const props = defineProps<{
   tree: MetaNode | null
   client: MetaClient | null
 }>()
-const emit = defineEmits<{ 'update:modelValue': [b: Binding | null] }>()
+const emit = defineEmits<{ 'update:modelValue': [b: Binding | null]; split: [keys: string[]] }>()
 
 const ALL_MODES: BindingMode[] = ['ts', 'ts-history', 'attr', 'alarm', 'const', 'ext']
 const MODE_LABEL: Record<BindingMode, string> = {
@@ -112,21 +112,20 @@ const attrGroups = computed(() => [
   { label: `属性(${attrKeys.value.length})`, items: attrKeys.value.map(k => ({ value: k, label: k })) },
 ])
 
-// ts-history 多 key
+/**
+ * ts-history:一条绑定 = 一条序列 = 一个测点。渲染器按绑定条数出 SeriesValue,一条绑定里写多个
+ * 测点的话除第一个之外都会被丢掉(审查 R3)。要画多条曲线,在槽位上「+ 添加一条」绑定。
+ * 这里只保留单选;遇到早期配置留下的多 key,原样显示并给出两个明确的处理办法。
+ */
 const hkeys = computed(() => ((props.modelValue as { keys?: string[] } | null)?.keys ?? []) as string[])
-function setHKey(i: number, v: string) {
-  const list = [...hkeys.value]
-  list[i] = v
-  patch({ keys: list.filter(Boolean) })
+const extraKeys = computed(() => hkeys.value.slice(1).filter(Boolean))
+/** 换第一个测点时保留多余项,免得「改个 key」把它们悄悄抹掉 —— 多余项要用下面两个按钮显式处理 */
+function setHKey(v: string) {
+  patch({ keys: [v, ...hkeys.value.slice(1)].filter(Boolean) })
 }
-function addHKey() {
-  patch({ keys: [...hkeys.value, ''] })
+function keepFirstKey() {
+  patch({ keys: hkeys.value.slice(0, 1).filter(Boolean) })
 }
-function delHKey(i: number) {
-  patch({ keys: hkeys.value.filter((_, j) => j !== i) })
-}
-/** 输入框里未确定的空项也要显示 */
-const hkeyRows = computed(() => (hkeys.value.length ? hkeys.value : ['']))
 
 // alarm types
 const types = computed(() => ((props.modelValue as { types?: string[] } | null)?.types ?? []) as string[])
@@ -225,17 +224,22 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
     </div>
     <!-- ts-history -->
     <template v-else-if="mode === 'ts-history'">
-      <div v-for="(k, i) in hkeyRows" :key="i" class="br-line">
+      <div class="br-line">
         <KeyPicker
-          :model-value="k"
+          :model-value="hkeys[0] ?? ''"
           :groups="keyGroups"
           :placeholder="loading ? '读取测点…' : entity?.id ? '选择测点' : '先选实体'"
-          @update:model-value="setHKey(i, $event)"
+          @update:model-value="setHKey($event)"
         />
-        <button v-if="hkeyRows.length > 1" type="button" class="br-mini" @click="delHKey(i)">×</button>
+      </div>
+      <div v-if="extraKeys.length" class="br-line br-legacy" data-role="multi-key-warning">
+        <span>这条绑定还绑着 {{ extraKeys.join('、') }} —— 一条绑定只画一条序列,渲染时只用第一个,多余的会被丢掉。</span>
+        <button v-if="spec.multiple" type="button" class="br-mini" @click="emit('split', hkeys.slice())">
+          拆成 {{ hkeys.length }} 条绑定
+        </button>
+        <button type="button" class="br-mini" @click="keepFirstKey">只留第一个</button>
       </div>
       <div class="br-line">
-        <button type="button" class="br-mini" @click="addHKey">+ 再加一个测点</button>
         <label
           >窗口
           <select :value="f('window')" data-role="window" @change="patch({ window: ev($event) })">
@@ -322,6 +326,10 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
   padding: 8px;
   border: 1px solid var(--ed-line, rgba(83, 196, 255, 0.2));
   border-radius: 6px;
+}
+.br-legacy {
+  font-size: 12px;
+  color: #ffcf6b;
 }
 .br-line {
   display: flex;

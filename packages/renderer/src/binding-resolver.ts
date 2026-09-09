@@ -211,6 +211,14 @@ export function resolveBindings(config: PageConfig, ds: DataSource, opts: Resolv
       return
     }
     if (one.mode === 'ts-history') {
+      // 一条绑定 = 一条序列(上面 multiple 槽位是 list.map 出的 SeriesValue,按绑定条数走)。
+      // 早期编辑器让人在一条绑定里加多个测点,多出来的会被悄悄丢掉 —— 现在至少喊一声(审查 R3)。
+      // 编辑器与校验层已经拦住新建这种配置,这里只面对历史遗留页面,所以不改渲染行为、不让整个组件报错。
+      if (one.keys.length > 1)
+        console.warn(
+          `[scada-renderer] ${w.id}/${slot}:一条历史曲线绑定只画一条序列,只用第一个测点「${one.keys[0]}」;` +
+            `多余的 ${one.keys.slice(1).join('、')} 被忽略。要画多条请在该槽位配多条绑定。`
+        )
       const key = one.keys[0]!
       let buf: TsPoint[] = []
       ds.getHistory(one.entity, one.keys, one.window, one.agg)

@@ -93,6 +93,14 @@ pnpm tbsite alarm-export sites/xx.tbsite.json --write   # 再写到资产 JIZHAN
 
 核对没过或有行出错时 CLI 退出 1。修好后重跑同一条命令即可:上界已固定,写入按 ts 覆盖(幂等),不会漏搬也不会误删。
 
+## 一条历史曲线绑定 = 一条序列(R3,2026-09-08)
+
+渲染器按**绑定条数**出序列,折线组件的 `series` 槽位是 `multiple: true` —— 多条曲线用**多条绑定**,不是在一条绑定里堆多个测点。一条绑定里写了多个,除第一个之外都会被丢掉。
+
+现在三处一起兜住:编辑器只让选一个测点(遇到早期配置给「拆成 N 条绑定 / 只留第一个」两个出口);校验层把多测点判为 error 并禁用发布,且**不连 TB 也生效**;渲染器仍按第一个测点渲染(不让历史页面整块报错)但打一条点名组件与槽位的 `console.warn`。
+
+契约的 `keys` 仍是数组(一期契约已冻结,没收紧成 `maxItems: 1`),靠上面两道拦。
+
 ## Customer 归属:未分配标识与取消分配(R2 / R5,2026-09-08)
 
 TB 用一个**占位 UUID** `13814000-1dd2-11b2-8080-808080808080` 表示「未分配 Customer」。它是非空字符串,所以 `if (asset.customerId?.id)` 会把「未分配」当成一个真实客户;真去 `POST /api/customer/<占位>/asset/…` 只会拿到 `404 Customer ... is not found`(镜像实测)。凡是读 `customerId` 都走 `customerIdOf(entity)`(`core/constants`),未分配一律归一成 `null`。

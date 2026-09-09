@@ -3,7 +3,7 @@
  * 断言 subscribeTs 的 (entity, keys) 集合、getHistory 的 window / agg、ext 的 query,
  * 卸载后 unsubscribe 次数 == 订阅次数;值按 valueType 整形;多序列槽位为数组。
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { resolveBindings } from '../src/binding-resolver'
 import type { PageConfig } from '../src/schema/page-config'
 import { createMockDataSource } from './mock-data-source'
@@ -196,6 +196,39 @@ describe('resolveBindings', () => {
     // 历史 5 点(值 0–4)+ 首包(值 1)+ 推送 2 点 = 8,保留最后 6 → 首个值为 2
     expect(pts).toHaveLength(6)
     expect(pts[0]!.value).toBe(2)
+    h.dispose()
+  })
+
+  it('一条 ts-history 绑定写了多个测点:只用第一个,但要出声警告(审查 R3)', async () => {
+    const ds = createMockDataSource({ history: { k: Array.from({ length: 3 }, (_, i) => ({ ts: i, value: i })) } })
+    const cfg: PageConfig = {
+      schemaVersion: 1,
+      template: 'overview-a',
+      widgets: [
+        {
+          id: 'w',
+          slot: 'g1',
+          type: 'line',
+          bindings: { series: [{ mode: 'ts-history', entity: AST, keys: ['k', 'k2'], window: '1h' }] },
+        },
+      ],
+    }
+    const warns: string[] = []
+    const spy = vi.spyOn(console, 'warn').mockImplementation((...a: unknown[]) => void warns.push(a.join(' ')))
+    const h = resolveBindings(cfg, ds, { onValue: () => {}, maxPoints: 6 })
+    await flush()
+    await flush()
+    spy.mockRestore()
+
+    expect(warns).toHaveLength(1)
+    expect(warns[0]).toContain('w/series')
+    expect(warns[0]).toContain('k2')
+    expect(warns[0]).toContain('多条绑定')
+    // 行为不变:仍按第一个测点渲染,不让历史页面整块报错
+    const series = h.values['w']!.series as { name: string; points: unknown[] }[]
+    expect(series).toHaveLength(1)
+    expect(series[0]!.name).toBe('k')
+    expect(series[0]!.points.length).toBeGreaterThan(0)
     h.dispose()
   })
 })
