@@ -1,4 +1,5 @@
-// @grid/tb-client 公共入口。T0.2 导出契约类型;LegacyDataSource 是 T1.1 预案(同事的 TbClient 到位后删除)。
+// @grid/tb-client 公共入口。T0.2 导出契约类型;LegacyDataSource 曾是 T1.1 预案,2026-09-09 起转为
+// **部署工具自用的数据源,长期保留**(不再计划删除,原因见 docs/联调记录/数据源归属-2026-09-09.md)。
 export type {
   EntityRef,
   TsPoint,

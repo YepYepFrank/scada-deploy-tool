@@ -4,7 +4,10 @@
  * 让渲染器在同事的 TbClient 交付前就能吃镜像真数据。
  *
  * 刻意保持薄:一条 WS、断线 3 秒后重连并重放订阅、告警走 REST 轮询;不做限流、不做 token 刷新
- * (token 由宿主通过 getToken 提供)。同事版到位后整个文件删除,test/conformance.ts 那套用例照跑。
+ * (token 由宿主通过 getToken 提供;刷新也归宿主,见部署工具 `standalone/session.ts`)。
+ * **2026-09-09 起不再计划删除**:同事的 TbClient 在她的内网仓库、我们的 CI 是 GitHub 跑机拉不到,
+ * 挪进本仓库对她是绕一圈;两份实现的行为一致由 test/conformance.ts 那套用例保证。
+ * 定位从「T1.1 临时预案」改为「部署工具(编辑器预览 / 独立大屏 / 渲染器 /dev)自用的数据源」。
  */
 import type {
   AlarmInfo,

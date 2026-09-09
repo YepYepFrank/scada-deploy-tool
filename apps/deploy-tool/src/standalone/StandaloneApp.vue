@@ -2,7 +2,7 @@
 /**
  * 独立大屏薄壳(T3.8,架构 §4):
  *   登录页(TB 地址 + 账号,token 只存 sessionStorage)→ 页面列表(当前身份看得到的 ScadaPage 资产)
- *   → 标头 / 时钟 / 菜单 + <ScadaPage>(LegacyDataSource,同事的 TbClient 就绪后换实现)。
+ *   → 标头 / 时钟 / 菜单 + <ScadaPage>(LegacyDataSource —— 工具自用数据源,2026-09-09 起不再计划换成同事的 TbClient)。
  * 长会话(T3.8):access token 2.5 小时到期,登录时一并存下 refresh token,`freshToken()` 在快到期时换新的。
  * 挂墙大屏可能几天没人碰,所以还有一个 5 分钟的心跳去续——TB 的 refresh token 是滚动的(每次刷新
  * 重新计 7 天),只要续得上就不用重新登录;真断了(超 7 天没开机 / 被吊销)回登录页并说明原因。

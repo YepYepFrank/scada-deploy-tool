@@ -2,7 +2,7 @@
 /**
  * /dev 展示页:左侧注册表(组件 + 模板),右侧按所选模板渲染一份覆盖全部内置组件的配置。
  * design 模式用 sampleData;「随机数据」用内置 MockDataSource(2 秒一推,含历史 / 属性 / 告警 / ext);不依赖 TB。
- * 「镜像真数据」用 LegacyDataSource(T1.1 预案)连镜像 TB:登录 → 选设备 → 把演示配置里的实体 / key 换成该设备实际有的。
+ * 「镜像真数据」用 LegacyDataSource(工具自用数据源)连镜像 TB:登录 → 选设备 → 把演示配置里的实体 / key 换成该设备实际有的。
  */
 import { computed, ref } from 'vue'
 import { LegacyDataSource } from '@grid/tb-client'
@@ -305,7 +305,7 @@ function toggleOffline() {
   offline.value = !offline.value
   statusCbs.forEach(cb => cb(mock.status))
 }
-// ---------- 镜像真数据(T1.1 预案 LegacyDataSource)----------
+// ---------- 镜像真数据(LegacyDataSource,工具自用数据源)----------
 // 凭据从表单输入;可在 dev/.env.local 加 VITE_TB_USER / VITE_TB_PASSWORD 预填(仅 dev server 读取,不入库不打包)
 const mirror = ref(false)
 const mBase = ref('/tbm') // vite.dev.config 代理到镜像(含 WS)
@@ -498,7 +498,7 @@ const issues = ref<{ path: string; message: string }[]>([])
         <button :disabled="!live" @click="toggleOffline">{{ offline ? '恢复连接' : '模拟断线' }}</button>
       </section>
       <section class="mirror">
-        <h2>镜像真数据(LegacyDataSource · T1.1 预案)</h2>
+        <h2>镜像真数据(LegacyDataSource)</h2>
         <label>地址 <input v-model="mBase" placeholder="/tbm(代理)或 http://host:8080" /></label>
         <label v-if="IDENTITIES.length > 1"
           >身份预填
