@@ -8,6 +8,7 @@ import {
   ALARM_CONFIG_ATTR,
   ALARM_DEVICES_ATTR,
   applyRenameTable,
+  cutoverKey,
   detectSiteDrift,
   diffJson,
   normalizeEntityRefs,
@@ -48,7 +49,9 @@ const USAGE = `用法:
                   本地声明 / 页面文件 vs 线上 siteConfig / pageConfig 的差异(只读;--strict 有差异时退出码 1,给 CI 用)
   tbsite migrate  <站点.tbsite.json> [--table 迁移表] [--apply] [--from 时刻] [--delete-old] [--rewrite-pages] [--pages 目录] [连接参数]
                   执行 ADR-003 迁移表:旧 key 的历史复制到新 key(只补新 key 首点之前的区间;--from 再限定起点);缺省 dry-run;
-                  --delete-old 复制后删旧 key 数据与同名 CF;--rewrite-pages 把页面文件里对旧 key 的绑定改名
+                  --delete-old 复制后删旧 key 数据与同名 CF —— 删之前核对「上界前的旧点都到新 key、上界后没有剩余旧点」,
+                  核对不过就不删;复制上界记在 migrations/<站点>.migrate-state.json,中断重试自动沿用(别删该文件)。
+                  --rewrite-pages 把页面文件里对旧 key 的绑定改名
   tbsite alarm-export <站点.tbsite.json> [--out 文件] [--offline] [--write [--force] [--asset 资产名]] [连接参数]
                   把站点的阈值告警导出成同事的 JSON(alarm_config 模板数组 + alarm_devices 设备清单,ADR-001 二期)。
                   默认连 TB 解析设备 id / label 并写文件(缺省 sites/exports/<站点>.alarm_config.json);--offline 不连;
@@ -346,18 +349,44 @@ async function main(argv: string[]) {
       console.log(`  (${pageChanges} 处页面绑定要改名,加 --rewrite-pages 改文件;改完用 tbsite page 重新发布)`)
     const { api, user, base } = await connect(flags)
     console.log(`✓ 已登录 ${base}(${user})`)
+    // 复制上界必须跨重试保持不变:第一批点搬进去之后「新 key 首点」就变早了,现算会漏搬(审查 R4)
+    const statePath = resolve(table, '..', `${cfg.site.name}.migrate-state.json`)
+    const state: Record<string, number> = existsSync(statePath)
+      ? (JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, number>)
+      : {}
+    if (Object.keys(state).length)
+      console.log(`状态文件 ${statePath}:${Object.keys(state).length} 行沿用上一轮算出的复制上界`)
     const res = await applyRenameTable(api, rows, {
       apply: !!flags.apply,
       deleteOld: !!flags['delete-old'],
       from: typeof flags.from === 'string' ? parseTs(flags.from) : undefined,
+      cutover: state,
       report: l => console.log('  ' + l),
     })
+    // 只有真写过数据才需要钉住上界;dry-run 不动 TB,不落状态
+    if (flags.apply) {
+      const next = { ...state }
+      for (const r of res) if (r.newFirstTs !== null) next[cutoverKey(r.row)] = r.newFirstTs
+      if (Object.keys(next).length) {
+        mkdirSync(resolve(statePath, '..'), { recursive: true })
+        writeFileSync(statePath, JSON.stringify(next, null, 2) + '\n')
+        console.log(`复制上界已记到 ${statePath}(中断后重试会自动沿用,别删)`)
+      }
+    }
     const total = res.reduce((n, r) => n + r.points, 0)
+    const failed = res.filter(r => r.error)
+    const notDeleted = res.filter(r => r.deleteSkipped)
+    for (const r of failed) console.log(`✗ ${r.row.entity}.${r.row.old}:${r.error}`)
+    for (const r of notDeleted) console.log(`! ${r.row.entity}.${r.row.old}:${r.deleteSkipped}`)
     console.log(
-      `${flags.apply ? '完成' : '计划'}:${res.filter(r => !r.skipped).length}/${rows.length} 行 · ${total} 点` +
-        (flags['delete-old'] && flags.apply ? ' · 旧 key 数据与同名 CF 已删' : '')
+      `${flags.apply ? '完成' : '计划'}:${res.filter(r => !r.skipped && !r.error).length}/${rows.length} 行 · ${total} 点` +
+        (flags['delete-old'] && flags.apply
+          ? ` · 旧 key 已删 ${res.filter(r => r.deletedOld).length} 行` +
+            (notDeleted.length ? `,${notDeleted.length} 行核对没过未删` : '')
+          : '')
     )
-    return res.some(r => r.skipped) ? 1 : 0
+    if (failed.length) console.log('有行中断:修好后重跑同一条命令即可,上界已固定,不会漏搬也不会误删。')
+    return res.some(r => r.skipped || r.error || r.deleteSkipped) ? 1 : 0
   }
   if (cmd === 'alarm-export') {
     const cfg = readConfig(file)

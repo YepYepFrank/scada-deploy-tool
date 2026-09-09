@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyRenameTable,
+  cutoverKey,
   collectEntityRefs,
   detectSiteDrift,
   diffJson,
@@ -108,7 +109,8 @@ describe('rewritePageKeys', () => {
 })
 
 /** 内存 TB:设备 / 资产按名查、时序按 key 存、CF 列表 / 删除、时序删除 */
-function fakeTb() {
+function fakeTb(failOnWriteNo = 0) {
+  let writes = 0
   const devices = [{ id: { id: 'dev-1' }, name: 'D1' }]
   const assets = [{ id: { id: 'site-1' }, name: 'S1', type: 'tbsite' }]
   const ts: Record<string, Record<string, { ts: number; value: unknown }[]>> = { 'dev-1': {} }
@@ -140,9 +142,15 @@ function fakeTb() {
       return { [key]: pts.slice(0, limit) }
     }
     if ((m = url.match(/^\/api\/plugins\/telemetry\/(\w+)\/([^/]+)\/timeseries\/ANY$/))) {
+      if (failOnWriteNo && ++writes === failOnWriteNo) throw new Error('网络中断(模拟)')
       const bag = (ts[m[2]!] ||= {})
       for (const e of data as { ts: number; values: Record<string, unknown> }[])
-        for (const [k, v] of Object.entries(e.values)) (bag[k] ||= []).push({ ts: e.ts, value: v })
+        for (const [k, v] of Object.entries(e.values)) {
+          const list = (bag[k] ||= [])
+          const i = list.findIndex(p => p.ts === e.ts)
+          if (i >= 0) list[i] = { ts: e.ts, value: v }
+          else list.push({ ts: e.ts, value: v })
+        }
       return null
     }
     if ((m = url.match(/^\/api\/plugins\/telemetry\/(\w+)\/([^/]+)\/timeseries\/delete\?keys=([^&]+)/))) {
@@ -239,5 +247,90 @@ describe('detectSiteDrift', () => {
     expect(r.remoteExists).toBe(true)
     expect(r.siteDiff.map(d => `${d.kind} ${d.path}`)).toEqual(['removed devices[D2]', 'added outputPrefix'])
     expect(r.pages[0]).toMatchObject({ file: 'p.json', title: '总览', pageName: null, diff: null })
+  })
+})
+
+describe('applyRenameTable · 中断重试的数据安全(审查 R4,2026-09-08)', () => {
+  const row: RenameEntry = { entityType: 'DEVICE', entity: 'D1', old: 'PAvg5m', new: 'calc_PAvg5m', since: 't' }
+  /** 旧 key 三点在前,新 key 从 400 起 —— 迁移要把 100/200/300 补进新 key */
+  const seed = (tb: ReturnType<typeof fakeTb>) => {
+    tb.ts['dev-1']!.PAvg5m = [100, 200, 300].map(t => ({ ts: t, value: t / 10 }))
+    tb.ts['dev-1']!.calc_PAvg5m = [{ ts: 400, value: 40 }]
+  }
+  const tsOf = (tb: ReturnType<typeof fakeTb>, k: string) =>
+    (tb.ts['dev-1']![k] ?? []).map(p => p.ts).sort((a, b) => a - b)
+  const opts = { apply: true, deleteOld: true, pageSize: 10, batchSize: 1 } as const
+
+  it('写到一半失败:本行记 error 不抛出,旧 key 一个点都没删', async () => {
+    const tb = fakeTb(2) // 第 2 次写入抛错
+    seed(tb)
+    const r = await applyRenameTable(tb.api, [row], opts)
+    expect(r[0]!.error).toContain('网络中断')
+    expect(r[0]!.deletedOld).toBe(false)
+    expect(r[0]!.deletedCf).toBe(false)
+    expect(tsOf(tb, 'PAvg5m')).toEqual([100, 200, 300])
+    expect(tsOf(tb, 'calc_PAvg5m')).toEqual([100, 400]) // 只搬进去第一个点
+  })
+
+  it('中断后不带上界直接重试:上界被带偏,核对拦住删除,旧数据保住', async () => {
+    const tb = fakeTb(2)
+    seed(tb)
+    await applyRenameTable(tb.api, [row], opts)
+    const lines: string[] = []
+    const r = await applyRenameTable(tb.api, [row], { ...opts, report: l => lines.push(l) })
+    expect(r[0]!.newFirstTs).toBe(100) // 现算的上界已经缩到「已搬进去的第一个点」
+    expect(r[0]!.points).toBe(0)
+    expect(r[0]!.deletedOld).toBe(false)
+    expect(r[0]!.deleteSkipped).toContain('不删旧 key')
+    expect(r[0]!.verified).toMatchObject({ oldBeyond: 3, newBeyond: 2, complete: false })
+    expect(tsOf(tb, 'PAvg5m')).toEqual([100, 200, 300]) // 200/300 还在,可补救
+    expect(lines.join('\n')).toContain('上界被已搬进去的点带偏了')
+  })
+
+  it('中断后带上一轮的上界重试(CLI 的状态文件):补齐余下历史,核对通过才删旧 key', async () => {
+    const tb = fakeTb(2)
+    seed(tb)
+    const first = await applyRenameTable(tb.api, [row], opts)
+    // CLI 把这一轮算出的上界记进 migrations/<站点>.migrate-state.json
+    const state = { [cutoverKey(row)]: first[0]!.newFirstTs! }
+    expect(state[cutoverKey(row)]).toBe(400)
+
+    const r = await applyRenameTable(tb.api, [row], { ...opts, cutover: state })
+    expect(r[0]!.cutoverPinned).toBe(true)
+    expect(r[0]!.error).toBeUndefined()
+    // 重跑整个区间(写入按 ts 覆盖,幂等),不是从断点续传 —— 简单且安全
+    expect(r[0]!.points).toBe(3)
+    expect(r[0]!.verified).toMatchObject({ oldInRange: 3, newInRange: 3, complete: true })
+    expect(r[0]!.deletedOld).toBe(true)
+    expect(r[0]!.deletedCf).toBe(true)
+    expect(tsOf(tb, 'calc_PAvg5m')).toEqual([100, 200, 300, 400]) // 一个点都没丢
+    expect(tb.ts['dev-1']!.PAvg5m).toBeUndefined()
+  })
+
+  it('重叠段(新旧 key 并行写过一阵)是正常的,不该拦住删除', async () => {
+    const tb = fakeTb()
+    tb.ts['dev-1']!.PAvg5m = [100, 200, 300, 400, 500].map(t => ({ ts: t, value: t / 10 }))
+    tb.ts['dev-1']!.calc_PAvg5m = [400, 500].map(t => ({ ts: t, value: t / 10 })) // 400 起两边都在写
+    const r = await applyRenameTable(tb.api, [row], opts)
+    expect(r[0]!.verified).toMatchObject({ oldInRange: 3, newInRange: 3, oldBeyond: 2, newBeyond: 2, complete: true })
+    expect(r[0]!.deletedOld).toBe(true)
+  })
+
+  it('一行出错不影响其它行', async () => {
+    const tb = fakeTb(1)
+    seed(tb)
+    tb.ts['dev-1']!.Other = [{ ts: 50, value: 5 }]
+    const other: RenameEntry = { entityType: 'DEVICE', entity: 'D1', old: 'Other', new: 'calc_Other', since: 't' }
+    const r = await applyRenameTable(tb.api, [row, other], { ...opts, deleteOld: false })
+    expect(r[0]!.error).toContain('网络中断')
+    expect(r[1]!.error).toBeUndefined()
+    expect(r[1]!.points).toBe(1)
+    expect(tsOf(tb, 'calc_Other')).toEqual([50])
+  })
+
+  it('cutoverKey 认实体与新旧 key:换任一个都是另一行', () => {
+    expect(cutoverKey(row)).toBe('DEVICE|D1|PAvg5m|calc_PAvg5m')
+    expect(cutoverKey({ ...row, entity: 'D2' })).not.toBe(cutoverKey(row))
+    expect(cutoverKey({ ...row, new: 'calc_X' })).not.toBe(cutoverKey(row))
   })
 })

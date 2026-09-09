@@ -48,6 +48,8 @@ export {
 } from './writer/drift'
 export {
   applyRenameTable,
+  cutoverKey,
+  type MigrateVerify,
   rewritePageKeys,
   type ApplyRenameOptions,
   type MigrateRowResult,

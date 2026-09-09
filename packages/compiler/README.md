@@ -62,6 +62,7 @@ pnpm tbsite publish sites/xx.tbsite.json --no-health     # 跳过自检
 pnpm tbsite cleanup sites/xx.tbsite.json
 pnpm tbsite drift sites/xx.tbsite.json                  # 本地声明 / pages/ 文件 vs 线上 siteConfig / pageConfig 的差异(只读;--strict 给 CI)
 pnpm tbsite migrate sites/xx.tbsite.json [--apply] [--from 2026-09-06] [--delete-old] [--rewrite-pages]   # 执行 ADR-003 迁移表,缺省 dry-run
+#   --delete-old 会先核对「旧点都到新 key 了」再删;复制上界记在 migrations/<站点>.migrate-state.json,中断重试自动沿用(别删)
 pnpm tbsite alarm-export sites/xx.tbsite.json           # 阈值告警 → 同事 JSON 文件 sites/exports/<站点>.alarm_config.json(ADR-001 二期)
 pnpm tbsite alarm-export sites/xx.tbsite.json --write   # 再写到资产 JIZHAN_ALARM_CONFIG 的 alarm_config / alarm_devices;已有非空内容拒绝,--force 覆盖并留 .prev.json
 ```
@@ -80,7 +81,17 @@ pnpm tbsite alarm-export sites/xx.tbsite.json --write   # 再写到资产 JIZHAN
 
 - `src/page/types.ts`:契约 §1–§3 的 TS 镜像(`PagePayload = PageConfig`、`WidgetConfig`、六种 `Binding`、`EntityRef`),不再用索引签名;`eachBinding / hasEntity / extEntityOf` 是遍历工具。`collectEntityRefs` 因此也把 `ext.params.entity` 纳入按名解析。向导传入时仍可 `as never`,发布器只读它认识的字段。
 - `src/writer/drift.ts`:`diffJson`(对象按键、数组按 name / key / id 对齐、叶子按值)、`normalizeEntityRefs`(`{type,id,name} → {type,name}`,去掉发布回填 id 的假差异)、`readSiteState`、`detectSiteDrift(api, cfg, pages)`。CLI `tbsite drift`;`publish` 前打印线上 vs 本地的差异摘要(仍以本地为准)。
-- `src/writer/migrate.ts`:`applyRenameTable(api, rows, { apply, from, deleteOld, report })` 把旧 key 历史复制到新 key(只补新 key 首点之前;`from` 再限起点;5000 点分页读、1000 点一批写),`deleteOld` 删同名 CF 与旧数据;`rewritePageKeys(page, rows)` 改页面文件里的绑定。CLI `tbsite migrate` 缺省 dry-run。镜像首跑记录 `docs/联调记录/迁移执行-2026-09-08.md`。
+- `src/writer/migrate.ts`:`applyRenameTable(api, rows, { apply, from, deleteOld, cutover, report })` 把旧 key 历史复制到新 key(只补新 key 首点之前;`from` 再限起点;5000 点分页读、1000 点一批写),`deleteOld` 删同名 CF 与旧数据;`rewritePageKeys(page, rows)` 改页面文件里的绑定。CLI `tbsite migrate` 缺省 dry-run。镜像首跑记录 `docs/联调记录/迁移执行-2026-09-08.md`。
+
+### 中断重试的数据安全(R4,2026-09-08)
+
+复制上界取「新 key 当前首点」。第一批点写进去之后这个时刻就变早了,**重试时现算会把刚搬进去的第一个点当成新 key 的原始起点,余下历史全被跳过**;老版本随后还会照常删掉旧 key,那些点就两边都没有了。三道措施:
+
+1. **上界钉住**:`cutover`(`cutoverKey(row)` → ts)由调用方传入。CLI 每次 `--apply` 后把本轮上界写进 `migrations/<站点>.migrate-state.json`,下次自动沿用——**这个文件别删**。
+2. **删之前核对**(只读,两段都要过):上界之前,新 key 的点数不能少于旧 key;上界之后(新旧并行写过的重叠段),新 key 的点数也不能少于旧 key。上界被带偏时后一条必然不过,删除就被拦住,并说明原因。
+3. **逐行容错**:一行出错记在 `error` 里不抛出,不影响其它行,而且出错的行绝不会走到删除。
+
+核对没过或有行出错时 CLI 退出 1。修好后重跑同一条命令即可:上界已固定,写入按 ts 覆盖(幂等),不会漏搬也不会误删。
 
 ## 发布时清理已删除的旧链(R1,2026-09-08)
 
