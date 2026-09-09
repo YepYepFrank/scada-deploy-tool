@@ -2,7 +2,16 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { cleanup, compile, publish, resolveDeviceIds, type StepId, type TbApi, type TbsiteConfig } from '../src/index'
+import {
+  cleanup,
+  compile,
+  NULL_UUID,
+  publish,
+  resolveDeviceIds,
+  type StepId,
+  type TbApi,
+  type TbsiteConfig,
+} from '../src/index'
 
 type Ent = { id: { id: string; entityType: string }; name: string; type?: string; root?: boolean; [k: string]: unknown }
 
@@ -59,7 +68,18 @@ function fakeTb(deviceNames: string[], startFailures: Record<string, string> = {
       assets.push(a)
       return a
     }
+    if ((m = p.match(/^\/api\/customer\/asset\/(.+)$/)) && method === 'DELETE') {
+      const a = assets.find(x => x.id.id === m![1])
+      if (!a) throw new Error(`${url} → HTTP 404`)
+      // 真实 TB:本来就没分配时再取消一次会 400(2026-09-08 镜像实测),所以调用方必须先判断
+      if (!a.customerId || (a.customerId as { id: string }).id === NULL_UUID)
+        throw new Error(`${url} → HTTP 400 资产本来就未分配`)
+      a.customerId = { id: NULL_UUID, entityType: 'CUSTOMER' }
+      return a
+    }
     if ((m = p.match(/^\/api\/customer\/([^/]+)\/asset\/(.+)$/)) && data) {
+      // 真实 TB:占位 UUID 不是客户,分配过去会 404(2026-09-08 镜像实测,审查 R5)
+      if (m[1] === NULL_UUID) throw new Error(`${url} → HTTP 404 Customer with id [${m[1]}] is not found`)
       const a = assets.find(x => x.id.id === m![2])
       if (!a) throw new Error(`${url} → HTTP 404`)
       a.customerId = { id: m[1], entityType: 'CUSTOMER' }
@@ -542,5 +562,72 @@ describe('publish · 清理声明里已删除的旧链(R1,2026-09-08)', () => {
     expect(chainNamesOf(tb)).toContain('Site Alarms · S')
     expect(rootFlows(tb)).toHaveLength(1)
     expect(r3.log.find(l => l.startsWith('alarm:ok'))).toBe('alarm:ok 1 条规则 · Root 链已接线')
+  })
+})
+
+describe('publish · 汇聚资产的 Customer 跟着站点走(审查 R5,2026-09-08)', () => {
+  const CUST = '00000000-0000-0000-0000-0000000000aa'
+  const OTHER = '00000000-0000-0000-0000-0000000000bb'
+  const cfg = () =>
+    ({
+      schema: 'tbsite/v2',
+      site: { name: 'S' },
+      devices: [{ name: 'D1', profile: 'IED', keys: [{ key: 'P' }] }],
+      computations: [
+        {
+          template: 'aggregate.crossEntity',
+          name: '总功率',
+          selector: { profiles: ['IED'], prefixes: [] },
+          key: 'P',
+          agg: 'sum',
+          asset: 'S-agg',
+          output: 'totalP',
+        },
+      ],
+    }) as unknown as TbsiteConfig
+  const opts = { layeredSettleMs: 0, healthWaitMs: 0 }
+  const setup = async () => {
+    const tb = fakeTb(['D1'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1'])
+    await publish(cfg(), devIds, tb.api, collect().report, opts)
+    return { tb, devIds }
+  }
+  const siteAsset = (tb: ReturnType<typeof fakeTb>) => tb.assets.find(a => a.name === 'S')!
+  const aggAsset = (tb: ReturnType<typeof fakeTb>) => tb.assets.find(a => a.name === 'S-agg')!
+
+  it('站点未分配 Customer:不去向占位 UUID 分配(那会 404 把 asset 步骤判失败)', async () => {
+    const { tb, devIds } = await setup()
+    siteAsset(tb).customerId = { id: NULL_UUID, entityType: 'CUSTOMER' }
+    const r = collect()
+    expect(await publish(cfg(), devIds, tb.api, r.report, opts)).toEqual([])
+    expect(r.log.filter(l => l.startsWith('asset:err'))).toEqual([])
+    expect(tb.calls.filter(c => c.includes(NULL_UUID))).toEqual([])
+  })
+
+  it('站点取消分配、汇聚资产还挂在原客户下:汇聚资产同步取消', async () => {
+    const { tb, devIds } = await setup()
+    siteAsset(tb).customerId = { id: CUST, entityType: 'CUSTOMER' }
+    aggAsset(tb).customerId = { id: CUST, entityType: 'CUSTOMER' }
+    siteAsset(tb).customerId = { id: NULL_UUID, entityType: 'CUSTOMER' }
+
+    const r = collect()
+    expect(await publish(cfg(), devIds, tb.api, r.report, opts)).toEqual([])
+    expect(aggAsset(tb).customerId).toEqual({ id: NULL_UUID, entityType: 'CUSTOMER' })
+    expect(tb.calls).toContain(`DELETE /api/customer/asset/${aggAsset(tb).id.id}`)
+  })
+
+  it('站点有 Customer:汇聚资产分配过去;换客户时跟着换;已一致则不重复分配', async () => {
+    const { tb, devIds } = await setup()
+    siteAsset(tb).customerId = { id: CUST, entityType: 'CUSTOMER' }
+    expect(await publish(cfg(), devIds, tb.api, collect().report, opts)).toEqual([])
+    expect((aggAsset(tb).customerId as { id: string }).id).toBe(CUST)
+
+    siteAsset(tb).customerId = { id: OTHER, entityType: 'CUSTOMER' }
+    expect(await publish(cfg(), devIds, tb.api, collect().report, opts)).toEqual([])
+    expect((aggAsset(tb).customerId as { id: string }).id).toBe(OTHER)
+
+    const before = tb.calls.filter(c => c.includes('/api/customer/')).length
+    expect(await publish(cfg(), devIds, tb.api, collect().report, opts)).toEqual([])
+    expect(tb.calls.filter(c => c.includes('/api/customer/')).length).toBe(before)
   })
 })

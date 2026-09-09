@@ -28,3 +28,16 @@ export const chainNames = {
 }
 
 export const isCfTemplate = (t: string | undefined) => !!t && (t.startsWith('expr.') || t.startsWith('formula.'))
+
+/**
+ * TB 表示「未分配 Customer」用的占位 UUID。**它是个非空字符串**,直接拿 `customerId.id`
+ * 做真值判断会把「未分配」当成一个真实客户,再去 `POST /api/customer/<它>/asset/…` 只会拿到
+ * `404 Customer ... is not found`(2026-09-08 在镜像上实测,审查 R5)。凡是读 customerId 都要先过这里。
+ */
+export const NULL_UUID = '13814000-1dd2-11b2-8080-808080808080'
+
+/** 读 TB 返回的 customerId:未分配(缺失或占位 UUID)一律归一成 null */
+export const customerIdOf = (e: { customerId?: { id?: string } | null } | null | undefined): string | null => {
+  const id = e?.customerId?.id
+  return id && id !== NULL_UUID ? id : null
+}

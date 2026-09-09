@@ -108,7 +108,10 @@ function fakeTb() {
       return null
     }
     if ((m = p.match(/^\/api\/customer\/asset\/(.+)$/)) && m0 === 'DELETE') {
-      assets.find(a => a.id.id === m![1])!.customerId = { id: NULL_UUID }
+      const cur = assets.find(a => a.id.id === m![1])!
+      // 真实 TB:本来就没分配时再取消一次会 400(2026-09-08 镜像实测)
+      if (!cur.customerId || cur.customerId.id === NULL_UUID) throw new Error('HTTP 400 资产本来就未分配')
+      cur.customerId = { id: NULL_UUID }
       return null
     }
     throw new Error(`fakeTb 不认识 ${call}`)
@@ -336,5 +339,74 @@ describe('publishPage', () => {
     expect([unresolved, count]).toEqual([[], 3])
     expect(tb.calls.filter(c => c.includes('deviceName='))).toHaveLength(2)
     expect((resolved.widgets[2]!.actions!.reset as { entity: { id: string } }).entity.id).toBe('keep-me')
+  })
+})
+
+describe('publishPage · 页面归属跟着站点走(审查 R2,2026-09-08)', () => {
+  const OTHER = '00000000-0000-0000-0000-0000000000ff'
+  const opts = (report?: ReturnType<typeof collect>['report']) => ({
+    siteName: 'xrs-mirror-test',
+    publishedBy: 'yy',
+    now: clock,
+    ...(report ? { report } : {}),
+  })
+  const siteOf = (tb: ReturnType<typeof fakeTb>) => tb.assets.find(a => a.name === 'xrs-mirror-test')!
+  const pageOf = (tb: ReturnType<typeof fakeTb>) => tb.assets.find(a => a.name === 'xrs-mirror-test-总览')!
+
+  it('站点取消 Customer 分配后再发布:页面同步取消,不再留在原 Customer 名下', async () => {
+    const tb = fakeTb()
+    await publishPage(page(), tb.api, opts())
+    expect(pageOf(tb).customerId).toEqual({ id: CUSTOMER })
+
+    // 有人把站点资产从 Customer 下撤了
+    siteOf(tb).customerId = { id: NULL_UUID }
+    const { log, report } = collect()
+    const r = await publishPage(page(), tb.api, opts(report))
+    expect(r.ok).toBe(true)
+    expect(pageOf(tb).customerId!.id).toBe(NULL_UUID)
+    expect(log.find(l => l.step === 'assign' && l.status === 'ok')!.detail).toContain('页面同步取消')
+    expect(tb.calls).toContain(`DELETE /api/customer/asset/${pageOf(tb).id.id}`)
+  })
+
+  it('站点换到另一个 Customer:页面跟着换', async () => {
+    const tb = fakeTb()
+    await publishPage(page(), tb.api, opts())
+    siteOf(tb).customerId = { id: OTHER }
+    const { log, report } = collect()
+    await publishPage(page(), tb.api, opts(report))
+    expect(pageOf(tb).customerId).toEqual({ id: OTHER })
+    expect(log.find(l => l.step === 'assign' && l.status === 'ok')!.detail).toContain(OTHER)
+  })
+
+  it('站点与页面都未分配:什么都不做', async () => {
+    const tb = fakeTb()
+    siteOf(tb).customerId = { id: NULL_UUID }
+    const { log, report } = collect()
+    await publishPage(page(), tb.api, opts(report))
+    expect(pageOf(tb).customerId!.id).toBe(NULL_UUID)
+    expect(log.find(l => l.step === 'assign' && l.status === 'ok')!.detail).toContain('都未分配')
+    expect(tb.calls.filter(c => c.includes('/api/customer/'))).toEqual([])
+  })
+
+  it('已在站点所属 Customer 下:不重复分配', async () => {
+    const tb = fakeTb()
+    await publishPage(page(), tb.api, opts())
+    const before = tb.calls.filter(c => c.includes('/api/customer/')).length
+    const { log, report } = collect()
+    await publishPage(page(), tb.api, opts(report))
+    expect(log.find(l => l.step === 'assign' && l.status === 'ok')!.detail).toContain('已在站点所属 Customer 下')
+    expect(tb.calls.filter(c => c.includes('/api/customer/')).length).toBe(before)
+  })
+
+  it('取消分配之后的步骤失败:回滚把页面改回原 Customer', async () => {
+    const tb = fakeTb()
+    await publishPage(page(), tb.api, opts())
+    siteOf(tb).customerId = { id: NULL_UUID }
+    // assign 是最后一步,回滚栈由后续注入失败触发 —— 这里直接验回滚项本身
+    tb.failOn.test = c => c.startsWith('DELETE /api/customer/asset/')
+    const r = await publishPage(page(), tb.api, opts())
+    expect(r.ok).toBe(false)
+    // 取消分配这一步就失败了,页面归属保持原样,没有半吊子状态
+    expect(pageOf(tb).customerId).toEqual({ id: CUSTOMER })
   })
 })

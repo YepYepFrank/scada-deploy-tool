@@ -93,6 +93,21 @@ pnpm tbsite alarm-export sites/xx.tbsite.json --write   # 再写到资产 JIZHAN
 
 核对没过或有行出错时 CLI 退出 1。修好后重跑同一条命令即可:上界已固定,写入按 ts 覆盖(幂等),不会漏搬也不会误删。
 
+## Customer 归属:未分配标识与取消分配(R2 / R5,2026-09-08)
+
+TB 用一个**占位 UUID** `13814000-1dd2-11b2-8080-808080808080` 表示「未分配 Customer」。它是非空字符串,所以 `if (asset.customerId?.id)` 会把「未分配」当成一个真实客户;真去 `POST /api/customer/<占位>/asset/…` 只会拿到 `404 Customer ... is not found`(镜像实测)。凡是读 `customerId` 都走 `customerIdOf(entity)`(`core/constants`),未分配一律归一成 `null`。
+
+归属**始终跟着站点资产走**,三种转换都要落地——页面资产(`publishPage` 的 assign 步)与汇聚 / 收益资产(`followSiteAsset`)同一套语义:
+
+| 站点 | 目标资产 | 动作 |
+|---|---|---|
+| 无 | 无 | 不动 |
+| 有 | 同一个 | 不动(不重复分配) |
+| 有 | 无 / 别的客户 | `POST /api/customer/<站点客户>/asset/<id>` |
+| **无** | **有** | `DELETE /api/customer/asset/<id>` —— 原来这一格只打了条成功日志,页面就一直留在原 Customer 名下 |
+
+注意:取消分配只在目标资产**确实有归属**时才调,本来就没分配再调一次真实 TB 会回 400。两个内存 TB mock 都照这个行为写了,谁把判断去掉都会被测试挡下。
+
 ## 发布时清理已删除的旧链(R1,2026-09-08)
 
 `publish` 只写声明里有的链,`cleanup` 又是整站全清,中间没人负责「声明里去掉的运算,它那条链怎么办」。镜像上 08-31 发布的收益链就这样留了下来,链内两个 generator 每 5 分钟自跑一次往旧资产写数,一周后才被发现。

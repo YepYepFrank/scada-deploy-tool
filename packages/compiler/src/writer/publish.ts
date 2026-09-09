@@ -4,7 +4,7 @@ import type { Computation, TbsiteConfig } from '../types'
 import { alarmMetadata } from '../core/alarm'
 import { buildAggCfs, resolveAggMembers } from '../core/aggregate'
 import { buildCf } from '../core/cf'
-import { AGG_ASSET_TYPE, chainNames, isCfTemplate, SITE_ASSET_TYPE } from '../core/constants'
+import { AGG_ASSET_TYPE, chainNames, customerIdOf, isCfTemplate, SITE_ASSET_TYPE } from '../core/constants'
 import { cascadeWhitelist, outputInventory, outputPrefixOf } from '../core/prefix'
 import { ConfigError, expandConfig, siteChainNames } from '../core/plan'
 import { revenueMetadata } from '../core/revenue'
@@ -221,7 +221,9 @@ async function followSiteAsset(
   api: TbApi
 ): Promise<number> {
   const site = await api(`/api/asset/${siteAssetId}`)
-  const customerId: string | undefined = site?.customerId?.id
+  // TB 用一个占位 UUID 表示「未分配」,它是非空字符串:直接当真客户用会去 POST
+  // /api/customer/<占位>/asset/…,真实 TB 回 404 并把整个 asset 步骤判失败(审查 R5)
+  const customerId = customerIdOf(site)
   const names = [
     ...new Set(
       computations
@@ -239,7 +241,10 @@ async function followSiteAsset(
       type: 'Contains',
       typeGroup: 'COMMON',
     })
-    if (customerId && a.customerId?.id !== customerId) await api(`/api/customer/${customerId}/asset/${a.id.id}`, {})
+    // 汇聚 / 收益资产的归属跟着站点走,三种转换都要落地(与页面发布器同一套语义)
+    const assetCustomer = customerIdOf(a)
+    if (customerId && assetCustomer !== customerId) await api(`/api/customer/${customerId}/asset/${a.id.id}`, {})
+    else if (!customerId && assetCustomer) await api(`/api/customer/asset/${a.id.id}`, null, 'DELETE')
     n++
   }
   return n
