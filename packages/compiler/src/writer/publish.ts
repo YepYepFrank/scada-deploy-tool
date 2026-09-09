@@ -65,6 +65,107 @@ export async function wireRootChain(api: TbApi, alarmChainId: string, siteName: 
   return 'Root 链已接线'
 }
 
+/** Root 链上摘掉本站点的转发节点(wireRootChain 的反操作);返回是否摘到了 */
+export async function unwireRootChain(api: TbApi, siteName: string): Promise<boolean> {
+  const flowName = chainNames.rootFlow(siteName)
+  const page = await api('/api/ruleChains?pageSize=100&page=0')
+  const root = ((page?.data || []) as { id: { id: string }; root?: boolean }[]).find(c => c.root)
+  if (!root) return false
+  const meta = await api(`/api/ruleChain/${root.id.id}/metadata`)
+  const idx = ((meta?.nodes || []) as { name: string }[]).findIndex(n => n.name === flowName)
+  if (idx < 0) return false
+  meta.nodes.splice(idx, 1)
+  // 删掉一个节点后,连线里大于该下标的索引要整体前移一位
+  meta.connections = ((meta.connections || []) as { fromIndex: number; toIndex: number }[])
+    .filter(c => c.fromIndex !== idx && c.toIndex !== idx)
+    .map(c => ({
+      ...c,
+      fromIndex: c.fromIndex > idx ? c.fromIndex - 1 : c.fromIndex,
+      toIndex: c.toIndex > idx ? c.toIndex - 1 : c.toIndex,
+    }))
+  if (typeof meta.firstNodeIndex === 'number' && meta.firstNodeIndex > idx) meta.firstNodeIndex--
+  await api('/api/ruleChain/metadata', meta)
+  return true
+}
+
+export type ChainKind = 'alarm' | 'rollup' | 'revenue'
+
+export interface StaleChainPrune {
+  /** 按种类记下删掉的链名 */
+  deleted: Partial<Record<ChainKind, string[]>>
+  /** 是否摘掉了 Root 上的转发节点 */
+  unwired: boolean
+  /** 发现了疑似残留但没敢删的情况 */
+  notes: string[]
+}
+
+/**
+ * 清掉「上一版发布过、这一版声明里不再有」的站点规则链(配置即真相,ADR-003 的同一条原则)。
+ *
+ * 2026-09-08 的教训:08-31 发布过的收益链在声明里去掉 revenue 之后没人清,链内两个 generator
+ * 每 5 分钟自跑一次往旧资产写数,一直跑到一周后才被发现。`publish` 只写声明里有的链、
+ * `cleanup` 又是整站全清,中间没有东西负责这件事。
+ *
+ * 只删两类名字,都是我们自己建的:
+ *   1. 本站点的默认链名(`Site Alarms · <站点>` 等)—— 也能收拾早就孤立的旧链;
+ *   2. 上一版已发布配置声明过的链名 —— 覆盖用户自定义 `chainName` 以及改名的情况。
+ * 除此之外一律不碰,免得误删同事的链。
+ */
+async function pruneStaleChains(
+  cfg: TbsiteConfig,
+  needed: Record<ChainKind, boolean>,
+  scoped: (k: ChainKind) => boolean,
+  api: TbApi
+): Promise<StaleChainPrune> {
+  const out: StaleChainPrune = { deleted: {}, unwired: false, notes: [] }
+  const site = cfg.site.name
+  const current = siteChainNames(cfg)
+  const defaults: Record<ChainKind, string> = {
+    alarm: chainNames.alarm(site),
+    rollup: chainNames.rollup(site),
+    revenue: chainNames.revenue(site),
+  }
+  // 上一版已发布的配置(自定义链名只能从这里得知)
+  let prev: Record<ChainKind, string> | null = null
+  try {
+    const asset = await findAsset(api, site)
+    if (asset) {
+      const attrs: { key: string; value: unknown }[] =
+        (await api(`/api/plugins/telemetry/ASSET/${asset.id.id}/values/attributes/SERVER_SCOPE?keys=siteConfig`)) || []
+      const raw = attrs.find(a => a.key === 'siteConfig')?.value
+      if (raw) {
+        const prevCfg = (typeof raw === 'string' ? JSON.parse(raw) : raw) as TbsiteConfig
+        prev = siteChainNames(expandConfig(prevCfg).cfg)
+      }
+    }
+  } catch {
+    /* 读不到上一版就只按默认链名清理 */
+  }
+
+  const chains: { id: { id: string }; name: string; root?: boolean }[] =
+    (await api('/api/ruleChains?pageSize=100&page=0'))?.data || []
+  // 本次要保留的链名(仍在声明里的),任何情况下都不能删
+  const keep = new Set<string>()
+  for (const k of ['alarm', 'rollup', 'revenue'] as ChainKind[]) if (needed[k]) keep.add(current[k])
+
+  for (const kind of ['alarm', 'rollup', 'revenue'] as ChainKind[]) {
+    if (!scoped(kind)) continue
+    const candidates = new Set<string>([defaults[kind], ...(prev ? [prev[kind]] : [])])
+    for (const name of candidates) {
+      if (keep.has(name)) continue // 改名场景:这个名字这一版还在用
+      const found = chains.find(c => c.name === name && !c.root)
+      if (!found) continue
+      // 删告警链之前先把 Root 上指向它的转发节点摘掉
+      if (kind === 'alarm' && !out.unwired) out.unwired = await unwireRootChain(api, site)
+      await api(`/api/ruleChain/${found.id.id}`, null, 'DELETE')
+      ;(out.deleted[kind] ||= []).push(name)
+    }
+  }
+  // 声明里没有告警了,但 Root 上还挂着本站点的转发节点(链可能早被人手工删了)
+  if (scoped('alarm') && !needed.alarm && !out.unwired) out.unwired = await unwireRootChain(api, site)
+  return out
+}
+
 /** 上一版 siteConfig 声明过、这一版不再声明的输出 CF:按名删除(只删本站点自己写过的名字,不碰存量) */
 async function pruneStaleCfs(
   cfg: TbsiteConfig,
@@ -294,6 +395,31 @@ export async function publish(
     } else report('agg', 'ok', '无')
   }
 
+  // 3b'. 先清掉声明里已不再有的站点规则链(配置即真相;否则旧链会带着自己的 generator 一直跑,
+  //      2026-09-08 在镜像上就抓到过一条自跑了一周的旧收益链)。失败不阻塞本次写入。
+  const cascadesAll = computations.filter(c => c.template === 'window.cascade')
+  const needed: Record<ChainKind, boolean> = {
+    alarm: computations.some(c => c.template === 'alarm.threshold'),
+    rollup: Object.keys(rollupGroups(computations)).length > 0 || cascadesAll.length > 0,
+    revenue: computations.some(c => c.template === 'revenue.periodic'),
+  }
+  let pruned: StaleChainPrune = { deleted: {}, unwired: false, notes: [] }
+  try {
+    pruned = await pruneStaleChains(cfg, needed, k => stepOn(k), api)
+  } catch (e) {
+    failures.push({
+      step: 'alarm',
+      error: '清理声明里已删除的旧规则链失败(不影响本次写入):' + (e instanceof Error ? e.message : String(e)),
+    })
+  }
+  /** 拼到对应步骤的结果里,让「无」这一行也能说明它顺手清掉了什么 */
+  const prunedNote = (k: ChainKind) => {
+    const names = pruned.deleted[k] ?? []
+    const bits = names.length ? [`已删上一版的 ${names.join('、')}`] : []
+    if (k === 'alarm' && pruned.unwired) bits.push('已摘除 Root 转发')
+    return bits.length ? `(${bits.join(',')})` : ''
+  }
+
   // 3c. 分时电价收益 → 独立规则链 + 收益资产
   report('revenue', 'run')
   if (!stepOn('revenue')) report('revenue', 'ok', '跳过(上次已成功)')
@@ -311,9 +437,11 @@ export async function publish(
         report(
           'revenue',
           'ok',
-          `${revs.length} 项收益统计 → ${names.revenue}` + (created ? '(新建定时链需 TB 重启后才开始跑)' : '')
+          `${revs.length} 项收益统计 → ${names.revenue}` +
+            (created ? '(新建定时链需 TB 重启后才开始跑)' : '') +
+            prunedNote('revenue')
         )
-      } else report('revenue', 'ok', '无')
+      } else report('revenue', 'ok', '无' + prunedNote('revenue'))
     } catch (e) {
       fail('revenue', e)
     }
@@ -332,9 +460,10 @@ export async function publish(
           'rollup',
           'ok',
           `${Object.keys(groups).length} 条流水线 · ${cascades.length} 项多级归档 → ${names.rollup}` +
-            (created ? '(新建定时链需 TB 重启后才开始跑)' : '')
+            (created ? '(新建定时链需 TB 重启后才开始跑)' : '') +
+            prunedNote('rollup')
         )
-      } else report('rollup', 'ok', '无')
+      } else report('rollup', 'ok', '无' + prunedNote('rollup'))
     } catch (e) {
       fail('rollup', e)
     }
@@ -357,8 +486,8 @@ export async function publish(
           )
         )
         const wired = await wireRootChain(api, id, cfg.site.name)
-        report('alarm', 'ok', `${alarms.length} 条规则 · ${wired}`)
-      } else report('alarm', 'ok', '无')
+        report('alarm', 'ok', `${alarms.length} 条规则 · ${wired}` + prunedNote('alarm'))
+      } else report('alarm', 'ok', '无' + prunedNote('alarm'))
     } catch (e) {
       fail('alarm', e)
     }

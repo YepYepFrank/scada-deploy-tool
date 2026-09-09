@@ -412,3 +412,135 @@ describe('publish · 发布后自检(2026-09-08 P0-1)', () => {
     expect(r.log.filter(l => /^health:(ok|err)/.test(l)).at(-1)).toContain('跳过')
   })
 })
+
+describe('publish · 清理声明里已删除的旧链(R1,2026-09-08)', () => {
+  type Tb = ReturnType<typeof fakeTb>
+  type RootNode = { name: string; configuration: Record<string, unknown> }
+  const base = (computations: unknown[], extra: Record<string, unknown> = {}) =>
+    ({
+      schema: 'tbsite/v2',
+      site: { name: 'S' },
+      devices: [{ name: 'D1', profile: 'IED', keys: [{ key: 'P' }, { key: 'Q' }] }],
+      computations,
+      ...extra,
+    }) as unknown as TbsiteConfig
+  const alarm = {
+    template: 'alarm.threshold',
+    device: 'D1',
+    name: '越限',
+    key: 'P',
+    condition: { op: 'gt', value: 45 },
+    severity: 'WARNING',
+  }
+  const cascade = { template: 'window.cascade', device: 'D1', keys: ['P'], aggs: ['avg'] }
+  const revenue = {
+    template: 'revenue.periodic',
+    charge: { device: 'D1', key: 'P' },
+    discharge: { device: 'D1', key: 'Q' },
+    priceAsset: 'S-price',
+    asset: 'S-rev',
+    output: 'rev',
+  }
+  const opts = { layeredSettleMs: 0, healthWaitMs: 0 }
+  const setup = async (cfg: TbsiteConfig) => {
+    const tb = fakeTb(['D1'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1'])
+    const r = collect()
+    const f0 = await publish(cfg, devIds, tb.api, r.report, opts)
+    return { tb, devIds, first: f0, firstLog: r.log }
+  }
+  const chainNamesOf = (tb: Tb) => tb.chains.map(c => c.name).sort()
+  const rootMeta = (tb: Tb) => tb.metadata[tb.chains[0]!.id.id]!
+  const rootFlows = (tb: Tb) => rootMeta(tb).nodes.filter(n => n.name === 'site alarms flow · S') as RootNode[]
+
+  it('删掉最后一条告警再发布:告警链被删、Root 转发被摘,且报告里说明了', async () => {
+    const { tb, devIds, first } = await setup(base([alarm]))
+    expect(first).toEqual([])
+    expect(chainNamesOf(tb)).toContain('Site Alarms · S')
+    expect(rootFlows(tb)).toHaveLength(1)
+
+    const r2 = collect()
+    expect(await publish(base([]), devIds, tb.api, r2.report, opts)).toEqual([])
+    expect(chainNamesOf(tb)).not.toContain('Site Alarms · S')
+    expect(rootFlows(tb)).toHaveLength(0)
+    expect(r2.log.find(l => l.startsWith('alarm:ok'))).toBe(
+      'alarm:ok 无(已删上一版的 Site Alarms · S,已摘除 Root 转发)'
+    )
+  })
+
+  it('Root 上其它节点与连线不受影响(摘节点后索引重排正确)', async () => {
+    const { tb, devIds } = await setup(base([alarm]))
+    type Conn = { fromIndex: number; toIndex: number; type: string }
+    // 在转发节点之后再挂一个别人的节点,确保摘除后连线索引不错位
+    const meta = rootMeta(tb)
+    meta.nodes.push({ type: 'x.TbOther', name: '同事的节点', configuration: {}, id: { id: 'other-1' } })
+    ;(meta.connections as Conn[]).push({ fromIndex: 0, toIndex: meta.nodes.length - 1, type: 'Post attributes' })
+    const before = (meta.connections as Conn[]).filter(c => c.type === 'Post attributes').length
+
+    await publish(base([]), devIds, tb.api, collect().report, opts)
+    const after = rootMeta(tb)
+    expect(after.nodes.map(n => n.name)).toEqual(['Message Type Switch', '同事的节点'])
+    const conn = (after.connections as Conn[]).filter(c => c.type === 'Post attributes')
+    expect(conn).toHaveLength(before)
+    expect(after.nodes[conn[0]!.toIndex]!.name).toBe('同事的节点')
+  })
+
+  it('删掉多级归档 / 收益后再发布:对应的链也被删', async () => {
+    const { tb, devIds } = await setup(base([cascade, revenue]))
+    expect(chainNamesOf(tb)).toEqual(expect.arrayContaining(['Site Rollups · S', 'Site Revenue · S']))
+
+    const r2 = collect()
+    expect(await publish(base([]), devIds, tb.api, r2.report, opts)).toEqual([])
+    expect(chainNamesOf(tb)).toEqual(['Root Rule Chain'])
+    expect(r2.log.find(l => l.startsWith('rollup:ok'))).toContain('已删上一版的 Site Rollups · S')
+    expect(r2.log.find(l => l.startsWith('revenue:ok'))).toContain('已删上一版的 Site Revenue · S')
+  })
+
+  it('自定义 chainName 改回默认名:旧的自定义链被删,新链接好 Root', async () => {
+    const { tb, devIds } = await setup(base([alarm], { alarm: { chainName: '自定义告警链' } }))
+    expect(chainNamesOf(tb)).toContain('自定义告警链')
+
+    const r2 = collect()
+    expect(await publish(base([alarm]), devIds, tb.api, r2.report, opts)).toEqual([])
+    expect(chainNamesOf(tb)).toContain('Site Alarms · S')
+    expect(chainNamesOf(tb)).not.toContain('自定义告警链')
+    expect(rootFlows(tb)).toHaveLength(1)
+    const flow = rootFlows(tb)[0]!
+    const target = tb.chains.find(c => c.name === 'Site Alarms · S')!
+    expect(flow.configuration.ruleChainId).toBe(target.id.id)
+  })
+
+  it('别人的链一概不碰:同名前缀但属于其它站点的链原样保留', async () => {
+    const { tb, devIds } = await setup(base([alarm]))
+    await tb.api('/api/ruleChain', { name: 'Site Alarms · 别的站点', type: 'CORE' })
+    await tb.api('/api/ruleChain', { name: '基站储能规则链', type: 'CORE' })
+
+    await publish(base([]), devIds, tb.api, collect().report, opts)
+    expect(chainNamesOf(tb)).toEqual(['Root Rule Chain', 'Site Alarms · 别的站点', '基站储能规则链'])
+  })
+
+  it('还有告警时不动链、不摘 Root(不制造无谓的重启)', async () => {
+    const { tb, devIds } = await setup(base([alarm]))
+    const chainId = tb.chains.find(c => c.name === 'Site Alarms · S')!.id.id
+    const before = tb.calls.length
+
+    const r2 = collect()
+    expect(await publish(base([alarm]), devIds, tb.api, r2.report, opts)).toEqual([])
+    expect(tb.chains.find(c => c.name === 'Site Alarms · S')!.id.id).toBe(chainId) // 原地更新,没重建
+    expect(rootFlows(tb)).toHaveLength(1)
+    expect(tb.calls.slice(before).filter(c => c.startsWith('DELETE /api/ruleChain'))).toEqual([])
+    expect(r2.log.find(l => l.startsWith('alarm:ok'))).toBe('alarm:ok 1 条规则 · 转发已就位')
+  })
+
+  it('把告警加回来:链重建、Root 重新接线', async () => {
+    const { tb, devIds } = await setup(base([alarm]))
+    await publish(base([]), devIds, tb.api, collect().report, opts)
+    expect(rootFlows(tb)).toHaveLength(0)
+
+    const r3 = collect()
+    expect(await publish(base([alarm]), devIds, tb.api, r3.report, opts)).toEqual([])
+    expect(chainNamesOf(tb)).toContain('Site Alarms · S')
+    expect(rootFlows(tb)).toHaveLength(1)
+    expect(r3.log.find(l => l.startsWith('alarm:ok'))).toBe('alarm:ok 1 条规则 · Root 链已接线')
+  })
+})

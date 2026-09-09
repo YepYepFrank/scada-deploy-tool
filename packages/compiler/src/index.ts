@@ -96,7 +96,14 @@ export {
   ensureChain,
   listCfs,
 } from './writer/api'
-export { publish, wireRootChain, type PublishOptions } from './writer/publish'
+export {
+  publish,
+  wireRootChain,
+  unwireRootChain,
+  type ChainKind,
+  type StaleChainPrune,
+  type PublishOptions,
+} from './writer/publish'
 export {
   checkChainHealth,
   summarizeNodeError,

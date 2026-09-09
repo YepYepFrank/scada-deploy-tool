@@ -11,6 +11,7 @@ pnpm -F @grid/tbsite-compiler test:live
 | 文件 | 内容 | 状态 |
 |---|---|---|
 | `rule-chain.live.ts` | 规则链路径:把 `xrs-mirror-test` 的配置改成临时站点(站点名、输出 key、告警名、汇聚 / 收益资产名全部加前缀)→ publish → 断言 CF / 链名与节点数 / Root 转发 / 站点资产 → 再 publish 幂等(快照相等、历史 +1)→ cleanup 全清;前后 `xrs-mirror-test` 快照零差异。`afterAll` 兜底 cleanup,断言失败也不留垃圾 | 可跑 |
+| `prune-chains.live.ts` | 发布时清理旧链(R1):独立命名的临时站点先发布「告警 + 多级归档」→ 断言两条链与 Root 转发都在 → 声明里去掉全部运算再发布 → 断言两条链从 TB 消失、Root 转发被摘、与本站点无关的链逐一比对一条没少 → 再发一次幂等。`afterAll` 兜底 `cleanup` | 可跑 |
 | `health.live.ts` | 发布后自检:自建一条临时链承载故障(不碰任何站点的链),写一个带 `propagateRelationTypes` 的建告警节点 → 断言自检抓到、报出节点类型与根因、同链正常节点不误报;把字段名改成 `relationTypes` 再存一次 → 断言通过(证明判据取最近一次 STARTED);链不存在时给跳过原因。`afterAll` 删临时链 | 可跑 |
 | ~~Profile 告警双轨(ADR-001)~~ | 取消(2026-09-06):ADR-001 定稿 Profile 一律不写 | — |
 

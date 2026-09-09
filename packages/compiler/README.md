@@ -82,6 +82,18 @@ pnpm tbsite alarm-export sites/xx.tbsite.json --write   # 再写到资产 JIZHAN
 - `src/writer/drift.ts`:`diffJson`(对象按键、数组按 name / key / id 对齐、叶子按值)、`normalizeEntityRefs`(`{type,id,name} → {type,name}`,去掉发布回填 id 的假差异)、`readSiteState`、`detectSiteDrift(api, cfg, pages)`。CLI `tbsite drift`;`publish` 前打印线上 vs 本地的差异摘要(仍以本地为准)。
 - `src/writer/migrate.ts`:`applyRenameTable(api, rows, { apply, from, deleteOld, report })` 把旧 key 历史复制到新 key(只补新 key 首点之前;`from` 再限起点;5000 点分页读、1000 点一批写),`deleteOld` 删同名 CF 与旧数据;`rewritePageKeys(page, rows)` 改页面文件里的绑定。CLI `tbsite migrate` 缺省 dry-run。镜像首跑记录 `docs/联调记录/迁移执行-2026-09-08.md`。
 
+## 发布时清理已删除的旧链(R1,2026-09-08)
+
+`publish` 只写声明里有的链,`cleanup` 又是整站全清,中间没人负责「声明里去掉的运算,它那条链怎么办」。镜像上 08-31 发布的收益链就这样留了下来,链内两个 generator 每 5 分钟自跑一次往旧资产写数,一周后才被发现。
+
+现在写三条链之前先跑一次清理(`pruneStaleChains`):
+
+- 声明里不再需要的种类,把对应的链删掉;删告警链之前先用 `unwireRootChain` 摘掉 Root 上的转发节点。
+- **只删两类名字**,都是我们自己建的:本站点的默认链名(`Site Alarms · <站点>` 等,连早就孤立的旧链一起收拾),以及上一版已发布配置声明过的链名(覆盖自定义 `chainName` 与改名)。仍在本次声明里的名字进 keep 集合,绝不删。除这两类之外一律不碰,免得误删同事的链。
+- 结果拼进对应步骤的结果行,例如 `alarm:ok 无(已删上一版的 Site Alarms · S,已摘除 Root 转发)`。
+- 清理失败不阻塞本次写入,只记一条 failure。
+- 声明里还有告警时不动链、不摘 Root,避免无谓的节点重启。
+
 ## 发布后自检(2026-09-08)
 
 TB 的规则节点如果配置字段名不对,`init` 抛异常、actor 起不来,之后进入该节点的消息被**静默丢弃**:非调试模式下 TB 不记事件、节点错误计数也是 0。镜像上「建告警节点」因为写了 `propagateRelationTypes`(TB CE 4.3.1 只认 `relationTypes`)就这样失败了一天多,直到里程碑 C 做 24 小时采样才发现。

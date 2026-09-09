@@ -1,9 +1,10 @@
 // 站点清理:删除本站点生成的 CF / 规则链 / Root 转发节点 / 汇聚资产 / 站点资产。
 // 只清理「当前配置声明过的东西」,不碰任何存量对象。
 import type { TbsiteConfig } from '../types'
-import { AGG_ASSET_TYPE, chainNames, isCfTemplate, SITE_ASSET_TYPE } from '../core/constants'
+import { AGG_ASSET_TYPE, isCfTemplate, SITE_ASSET_TYPE } from '../core/constants'
 import { expandConfig, siteChainNames } from '../core/plan'
 import { listCfs, type Reporter, type TbApi } from './api'
+import { unwireRootChain } from './publish'
 
 const q = (s: string) => encodeURIComponent(s)
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -36,29 +37,11 @@ export async function cleanup(
     }
   }
   report?.('cleanup', 'run', `已删计算字段 ${cfDel}`)
-  // 2. Root 链上的本站点转发节点
-  const flowName = chainNames.rootFlow(cfg.site.name)
+  // 2. Root 链上的本站点转发节点(与 publish 共用同一份索引重排逻辑)
   try {
-    const page = await api('/api/ruleChains?pageSize=100&page=0')
-    const chains: { id: { id: string }; name: string; root?: boolean }[] = page?.data || []
-    const root = chains.find(c => c.root)
-    if (root) {
-      const meta = await api(`/api/ruleChain/${root.id.id}/metadata`)
-      const idx = (meta.nodes as { name: string }[]).findIndex(n => n.name === flowName)
-      if (idx >= 0) {
-        meta.nodes.splice(idx, 1)
-        meta.connections = ((meta.connections || []) as { fromIndex: number; toIndex: number }[])
-          .filter(c => c.fromIndex !== idx && c.toIndex !== idx)
-          .map(c => ({
-            ...c,
-            fromIndex: c.fromIndex > idx ? c.fromIndex - 1 : c.fromIndex,
-            toIndex: c.toIndex > idx ? c.toIndex - 1 : c.toIndex,
-          }))
-        if (meta.firstNodeIndex > idx) meta.firstNodeIndex--
-        await api('/api/ruleChain/metadata', meta)
-        log.push('Root 转发节点已摘除')
-      }
-    }
+    if (await unwireRootChain(api, cfg.site.name)) log.push('Root 转发节点已摘除')
+    const chains: { id: { id: string }; name: string; root?: boolean }[] =
+      (await api('/api/ruleChains?pageSize=100&page=0'))?.data || []
     // 3. 站点规则链
     for (const name of [names.alarm, names.rollup, names.revenue]) {
       const found = chains.find(c => c.name === name && !c.root)
