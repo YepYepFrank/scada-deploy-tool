@@ -25,7 +25,11 @@ export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const git = args =>
   execFileSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
 
-/** 远端地址可能带凭据(https://user:token@host/...),写进包里就是泄露,去掉 userinfo */
+/**
+ * 去掉远端地址里的 userinfo —— 有人会把账号和令牌写在主机名前面(@ 之前那一段),
+ * 那种 origin 直接写进包里就是泄露。
+ * (这里不写出那种地址的样子:gitleaks 会当成真凭据拦下,fe024b5 上已经误报过一次。)
+ */
 export function sanitizeRemote(url) {
   if (!url) return null
   return url.replace(/^(\w+:\/\/)[^@/]*@/, '$1').replace(/\.git$/, '')
