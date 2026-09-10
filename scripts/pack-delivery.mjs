@@ -18,7 +18,6 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { resolve, join } from 'node:path'
 import { REPO_ROOT, gitInfo, writeBuildInfo } from './build-info.mjs'
 
@@ -95,7 +94,8 @@ if (!flag('--no-build')) {
 // ── ③ 逐个打包 ────────────────────────────────────────────────────────
 mkdirSync(outDir, { recursive: true })
 const stamp = info.commitShort + (info.dirty ? '+dirty' : '')
-const staging = mkdtempSync(join(tmpdir(), 'grid-pack-'))
+// 暂存目录放在 outDir 里面:系统 temp 常在另一个盘,跨盘 rename 会 EXDEV
+const staging = mkdtempSync(join(outDir, '.pack-'))
 const results = []
 
 try {
