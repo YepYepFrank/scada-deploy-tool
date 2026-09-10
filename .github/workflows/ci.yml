@@ -47,7 +47,7 @@ jobs:
           node -e "import('./packages/compiler/dist/index.js').then(m => { const p = m.compile({schemaVersion:0,schema:'tbsite/v2',site:{name:'ci'},devices:[{name:'d',keys:[{key:'p'}]}],computations:[{template:'alarm.threshold',device:'d',key:'p',name:'x',condition:{op:'gt',value:1},severity:'MINOR',message:'m'}]}); if (!p.alarm || p.alarm.metadata.nodes.length !== 5) process.exit(1) })"
           node packages/compiler/bin/tbsite.mjs plan packages/compiler/test/fixtures/demo-site.tbsite.json
 
-            # 交付包必须能追溯到提交(2026-09-10):文件名带短提交号,包内 build-info.json 带完整提交号。
+      # 交付包必须能追溯到提交(2026-09-10):文件名带短提交号,包内 build-info.json 带完整提交号。
       # 这一步防的是「以后有人改了 files / build 脚本,标记悄悄丢了」。
       - name: 交付包带提交号
         run: |
