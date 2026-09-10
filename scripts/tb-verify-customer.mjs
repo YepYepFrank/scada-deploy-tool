@@ -60,3 +60,22 @@ console.log(
 )
 const other = await get('/api/device/5727ae80-6fb8-11f1-8007-51b9f7714bbe')
 console.log('润扬 RY_GZ_ESS_PCS access →', other.status, other.status === 200 ? '(!! 越权可见)' : '(不可见 ✓ 隔离生效)')
+
+// 2026-09-10 补:同一台未分配设备,「最新值」与「历史区间」在 TB 里判得不一样 ——
+// 最新值 403,带 startTs/endTs 的历史却回 200 带数据(镜像 TB 4.3.1.3 CE 实测,三台设备都这样)。
+// 这一条留在这里常跑:哪天升级或改了配置能自动发现是否还漏。
+const LEAK = { name: 'BS_2_CK(未分配)', id: 'b3ccd5e0-7c36-11f1-8007-51b9f7714bbe', key: 'DC_V' }
+const now = Date.now()
+const latest = await get(`/api/plugins/telemetry/DEVICE/${LEAK.id}/values/timeseries?keys=${LEAK.key}`)
+const hist = await get(
+  `/api/plugins/telemetry/DEVICE/${LEAK.id}/values/timeseries?keys=${LEAK.key}&startTs=${now - 3600_000}&endTs=${now}&limit=3&agg=NONE`
+)
+const histPts = hist.status === 200 ? (hist.body?.[LEAK.key] ?? []).length : 0
+console.log(
+  `${LEAK.name} 最新值 → ${latest.status} / 历史区间 → ${hist.status}${histPts ? ` (${histPts} 点)` : ''}`,
+  latest.status !== 200 && histPts > 0
+    ? '(!! 历史越权可读,联调环境待办 ⑦)'
+    : latest.status !== 200 && hist.status !== 200
+      ? '(两边都拒 ✓ 已修)'
+      : '(判不了:这台设备可能已分配或没有数据,换一台)'
+)
