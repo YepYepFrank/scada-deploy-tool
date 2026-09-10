@@ -59,9 +59,22 @@ const info = gitInfo()
 if (!info.available) die('这里不是 git 仓库(或没装 git),打出来的包无从追溯。请在仓库里打包。')
 if (info.dirty && !flag('--allow-dirty'))
   die(
-    '工作区有未提交的改动,提交号对不上包里的代码。\n' +
-      '  先提交(或 git stash),或者明确用 --allow-dirty(文件名会带 +dirty,只适合自己临时验证)。'
+    '工作区有未提交的改动,提交号对不上包里的代码:\n' +
+      dirtyPaths()
+        .slice(0, 12)
+        .map(l => '    ' + l)
+        .join('\n') +
+      '\n  先提交(或 git stash),或者明确用 --allow-dirty(文件名会带 +dirty,只适合自己临时验证)。'
   )
+
+/** 哪些文件脏了 —— 只说「有改动」在 CI 里没法查,得点名 */
+function dirtyPaths() {
+  try {
+    return execFileSync('git', ['status', '--porcelain'], { cwd: REPO_ROOT, encoding: 'utf8' }).trim().split(/\r?\n/)
+  } catch {
+    return ['    (git status 取不到)']
+  }
+}
 
 let pushed = 'yes'
 try {
