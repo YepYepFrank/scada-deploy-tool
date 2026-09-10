@@ -12,16 +12,18 @@
     "./testing": {
       "types": "./src/testing/index.ts",
       "import": "./src/testing/index.ts"
-    }
+    },
+    "./build-info.json": "./build-info.json"
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "build-info.json"
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
-    "build": "tsup",
+    "build": "node ../../scripts/build-info.mjs . && tsup",
     "test:live": "vitest run --config vitest.live.config.ts"
   },
   "devDependencies": {
@@ -38,7 +40,8 @@
       "./testing": {
         "types": "./dist/testing/index.d.ts",
         "import": "./dist/testing/index.js"
-      }
+      },
+      "./build-info.json": "./build-info.json"
     }
   },
   "sideEffects": false,

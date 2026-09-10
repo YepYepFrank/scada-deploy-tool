@@ -3,6 +3,8 @@ node_modules/
 dist/
 dist-site/
 *.tsbuildinfo
+build-info.json
+/delivery/
 .pnpm-store/
 
 # env / secrets — 凭据永不入库

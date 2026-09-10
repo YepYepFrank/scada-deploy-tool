@@ -14,18 +14,20 @@
       "import": "./src/schema/index.ts"
     },
     "./schema/page-config.schema.json": "./src/schema/page-config.schema.json",
-    "./style.css": "./src/theme/default.css"
+    "./style.css": "./src/theme/default.css",
+    "./build-info.json": "./build-info.json"
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "build-info.json"
   ],
   "scripts": {
     "typecheck": "vue-tsc -p tsconfig.json --noEmit",
     "gen:schema": "node scripts/gen-schema.mjs",
     "test": "vitest run",
     "test:schema": "vitest run test/schema.test.ts",
-    "build": "vite build",
+    "build": "node ../../scripts/build-info.mjs . && vite build",
     "dev": "vite --config vite.dev.config.ts --port 5180 --strictPort"
   },
   "peerDependencies": {
@@ -59,7 +61,8 @@
         "import": "./dist/schema/index.js"
       },
       "./schema/page-config.schema.json": "./dist/schema/page-config.schema.json",
-      "./style.css": "./dist/style.css"
+      "./style.css": "./dist/style.css",
+      "./build-info.json": "./build-info.json"
     }
   },
   "sideEffects": [

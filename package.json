@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"@grid/*\" run build",
+    "pack:delivery": "node scripts/pack-delivery.mjs",
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck",
     "gen:schema": "pnpm -F @grid/scada-renderer run gen:schema",

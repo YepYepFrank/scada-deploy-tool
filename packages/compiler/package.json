@@ -8,7 +8,8 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    }
+    },
+    "./build-info.json": "./build-info.json"
   },
   "bin": {
     "tbsite": "./bin/tbsite.mjs"
@@ -16,11 +17,12 @@
   "files": [
     "dist",
     "src",
-    "bin"
+    "bin",
+    "build-info.json"
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsup",
+    "build": "node ../../scripts/build-info.mjs . && tsup",
     "test": "vitest run",
     "test:live": "vitest run --config vitest.live.config.ts",
     "tbsite": "node bin/tbsite.mjs",
@@ -36,7 +38,8 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
-      }
+      },
+      "./build-info.json": "./build-info.json"
     }
   },
   "sideEffects": false
