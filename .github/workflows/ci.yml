@@ -59,7 +59,7 @@ jobs:
           for f in /tmp/delivery/*.tgz; do
             tar -xzOf "$f" package/build-info.json | grep -q "\"commit\": \"$full\"" || { echo "✗ $f 里的 build-info.json 提交号不对"; exit 1; }
           done
-      
+
       - name: Test
         run: pnpm test
 
