@@ -47,24 +47,45 @@ export async function findAsset(api: TbApi, name: string) {
   return (page?.data || []).find((a: { name: string }) => a.name === name) ?? null
 }
 
-/** 按名找资产,没有则建;返回 {id, created} */
-export async function ensureAsset(api: TbApi, name: string, type: string): Promise<{ id: string; created: boolean }> {
+/** 按名找资产,没有则建(新建时可带归属标记);返回 {id, created} */
+export async function ensureAsset(
+  api: TbApi,
+  name: string,
+  type: string,
+  additionalInfo?: Record<string, unknown>
+): Promise<{ id: string; created: boolean }> {
   const found = await findAsset(api, name)
   if (found) return { id: found.id.id, created: false }
-  const created = await api('/api/asset', { name, type })
+  const created = await api('/api/asset', additionalInfo ? { name, type, additionalInfo } : { name, type })
   return { id: created.id.id, created: true }
 }
 
-export async function ensureChain(api: TbApi, name: string): Promise<{ id: string; created: boolean }> {
+export async function ensureChain(
+  api: TbApi,
+  name: string,
+  additionalInfo?: Record<string, unknown>
+): Promise<{ id: string; created: boolean }> {
   const page = await api(`/api/ruleChains?pageSize=100&page=0&textSearch=${q(name)}`)
   const found = (page?.data || []).find((c: { name: string }) => c.name === name)
   if (found) return { id: found.id.id, created: false }
-  const created = await api('/api/ruleChain', { name, type: 'CORE', debugMode: false, root: false })
+  const created = await api('/api/ruleChain', {
+    name,
+    type: 'CORE',
+    debugMode: false,
+    root: false,
+    ...(additionalInfo ? { additionalInfo } : {}),
+  })
   return { id: created.id.id, created: true }
 }
 
+/** TB 返回的计算字段(写入器用到的字段;version 是乐观锁,additionalInfo 放归属标记) */
+export interface TbCf {
+  id: { id: string }
+  name: string
+  version?: number
+  additionalInfo?: Record<string, unknown> | null
+  [k: string]: unknown
+}
+
 export const listCfs = async (api: TbApi, entityType: 'DEVICE' | 'ASSET', id: string) =>
-  ((await api(`/api/${entityType}/${id}/calculatedFields?pageSize=100&page=0`))?.data || []) as {
-    id: { id: string }
-    name: string
-  }[]
+  ((await api(`/api/${entityType}/${id}/calculatedFields?pageSize=100&page=0`))?.data || []) as TbCf[]

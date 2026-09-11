@@ -67,7 +67,8 @@ export function buildCf(
   return {
     entityId: { entityType: hostType, id: hostId },
     type: 'SIMPLE',
-    name: out,
+    // 接管来的字段保持它在 TB 上的原名(常是中文描述),输出测点名另算
+    name: comp.cfName || out,
     configurationVersion: 1,
     configuration: {
       type: 'SIMPLE',

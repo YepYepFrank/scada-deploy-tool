@@ -21,6 +21,22 @@ export const MAX_CF_PER_ENTITY = 5
 export const AGG_ASSET_TYPE = 'tbsite-agg'
 export const SITE_ASSET_TYPE = 'tbsite'
 
+/**
+ * 归属标记(2026-09-11):本工具写进 TB 的计算字段 / 资产 / 规则链,在 additionalInfo 上带
+ * `{ managedBy: 'deploy-tool', site }`(与页面资产的 MANAGED_BY 同值)。清理、漂移比对、交还都认它,
+ * 不再只靠「名字 + 上一版声明」判断——那样认不出早先发布、后来从声明里删掉的遗留。
+ */
+export const OWNER_TAG = 'deploy-tool'
+export type OwnerInfo = { managedBy: typeof OWNER_TAG; site: string }
+export const ownerInfo = (site: string): OwnerInfo => ({ managedBy: OWNER_TAG, site })
+/** 读实体上的归属标记;不是本工具的回 null */
+export const ownerOf = (e: { additionalInfo?: unknown } | null | undefined): OwnerInfo | null => {
+  const a = e?.additionalInfo as { managedBy?: unknown; site?: unknown } | null | undefined
+  return a && typeof a === 'object' && a.managedBy === OWNER_TAG && typeof a.site === 'string'
+    ? { managedBy: OWNER_TAG, site: a.site }
+    : null
+}
+
 export const chainNames = {
   rollup: (site: string) => `Site Rollups · ${site}`,
   alarm: (site: string) => `Site Alarms · ${site}`,

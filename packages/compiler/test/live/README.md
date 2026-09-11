@@ -14,6 +14,7 @@ pnpm -F @grid/tbsite-compiler test:live
 | `prune-chains.live.ts` | 发布时清理旧链(R1):独立命名的临时站点先发布「告警 + 多级归档」→ 断言两条链与 Root 转发都在 → 声明里去掉全部运算再发布 → 断言两条链从 TB 消失、Root 转发被摘、与本站点无关的链逐一比对一条没少 → 再发一次幂等。`afterAll` 兜底 `cleanup` | 可跑 |
 | `health.live.ts` | 发布后自检:自建一条临时链承载故障(不碰任何站点的链),写一个带 `propagateRelationTypes` 的建告警节点 → 断言自检抓到、报出节点类型与根因、同链正常节点不误报;把字段名改成 `relationTypes` 再存一次 → 断言通过(证明判据取最近一次 STARTED);链不存在时给跳过原因。`afterAll` 删临时链 | 可跑 |
 | `cross-device-cf.live.ts` | 即时计算的结果存哪(2026-09-10):用两台持续上报 `temperature` 的测试设备(`Test Device A1 / A2`,本来都没有 CF)建临时站点 → publish → 断言跨设备的 `A1 − A2` 的 CF 建在结果资产(`tbsite-agg`)上并挂到站点下、单设备的 `A1 × 2` 建在 A1 上 → 等真实遥测触发,逐点拿同一时刻的输入核对算出来的值 → cleanup 全清。`afterAll` 兜底 cleanup 并删掉 A1 上临时结果 key 的历史 | 可跑 |
+| `sync-adopt.live.ts` | 第 3 步建资产 / 同步 / 接管 / 交还(2026-09-11):临时站点 + 用临时资产模拟「同事手配、不带标记」的字段 → `ensureResultAssets` 只建资产与关系、不建计算字段和链 → `readPlatformState` 把同事字段列为可接管、跨设备运算列为「平台上还没有」→ 接管后发布:原字段原地更新并打标记;第二次发布规则链「未变,未重写」(真实 TB 读回的元数据比对)→ 交还后再发布不删 → cleanup 只清本站点,同事的资产与字段不动。不建告警,不碰 Root 链 | 可跑 |
 | ~~Profile 告警双轨(ADR-001)~~ | 取消(2026-09-06):ADR-001 定稿 Profile 一律不写 | — |
 
 元数据读取那两项(Asset 树按 `Contains` 递归、属性 key 列表)在 `apps/deploy-tool/src/meta/MetaNode.ts`,单元测试在 `apps/deploy-tool/test/meta-tree.test.ts`(Asset 树)与 `apps/deploy-tool/test/meta-attr-keys.test.ts`(属性 key 按 scope、遥测 key 带最新值与类型;2026-09-08),镜像验收记录见开发计划 T2.5。T3.11 于 2026-09-08 收尾:本 live 用例 3/3 重跑通过。

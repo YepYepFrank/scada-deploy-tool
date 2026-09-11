@@ -14,7 +14,20 @@ import EditorApp from '../editor/EditorApp.vue'
 import PublishPanel from '../editor/PublishPanel.vue'
 import { listSitePages, readPageState } from '../publish/publishPage'
 import { declaredFromSiteConfig } from '../editor/declared-keys'
-import { publish, cleanup, cfInputDevices, assetCfLoad, MAX_CF_PER_ENTITY } from './publisher.js'
+import {
+  publish,
+  cleanup,
+  cfInputDevices,
+  assetCfLoad,
+  MAX_CF_PER_ENTITY,
+  expandConfig,
+  outputInventory,
+  ensureResultAssets,
+  readPlatformState,
+  handBackCf,
+  findAsset,
+  listCfs,
+} from './publisher.js'
 import KeyPicker from '../components/KeyPicker.vue'
 
 const STEPS = ['连接与站点', '设备与测点', '运算配置', '组态编辑', '发布上线']
@@ -287,9 +300,15 @@ function writeDrafts(list) {
 }
 async function saveDraft(advance = false) {
   const def = lastDraftName.value || `${site.label || site.name} 草稿`
+  // 第 3 步「保存并进入展示配置」同时把结果资产建到平台上(2026-09-11),第 4 步就能选中
+  const writesTb = advance && step.value === 2
   const name = await askPrompt({
     title: '保存草稿',
-    text: `给这份草稿起个名字${advance ? ',保存后进入下一步' : ''}。同名草稿会被覆盖;只保存在本浏览器,不写入平台。`,
+    text:
+      `给这份草稿起个名字${advance ? ',保存后进入下一步' : ''}。同名草稿会被覆盖;草稿只保存在本浏览器` +
+      (writesTb
+        ? '。\n同时在平台上建好结果资产(跨设备运算、汇聚、收益用到的资产),第 4 步就能选中;计算字段和规则链仍在第 5 步发布时写。'
+        : ',不写入平台。'),
     placeholder: '草稿名称,如:仙人山二期 调试中',
     value: def,
     okLabel: advance ? '保存并继续' : '保存',
@@ -306,7 +325,17 @@ async function saveDraft(advance = false) {
   draftList.value = readDrafts()
   draftMsg.value = `✓ 已保存「${nm}」(${new Date().toLocaleTimeString('zh-CN', { hour12: false })})`
   clearTimeout(draftMsgTimer)
-  draftMsgTimer = setTimeout(() => (draftMsg.value = ''), 4000)
+  if (writesTb) {
+    try {
+      const m = await writeResultAssets()
+      if (m) draftMsg.value += ` · ${m}`
+    } catch (e) {
+      draftMsg.value += ` · 结果资产没建成:${e.message || e}`
+      alert(`草稿已保存,但结果资产没建成,先留在本步:\n${e.message || e}`)
+      return
+    }
+  }
+  draftMsgTimer = setTimeout(() => (draftMsg.value = ''), writesTb ? 8000 : 4000)
   if (advance && step.value < 4) step.value++
 }
 function checkDraft() {
@@ -1133,7 +1162,8 @@ const modalCfDevices = computed(() => {
 const modalResultAsset = computed(() => (modal.form.resultAsset || '').trim() || defaultCalcAsset.value)
 /** 结果资产名的问题(撞名 / 超 TB 单实体 CF 上限);空串 = 没问题 */
 const modalAssetProblem = computed(() => {
-  if (modalCfDevices.value.length < 2) return ''
+  // 接管来的运算保持原实体,不走「结果资产名」这一套(那是同事的资产,名字不归我们定)
+  if (modalCfDevices.value.length < 2 || modalAdopted.value) return ''
   const name = modalResultAsset.value
   if (name === site.name) return '结果资产名不能与站点同名'
   if (claimedDevices.value.some(d => d.name === name)) return `结果资产名与设备 ${name} 重名`
@@ -1152,10 +1182,184 @@ function placeCf(c) {
 }
 /** 运算清单里的「结果存在哪」;旧配置里跨设备却挂在设备上的,提示编辑一次即改存资产 */
 function cfWhere(c) {
-  if (c.asset) return `资产 ${c.asset}.${c.output}`
+  const tag = c.adopted ? `(接管 · 平台字段「${c.cfName || c.output}」)` : ''
+  if (c.asset) return `资产 ${c.asset}.${c.output}${tag}`
   const legacy =
-    cfInputDevices(c).length > 1 ? '(旧配置:跨设备结果仍存在这台设备上,点「编辑」再保存即改存资产)' : ''
-  return `${c.device}.${c.output}${legacy}`
+    !c.adopted && cfInputDevices(c).length > 1
+      ? '(旧配置:跨设备结果仍存在这台设备上,点「编辑」再保存即改存资产)'
+      : ''
+  return `${c.device}.${c.output}${tag}${legacy}`
+}
+
+/* ── 接管来的运算在弹窗里:保持接管身份和原实体(换了宿主就不是原来那个字段了) ── */
+const modalEditing = computed(() => (modal.target === null && modal.editIndex !== null ? computations.value[modal.editIndex] : null))
+const modalAdopted = computed(() => !!modalEditing.value?.adopted)
+function keepAdopted(c) {
+  const old = modalEditing.value
+  if (!old?.adopted) return
+  delete c.device
+  delete c.asset
+  if (old.asset) c.asset = old.asset
+  else c.device = old.device
+  c.adopted = true
+  if (old.cfName) c.cfName = old.cfName
+}
+
+/* ── 进第 3 步时同步平台现状 + 接管 / 交还(2026-09-11)──
+   读 TB 上与本站点有关的计算字段与规则链:本工具管的比对漂移;别人配的只读,能套进模板的可以「接管」。
+   同步本身只读;唯一的写操作是「交还」(去掉归属标记,字段原样留在平台上)。 */
+const platform = reactive({ loading: false, error: '', at: 0, state: null, open: true })
+const tbApi = (url, data, method) => api(url, data, method)
+const claimedIdMap = () => Object.fromEntries(claimedDevices.value.map(d => [d.name, d.tbId]))
+async function syncPlatform() {
+  if (conn.status !== 'ok') {
+    platform.error = '尚未连接 ThingsBoard,连接后进入本步会自动同步'
+    return
+  }
+  platform.loading = true
+  platform.error = ''
+  try {
+    platform.state = await readPlatformState(tbApi, siteJson.value, claimedIdMap())
+    platform.at = Date.now()
+  } catch (e) {
+    platform.error = `同步失败:${e.message || e}`
+  } finally {
+    platform.loading = false
+  }
+}
+watch(step, (s, old) => {
+  if (s === 2 && old !== 2 && conn.status === 'ok') void syncPlatform()
+})
+const platView = computed(() => {
+  const st = platform.state
+  if (!st) return null
+  const taken = new Set(
+    computations.value
+      .filter(c => c.adopted)
+      .map(c => `${c.asset ? 'ASSET|' + c.asset : 'DEVICE|' + c.device}|${c.cfName || c.output}`)
+  )
+  const foreign = st.cfs
+    .filter(r => r.owner === 'foreign')
+    .map(r => ({ ...r, taken: taken.has(`${r.entityType}|${r.entity}|${r.cf.name}`) }))
+  const mine = st.cfs.filter(r => r.owner === 'mine')
+  return {
+    mine,
+    changed: mine.filter(r => r.drift === 'changed'),
+    orphans: mine.filter(r => r.drift === 'orphan'),
+    adoptable: foreign.filter(r => r.adopt?.ok),
+    readonly: foreign.filter(r => !r.adopt?.ok),
+    otherSite: st.cfs.filter(r => r.owner === 'otherSite'),
+    missing: st.missing,
+    chains: st.chains,
+  }
+})
+const cfExprOf = r => r.cf.configuration?.expression || ''
+const cfOutOf = r => r.cf.configuration?.output?.name || ''
+async function adoptRow(r) {
+  if (!r.adopt?.ok || r.taken) return
+  const c = r.adopt.computation
+  const notes = r.adopt.notes.length ? `\n\n注意:${r.adopt.notes.join(';')}` : ''
+  if (
+    !(await askConfirm({
+      title: '接管这条计算',
+      text:
+        `把「${r.entity}」上的计算字段「${r.cf.name}」交给本工具管理?\n` +
+        `· 原字段名、原输出测点「${c.output}」、原实体都不变,历史曲线接得上;\n` +
+        '· 之后以向导里的配置为准,第 5 步发布时写回(表达式换成等价的向导写法并打上归属标记);\n' +
+        `· 随时可以「交还」:本工具不再管,字段原样留在平台上。${notes}`,
+      okLabel: '接管',
+    }))
+  )
+    return
+  computations.value.push(JSON.parse(JSON.stringify(c)))
+}
+/** 交还:从清单移除;平台上已发布过(带标记)的立刻去掉标记,之后发布、清理都不会删它 */
+async function handBackComp(i) {
+  const c = computations.value[i]
+  if (!c?.adopted) return
+  const nm = c.cfName || c.output
+  if (
+    !(await askConfirm({
+      title: '交还给平台',
+      text: `交还「${nm}」?本工具不再管理它:从运算清单里移除,平台上的字段原样保留。`,
+      okLabel: '交还',
+    }))
+  )
+    return
+  if (conn.status !== 'ok') {
+    alert('请先在第 1 步连接 ThingsBoard 再交还(要去掉平台上的归属标记,不然下次发布会把它当成本站点的删掉)')
+    return
+  }
+  try {
+    const hostId = c.asset
+      ? (await findAsset(tbApi, c.asset))?.id.id
+      : claimedDevices.value.find(d => d.name === c.device)?.tbId
+    const f = hostId ? (await listCfs(tbApi, c.asset ? 'ASSET' : 'DEVICE', hostId)).find(x => x.name === nm) : null
+    if (f) await handBackCf(tbApi, f)
+  } catch (e) {
+    alert(`交还失败:${e.message || e}`)
+    return
+  }
+  computations.value.splice(i, 1)
+  void syncPlatform()
+}
+/** 遗留(带本站点标记、声明里已没有):交还 = 去掉标记、字段留着;不管的话第 5 步发布会删掉 */
+async function handBackRow(r) {
+  if (
+    !(await askConfirm({
+      title: '交还给平台',
+      text: `「${r.entity}」上的「${r.cf.name}」带着本站点的标记,但声明里已经没有了——不处理的话第 5 步发布时会被删掉。交还后标记去掉、字段留着,本工具不再管它。`,
+      okLabel: '交还',
+    }))
+  )
+    return
+  try {
+    await handBackCf(tbApi, r.cf)
+  } catch (e) {
+    alert(`交还失败:${e.message || e}`)
+    return
+  }
+  void syncPlatform()
+}
+/** 单设备运算:这台设备上平台已有的别人的计算字段 + 本站点要建的,超过 TB 单实体上限就提前拦 */
+const modalSlotProblem = computed(() => {
+  const st = platform.state
+  if (!st || modalCfDevices.value.length !== 1 || modalAdopted.value) return ''
+  const dev = modalCfDevices.value[0]
+  const key = `DEVICE|${dev}`
+  const foreign =
+    (st.occupied[key] || 0) - st.cfs.filter(r => r.owner === 'mine' && `${r.entityType}|${r.entity}` === key).length
+  const others = computations.value.filter((_, i) => i !== modal.editIndex)
+  const probe = {
+    ...siteJson.value,
+    computations: [...others, { template: 'expr.add', device: dev, output: '__probe__', inputs: {} }],
+  }
+  const { cfg, computations: all, prefix } = expandConfig(probe)
+  const planned = outputInventory(cfg, all, prefix).filter(
+    o => o.kind === 'cf' && o.entityType === 'DEVICE' && o.entity === dev
+  ).length
+  return foreign + planned > MAX_CF_PER_ENTITY
+    ? `设备 ${dev} 上平台已有 ${foreign} 个别人的计算字段,加上本站点的 ${planned} 个,超过 TB 单个实体上限 ${MAX_CF_PER_ENTITY}`
+    : ''
+})
+
+/* ── 第 3 步「保存并进入展示配置」:把结果资产建到平台上(2026-09-11) ──
+   只建资产(跨设备运算 / 汇聚 / 收益用到的)+ 挂到站点下;计算字段和规则链仍在第 5 步写 */
+const metaRev = ref(0) // 第 4 步编辑器的实体树版本:建完资产 +1,编辑器重读
+async function writeResultAssets() {
+  if (conn.status !== 'ok') return '未连接 TB,结果资产留到第 5 步发布时建'
+  if (!canPublishSite.value)
+    throw new Error(`当前账号(现场)只能写以下站点:${perm.sites.join('、') || '(未授权任何站点)'}`)
+  const r = await ensureResultAssets(siteJson.value, claimedIdMap(), tbApi)
+  if (r.conflicts.length)
+    throw new Error(
+      `这些资产名已被别的资产占用(不是本工具建的),没有建:${r.conflicts
+        .map(x => `${x.name}(类型 ${x.type})`)
+        .join('、')}。请换一个结果资产名`
+    )
+  metaRev.value++
+  const n = r.created.length + r.existing.length
+  return n ? `平台上结果资产已就绪 ${n} 个(新建 ${r.created.length})` : ''
 }
 
 function openTpl(id, target = null) {
@@ -1306,7 +1510,7 @@ watch(
 const modalValid = computed(() => {
   const tpl = modalTpl.value
   if (!tpl) return false
-  if (modalAssetProblem.value) return false
+  if (modalAssetProblem.value || modalSlotProblem.value) return false
   if (tpl.custom) return customValid.value
   if (tpl.kind === 'revenue') {
     const f = modal.form
@@ -1417,12 +1621,14 @@ function addComputation() {
     )
     c.ops = [...modal.form.termOps]
     placeCf(c) // 单设备 → 存这台设备;跨设备 → 存结果资产
+    keepAdopted(c) // 接管来的:保持接管身份和原实体
     c.output = modal.form.output.trim()
     c.outputMode = modal.form.outputMode
   } else if (tpl.kind === 'cf') {
     c.inputs = {}
     for (const p of tpl.params) c.inputs[p.id] = keyRef(modal.form[p.id])
     placeCf(c)
+    keepAdopted(c)
     c.output = tpl.fixedOutput || modal.form.output.trim()
     c.outputMode = modal.form.outputMode
   } else if (modal.tplId === 'window.cascade') {
@@ -1493,9 +1699,17 @@ function compDesc(c) {
 /* ── 组态(T3.7 起):新编辑器 EditorApp 嵌入第 4 步,页面存为 ScadaPage 资产,不再写 siteConfig.layout ── */
 const editorRef = ref(null)
 /** 向导第 1 步登录后的会话交给编辑器采用(不让用户再登录一次) */
+// rev:第 3 步建完结果资产后 +1,编辑器(深度监听会话)据此重读实体树,新资产马上能选中
 const editorSession = computed(() =>
   conn.status === 'ok' && conn.token
-    ? { base: curEnv.value.base, token: conn.token, user: conn.username, siteName: site.name, authority: 'TENANT_ADMIN' }
+    ? {
+        base: curEnv.value.base,
+        token: conn.token,
+        user: conn.username,
+        siteName: site.name,
+        authority: 'TENANT_ADMIN',
+        rev: metaRev.value,
+      }
     : null
 )
 const pageState = computed(() => editorRef.value?.state ?? null)
@@ -2038,6 +2252,89 @@ function openFrontend() {
         >
       </div>
 
+      <!-- 平台上已有的配置(2026-09-11):进本步时从 TB 同步,只读;别人配的可接管 -->
+      <div class="plat-panel">
+        <div class="plat-head clickable" @click="platform.open = !platform.open" title="点击折叠/展开">
+          <span class="gw-fold">{{ platform.open ? '▼' : '▶' }}</span>
+          <h3 class="way-title">平台上已有的配置</h3>
+          <span v-if="platView" class="plat-sum">
+            本站点 {{ platView.mine.length }} · 可接管 {{ platView.adoptable.length }} · 只读
+            {{ platView.readonly.length + platView.otherSite.length }} · 规则链 {{ platView.chains.length }}
+          </span>
+          <span v-else class="plat-sum">{{ platform.loading ? '同步中…' : '尚未同步' }}</span>
+          <button class="btn ghost sm" :disabled="platform.loading || conn.status !== 'ok'" @click.stop="syncPlatform">
+            {{ platform.loading ? '同步中…' : '重新同步' }}
+          </button>
+        </div>
+        <p v-if="platform.error" class="err-msg" style="margin: 6px 0 0">{{ platform.error }}</p>
+        <template v-if="platform.open && platView">
+          <p class="hint" style="margin: 8px 0 0">
+            进入本步时从 TB 读取(只读,{{ new Date(platform.at).toLocaleTimeString('zh-CN', { hour12: false }) }}
+            同步)。本工具只管带本站点标记的计算字段;别人配的一律不改不删,表达式能套进模板的可以「接管」。
+          </p>
+          <div v-if="platView.changed.length" class="plat-group warn">
+            <div class="plat-gt">
+              ⚠ 平台上被改过({{ platView.changed.length }})—— 第 5 步发布会以向导里的配置为准覆盖
+            </div>
+            <div v-for="r in platView.changed" :key="r.cf.id?.id" class="plat-row">
+              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }}</span><code>{{ cfExprOf(r) }}</code>
+            </div>
+          </div>
+          <div v-if="platView.orphans.length" class="plat-group warn">
+            <div class="plat-gt">
+              带本站点标记、声明里已没有({{ platView.orphans.length }})—— 不处理的话第 5 步发布会删掉
+            </div>
+            <div v-for="r in platView.orphans" :key="r.cf.id?.id" class="plat-row">
+              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }}</span><code>{{ cfExprOf(r) }}</code>
+              <button class="btn ghost sm" @click="handBackRow(r)">交还(保留字段)</button>
+            </div>
+          </div>
+          <div v-if="platView.missing.length" class="plat-group">
+            <div class="plat-gt">声明里有、平台上还没有({{ platView.missing.length }})—— 第 5 步发布时建</div>
+            <div v-for="m in platView.missing" :key="m.entity + m.name" class="plat-row">
+              <span class="pe">{{ m.entity }}</span><span class="pn">{{ m.name }}</span>
+            </div>
+          </div>
+          <div v-if="platView.adoptable.length" class="plat-group">
+            <div class="plat-gt">别人配的、可以接管({{ platView.adoptable.length }})</div>
+            <div v-for="r in platView.adoptable" :key="r.cf.id?.id" class="plat-row">
+              <span class="pe">{{ r.entity }}</span>
+              <span class="pn">{{ r.cf.name }} → {{ cfOutOf(r) }}</span>
+              <code>{{ cfExprOf(r) }}</code>
+              <span v-if="r.taken" class="plat-tag mine">已接管,第 5 步发布后生效</span>
+              <button v-else class="btn ghost sm" @click="adoptRow(r)">接管</button>
+              <span v-if="r.adopt.notes.length" class="plat-note">⚠ {{ r.adopt.notes.join(';') }}</span>
+            </div>
+          </div>
+          <details v-if="platView.readonly.length || platView.otherSite.length" class="plat-group">
+            <summary class="plat-gt">
+              别人配的、只读({{ platView.readonly.length + platView.otherSite.length }})—— 向导的模板表达不了,要改请在
+              TB 里改
+            </summary>
+            <div v-for="r in platView.readonly" :key="r.cf.id?.id" class="plat-row">
+              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }} → {{ cfOutOf(r) }}</span>
+              <code>{{ cfExprOf(r) }}</code><span class="plat-why">{{ r.adopt.reason }}</span>
+            </div>
+            <div v-for="r in platView.otherSite" :key="r.cf.id?.id" class="plat-row">
+              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }}</span>
+              <span class="plat-why">本工具 · 站点「{{ r.site }}」在管</span>
+            </div>
+          </details>
+          <details class="plat-group">
+            <summary class="plat-gt">
+              规则链({{ platView.chains.length }})—— 只读;本工具只管本站点的链和 Root 链上本站点那一个转发节点
+            </summary>
+            <div v-for="c in platView.chains" :key="c.id" class="plat-row">
+              <span class="pn">{{ c.root ? '[Root] ' : '' }}{{ c.name }}</span>
+              <span class="pe">{{ c.nodes }} 节点{{ c.timers ? ` · ${c.timers} 个定时器` : '' }}</span>
+              <span class="plat-tag" :class="{ mine: c.mine }">{{
+                c.mine ? '本站点' : c.root && c.ourFlow ? '别人的 · 含本站点转发节点' : '别人的'
+              }}</span>
+            </div>
+          </details>
+        </template>
+      </div>
+
       <div class="way-head clickable" @click="wayOpen.w1 = !wayOpen.w1" title="点击折叠/展开">
         <span class="gw-fold">{{ wayOpen.w1 ? '▼' : '▶' }}</span>
         <span class="way-badge">方式一 · 推荐</span>
@@ -2133,9 +2430,17 @@ function openFrontend() {
         已配置的单设备/全站级运算({{ computations.length }} 项)
       </h3>
       <div v-for="(c, i) in computations" :key="i" class="comp-row">
-        <span class="tag">{{ TEMPLATES[c.template].name }}</span>
+        <span class="tag" :class="{ adopted: c.adopted }">{{ c.adopted ? '接管' : TEMPLATES[c.template].name }}</span>
         <span class="desc">{{ compDesc(c) }}</span>
         <button class="btn ghost sm x" @click="openEdit(i)">编辑</button>
+        <button
+          v-if="c.adopted"
+          class="btn ghost sm"
+          title="本工具不再管它,平台上的字段原样保留"
+          @click="handBackComp(i)"
+        >
+          交还
+        </button>
         <button class="btn ghost sm" @click="removeComp(i)">删除</button>
       </div>
       <div class="step-foot">
@@ -2558,7 +2863,12 @@ function openFrontend() {
           </div>
         </div>
         <div v-if="modalCfDevices.length" class="frow">
-          <div v-if="modalCfDevices.length > 1" class="field">
+          <p v-if="modalAdopted" class="hint" style="margin: 4px 0 0">
+            接管来的运算:结果仍存在原来的 <b>{{ modalEditing.asset || modalEditing.device }}</b> 上,平台字段名「{{
+              modalEditing.cfName || modalEditing.output
+            }}」不变。
+          </p>
+          <div v-else-if="modalCfDevices.length > 1" class="field">
             <label>结果存到资产 (英文名) · 输入来自 {{ modalCfDevices.length }} 台设备</label>
             <input
               type="text"
@@ -2575,6 +2885,7 @@ function openFrontend() {
           <p v-else class="hint" style="margin: 4px 0 0">
             输入都在设备 <b>{{ modalCfDevices[0] }}</b> 上,结果存到这台设备。
           </p>
+          <div v-if="modalSlotProblem" class="err-msg" style="flex-basis: 100%">{{ modalSlotProblem }}</div>
         </div>
         <div v-if="modalTpl.fixedOutput" class="frow">
           <div class="field"><label>输出测点名</label><input type="text" :value="modalTpl.fixedOutput" disabled /></div>

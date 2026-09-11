@@ -72,7 +72,7 @@ export function compile(
     .filter(c => isCfTemplate(c.template))
     .map(c => {
       const host = cfHost(c)
-      const base = { output: c.output as string, template: c.template }
+      const base = { output: c.output as string, template: c.template, ...(c.adopted ? { adopted: true } : {}) }
       // 设备宿主的条目形状与冻结的 Python 版一致(parity);资产宿主是 TS 版新增,带 asset 不带 device
       return host.entityType === 'ASSET'
         ? {

@@ -15,6 +15,14 @@ export {
   cfInputDevices,
   assetCfLoad,
   MAX_CF_PER_ENTITY,
+  expandConfig,
+  outputInventory,
+  // 第 3 步:建结果资产、同步平台现状、接管 / 交还(2026-09-11)
+  ensureResultAssets,
+  readPlatformState,
+  handBackCf,
+  findAsset,
+  listCfs,
 } from '@grid/tbsite-compiler'
 
 export function publish(cfg, devIds, api, report, publishedBy = '', retry = null) {

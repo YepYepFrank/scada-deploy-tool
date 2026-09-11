@@ -1368,3 +1368,91 @@ select {
   font-size: 12px;
   color: var(--ink-2);
 }
+
+/* 第 3 步「平台上已有的配置」(2026-09-11):同步 TB 现状,接管 / 交还 */
+.plat-panel {
+  border: 1px solid var(--line-0);
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin: 0 0 18px;
+}
+.plat-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.plat-head .way-title {
+  margin: 0;
+}
+.plat-sum {
+  flex: 1;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.plat-group {
+  margin-top: 10px;
+  border-top: 1px dashed var(--line-0);
+  padding-top: 8px;
+}
+.plat-group.warn .plat-gt {
+  color: var(--bad);
+}
+.plat-gt {
+  font-size: 12px;
+  color: var(--ink-1);
+  margin-bottom: 6px;
+  cursor: default;
+}
+details.plat-group > summary.plat-gt {
+  cursor: pointer;
+}
+.plat-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.plat-row .pe {
+  color: var(--ink-2);
+  min-width: 160px;
+}
+.plat-row .pn {
+  color: var(--ink-0);
+}
+.plat-row code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--bg-2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plat-why,
+.plat-note {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.plat-note {
+  color: var(--bad);
+  flex-basis: 100%;
+}
+.plat-tag {
+  font-size: 11px;
+  color: var(--ink-2);
+  border: 1px solid var(--line-1);
+  border-radius: 3px;
+  padding: 0 6px;
+}
+.plat-tag.mine {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.tag.adopted {
+  color: var(--accent);
+}

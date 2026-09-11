@@ -5,11 +5,16 @@ import { describe, expect, it } from 'vitest'
 import {
   cleanup,
   compile,
+  ensureResultAssets,
+  handBackCf,
   NULL_UUID,
   publish,
+  readPlatformState,
   resolveDeviceIds,
+  type Computation,
   type StepId,
   type TbApi,
+  type TbCf,
   type TbsiteConfig,
 } from '../src/index'
 
@@ -447,6 +452,257 @@ describe('publish · 跨设备运算的结果存到资产(2026-09-10)', () => {
   })
 })
 
+describe('第 3 步建结果资产 · 归属标记 · 接管 / 交还 · 同步(2026-09-11)', () => {
+  const dev = (name: string, keys: string[]) => ({ name, profile: 'IED', keys: keys.map(key => ({ key })) })
+  const OWNER_S = { managedBy: 'deploy-tool', site: 'S' }
+  const cross = {
+    template: 'expr.subtract',
+    asset: 'S-CALC',
+    output: 'dP',
+    inputs: { a: { device: 'D1', key: 'P' }, b: { device: 'D2', key: 'P' } },
+  }
+  const pq = {
+    template: 'expr.add',
+    device: 'D1',
+    output: 'pq',
+    inputs: { a: { device: 'D1', key: 'P' }, b: { device: 'D1', key: 'Q' } },
+  }
+  const aggC = {
+    template: 'aggregate.crossEntity',
+    name: 'ΣP',
+    selector: { profiles: ['IED'] },
+    key: 'P',
+    agg: 'sum',
+    asset: 'S-agg',
+    output: 'totalP',
+  }
+  const cfgOf = (computations: unknown[]) =>
+    ({
+      schema: 'tbsite/v2',
+      site: { name: 'S' },
+      outputPrefix: 'calc_',
+      devices: [dev('D1', ['P', 'Q']), dev('D2', ['P'])],
+      computations,
+    }) as unknown as TbsiteConfig
+  const setup = async () => {
+    const tb = fakeTb(['D1', 'D2'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1', 'D2'])
+    return { tb, devIds }
+  }
+  type Row = TbCf & {
+    entityId: { id: string }
+    configuration?: { expression?: string; output?: { name?: string } }
+  }
+  const rows = (tb: ReturnType<typeof fakeTb>) => tb.cfs as unknown as Row[]
+  const contains = (tb: ReturnType<typeof fakeTb>, from: string, to: string) =>
+    tb.relations.some((x: unknown) => {
+      const r = x as { from: { id: string }; to: { id: string }; type: string }
+      return r.from.id === from && r.to.id === to && r.type === 'Contains'
+    })
+  const colleagueCf = (devIds: Record<string, string>, assetId: string) => ({
+    name: '实时曲线-总功率',
+    type: 'SIMPLE',
+    entityId: { entityType: 'ASSET', id: assetId },
+    configuration: {
+      type: 'SIMPLE',
+      expression: 'P1+P2',
+      arguments: {
+        P1: { refEntityId: { entityType: 'DEVICE', id: devIds.D1 }, refEntityKey: { type: 'TS_LATEST', key: 'P' } },
+        P2: { refEntityId: { entityType: 'DEVICE', id: devIds.D2 }, refEntityKey: { type: 'TS_LATEST', key: 'P' } },
+      },
+      output: { type: 'TIME_SERIES', name: 'tsTotal' },
+    },
+  })
+
+  it('ensureResultAssets:只建资产 + 站点资产 + 关系,不写计算字段、不碰规则链;同名的别人的资产记冲突、不借用', async () => {
+    const { tb, devIds } = await setup()
+    tb.assets.push({ id: { id: 'colleague', entityType: 'ASSET' }, name: 'S-agg', type: 'building' })
+    const r = await ensureResultAssets(cfgOf([cross, aggC]), devIds, tb.api)
+    expect(r.created).toEqual(['S-CALC'])
+    expect(r.conflicts).toEqual([{ name: 'S-agg', type: 'building' }])
+    expect(tb.cfs).toHaveLength(0)
+    expect(tb.calls.some(c => c.includes('/api/ruleChain'))).toBe(false)
+    const calc = tb.assets.find(a => a.name === 'S-CALC')!
+    expect(calc).toMatchObject({ type: 'tbsite-agg', additionalInfo: OWNER_S })
+    const site = tb.assets.find(a => a.name === 'S')!
+    expect(site).toMatchObject({ type: 'tbsite', additionalInfo: OWNER_S })
+    expect(contains(tb, site.id.id, calc.id.id)).toBe(true)
+    expect(contains(tb, site.id.id, 'colleague')).toBe(false)
+    expect(r.followed).toBe(1)
+    const again = await ensureResultAssets(cfgOf([cross]), devIds, tb.api)
+    expect(again).toMatchObject({ created: [], existing: ['S-CALC'], conflicts: [] })
+    expect(tb.assets.filter(a => a.name === 'S-CALC')).toHaveLength(1)
+  })
+
+  it('发布:计算字段带归属标记、更新时带 version;清理只删本站点标记 / 上一版声明的,别人的与别的站点的不碰', async () => {
+    const { tb, devIds } = await setup()
+    const d1 = { entityType: 'DEVICE', id: devIds.D1! }
+    await tb.api('/api/calculatedField', { name: '总电压', entityId: d1, type: 'SIMPLE' })
+    await tb.api('/api/calculatedField', { name: 'calc_old', entityId: d1, type: 'SIMPLE', additionalInfo: OWNER_S })
+    await tb.api('/api/calculatedField', {
+      name: 'calc_x',
+      entityId: d1,
+      type: 'SIMPLE',
+      additionalInfo: { managedBy: 'deploy-tool', site: 'T' },
+    })
+    const r = collect()
+    expect(await publish(cfgOf([pq, cross]), devIds, tb.api, r.report, { layeredSettleMs: 0 })).toEqual([])
+    expect(
+      rows(tb)
+        .map(c => c.name)
+        .sort()
+    ).toEqual(['calc_dP', 'calc_pq', 'calc_x', '总电压'])
+    expect(r.log.find(l => l.startsWith('cf:ok'))).toContain('清理旧输出 1')
+    expect(rows(tb).find(c => c.name === 'calc_pq')!.additionalInfo).toEqual(OWNER_S)
+    expect(rows(tb).find(c => c.name === 'calc_dP')!.additionalInfo).toEqual(OWNER_S)
+    // 再发布:更新时把 TB 读回的 version 带上(乐观锁)
+    rows(tb).find(c => c.name === 'calc_pq')!.version = 7
+    const sent: Record<string, unknown>[] = []
+    const spy: TbApi = async (url, data, method) => {
+      if (url === '/api/calculatedField' && data) sent.push(data as Record<string, unknown>)
+      return tb.api(url, data, method)
+    }
+    expect(await publish(cfgOf([pq, cross]), devIds, spy, () => {}, { layeredSettleMs: 0 })).toEqual([])
+    expect(sent.find(b => b.name === 'calc_pq')!.version).toBe(7)
+  })
+
+  it('版本冲突(409):这一条失败并说人话,不重试、不覆盖', async () => {
+    const { tb, devIds } = await setup()
+    await publish(cfgOf([pq]), devIds, tb.api, () => {}, { layeredSettleMs: 0 })
+    const api: TbApi = async (url, data, method) => {
+      if (url === '/api/calculatedField' && data) throw new Error('/api/calculatedField → HTTP 409 version mismatch')
+      return tb.api(url, data, method)
+    }
+    const failures = await publish(cfgOf([pq]), devIds, api, () => {}, { layeredSettleMs: 0 })
+    expect(failures).toHaveLength(1)
+    expect(failures[0]!.error).toContain('计算字段「calc_pq」刚被别人改过(版本冲突)')
+    expect(failures[0]!.error).toContain('没有覆盖对方的修改')
+  })
+
+  it('接管:同步里列为可接管 → 发布后原地更新原字段(原名、原输出、原资产),打标记;同事的资产不挪不改归属', async () => {
+    const { tb, devIds } = await setup()
+    tb.assets.push({ id: { id: 'col', entityType: 'ASSET' }, name: 'REALTIME_TOTAL', type: 'REALTIME' })
+    await tb.api('/api/calculatedField', colleagueCf(devIds, 'col'))
+    const st = await readPlatformState(tb.api, cfgOf([]), devIds)
+    const row = st.cfs.find(x => x.cf.name === '实时曲线-总功率')!
+    expect(row).toMatchObject({ owner: 'foreign', entity: 'REALTIME_TOTAL' })
+    expect(row.adopt!.ok).toBe(true)
+    const adopted = (row.adopt as { computation: Computation }).computation
+
+    const r = collect()
+    expect(await publish(cfgOf([adopted]), devIds, tb.api, r.report, { layeredSettleMs: 0 })).toEqual([])
+    const onCol = rows(tb).filter(c => c.entityId.id === 'col')
+    expect(onCol.map(c => c.name)).toEqual(['实时曲线-总功率']) // 原地更新,没多建
+    expect(onCol[0]!.configuration!.output!.name).toBe('tsTotal') // 不加 calc_ 前缀
+    expect(onCol[0]!.additionalInfo).toEqual(OWNER_S)
+    expect(tb.assets.find(a => a.id.id === 'col')).toMatchObject({ type: 'REALTIME' })
+    const site = tb.assets.find(a => a.name === 'S')!
+    expect(contains(tb, site.id.id, 'col')).toBe(false)
+
+    const st2 = await readPlatformState(tb.api, cfgOf([adopted]), devIds)
+    expect(st2.cfs.find(x => x.cf.name === '实时曲线-总功率')).toMatchObject({
+      owner: 'mine',
+      drift: 'same',
+      adopted: true,
+    })
+  })
+
+  it('交还:去掉标记、字段留着;之后发布(声明里已没有)与 cleanup 都不删它', async () => {
+    const { tb, devIds } = await setup()
+    tb.assets.push({ id: { id: 'col', entityType: 'ASSET' }, name: 'REALTIME_TOTAL', type: 'REALTIME' })
+    await tb.api('/api/calculatedField', colleagueCf(devIds, 'col'))
+    const st = await readPlatformState(tb.api, cfgOf([]), devIds)
+    const adopted = (st.cfs[0]!.adopt as { computation: Computation }).computation
+    await publish(cfgOf([adopted]), devIds, tb.api, () => {}, { layeredSettleMs: 0 })
+
+    const f = rows(tb).find(c => c.name === '实时曲线-总功率')!
+    expect(await handBackCf(tb.api, f)).toBe(true)
+    expect(rows(tb).find(c => c.name === '实时曲线-总功率')!.additionalInfo).toBeNull()
+    expect(
+      await handBackCf(
+        tb.api,
+        rows(tb).find(c => c.name === '实时曲线-总功率')!
+      )
+    ).toBe(false) // 没标记就不写
+
+    expect(await publish(cfgOf([]), devIds, tb.api, () => {}, { layeredSettleMs: 0 })).toEqual([])
+    expect(rows(tb).map(c => c.name)).toEqual(['实时曲线-总功率'])
+  })
+
+  it('cleanup:接管来的交还(去标记)不删、本工具建的删;同事的资产留着', async () => {
+    const { tb, devIds } = await setup()
+    tb.assets.push({ id: { id: 'col', entityType: 'ASSET' }, name: 'REALTIME_TOTAL', type: 'REALTIME' })
+    await tb.api('/api/calculatedField', colleagueCf(devIds, 'col'))
+    const st = await readPlatformState(tb.api, cfgOf([]), devIds)
+    const cfg = cfgOf([(st.cfs[0]!.adopt as { computation: Computation }).computation, pq])
+    await publish(cfg, devIds, tb.api, () => {}, { layeredSettleMs: 0 })
+    const msg = await cleanup(cfg, devIds, tb.api)
+    expect(msg).toContain('计算字段 ×1')
+    expect(msg).toContain('交还接管的 1 个')
+    expect(rows(tb).map(c => [c.name, c.additionalInfo ?? null])).toEqual([['实时曲线-总功率', null]])
+    expect(tb.assets.map(a => a.name)).toEqual(['REALTIME_TOTAL'])
+  })
+
+  it('规则链:TB 读回时补了默认字段、去掉了 null 字段,仍判为没变不重写;真改了才写(2026-09-11 镜像实测的两种差异)', async () => {
+    const { tb, devIds } = await setup()
+    const roll = { template: 'window.aggregate', device: 'D1', keys: ['P'], aggs: ['avg'], window: '5m' }
+    const opts = { layeredSettleMs: 0, healthWaitMs: 0 }
+    await publish(cfgOf([roll]), devIds, tb.api, () => {}, opts)
+    const chain = tb.chains.find(c => c.name === 'Site Rollups · S')!
+    for (const n of tb.metadata[chain.id.id]!.nodes) {
+      if (n.type.endsWith('TbMsgTimeseriesNode')) n.configuration.processingSettings = { type: 'ON_EVERY_MESSAGE' }
+      for (const [k, v] of Object.entries(n.configuration)) if (v === null) delete n.configuration[k]
+    }
+    const before = tb.calls.length
+    const r = collect()
+    expect(await publish(cfgOf([roll]), devIds, tb.api, r.report, opts)).toEqual([])
+    expect(tb.calls.slice(before).filter(c => c === 'POST /api/ruleChain/metadata')).toEqual([])
+    expect(r.log.find(l => l.startsWith('rollup:ok'))).toContain('(未变,未重写)')
+    const r2 = collect()
+    expect(await publish(cfgOf([{ ...roll, window: '15m' }]), devIds, tb.api, r2.report, opts)).toEqual([])
+    expect(r2.log.find(l => l.startsWith('rollup:ok'))).not.toContain('未变')
+  })
+
+  it('同步:平台上被改过 / 还没有 / 别的站点 / 遗留 各归各类;占用名额含别人的;规则链只读列出', async () => {
+    const { tb, devIds } = await setup()
+    await publish(cfgOf([pq]), devIds, tb.api, () => {}, { layeredSettleMs: 0 })
+    const d1 = { entityType: 'DEVICE', id: devIds.D1! }
+    // 有人在 TB 界面里改了本工具的字段
+    const mine = rows(tb).find(c => c.name === 'calc_pq')!
+    ;(mine.configuration as { expression: string }).expression = 'a * b'
+    await tb.api('/api/calculatedField', {
+      name: 'calc_x',
+      entityId: d1,
+      type: 'SIMPLE',
+      additionalInfo: { managedBy: 'deploy-tool', site: 'T' },
+    })
+    await tb.api('/api/calculatedField', { name: 'calc_gone', entityId: d1, type: 'SIMPLE', additionalInfo: OWNER_S })
+    await tb.api('/api/calculatedField', {
+      name: '总电压',
+      entityId: d1,
+      type: 'SIMPLE',
+      configuration: {
+        expression: 'a + b',
+        arguments: {
+          a: { refEntityKey: { type: 'TS_LATEST', key: 'Ua' } },
+          b: { refEntityKey: { type: 'TS_LATEST', key: 'Uc' } },
+        },
+        output: { type: 'TIME_SERIES', name: '总电压' },
+      },
+    })
+    const st = await readPlatformState(tb.api, cfgOf([pq, cross]), devIds)
+    const by = (n: string) => st.cfs.find(x => x.cf.name === n)!
+    expect(by('calc_pq')).toMatchObject({ owner: 'mine', drift: 'changed' })
+    expect(by('calc_gone')).toMatchObject({ owner: 'mine', drift: 'orphan' })
+    expect(by('calc_x')).toMatchObject({ owner: 'otherSite', site: 'T' })
+    expect(by('总电压')).toMatchObject({ owner: 'foreign' })
+    expect(by('总电压').adopt).toMatchObject({ ok: true })
+    expect(st.missing).toEqual([{ entityType: 'ASSET', entity: 'S-CALC', name: 'calc_dP' }])
+    expect(st.occupied['DEVICE|D1']).toBe(4)
+    expect(st.chains.map(c => [c.name, c.root, c.mine])).toEqual([['Root Rule Chain', true, false]])
+  })
+})
+
 describe('cleanup', () => {
   it('删掉本站点的 CF / 规则链 / Root 转发 / 汇聚资产 / 站点资产,不碰存量', async () => {
     const cfg = fixture('xrs-mirror-test.tbsite.json')
@@ -653,7 +909,10 @@ describe('publish · 清理声明里已删除的旧链(R1,2026-09-08)', () => {
     expect(tb.chains.find(c => c.name === 'Site Alarms · S')!.id.id).toBe(chainId) // 原地更新,没重建
     expect(rootFlows(tb)).toHaveLength(1)
     expect(tb.calls.slice(before).filter(c => c.startsWith('DELETE /api/ruleChain'))).toEqual([])
-    expect(r2.log.find(l => l.startsWith('alarm:ok'))).toBe('alarm:ok 1 条规则 · 转发已就位')
+    // 2026-09-11:内容没变就连元数据都不写(写一次 TB 就重启链上全部节点、定时器从头计时)
+    expect(tb.calls.slice(before).filter(c => c === 'POST /api/ruleChain/metadata')).toEqual([])
+    expect(r2.log.find(l => l.startsWith('alarm:ok'))).toBe('alarm:ok 1 条规则(未变,未重写) · 转发已就位')
+    expect(r2.log.find(l => l.startsWith('health:ok'))).toBe('health:ok 跳过(这次没有重写任何规则链,节点没有重启)')
   })
 
   it('把告警加回来:链重建、Root 重新接线', async () => {

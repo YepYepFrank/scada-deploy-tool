@@ -9,6 +9,24 @@ export { AGG_JS, AGG_JS_PREFIXED, CASCADE_JS, REVENUE_JS } from './core/scripts'
 export { matchSelector, itemKeys, expandTemplates } from './core/templates'
 export { validateConfig, assetCfLoad } from './core/validate'
 export { tsArg, buildCf, cfHost, cfInputRefs, cfInputDevices, type CfHost } from './core/cf'
+export {
+  adoptCf,
+  parseExpression,
+  type AdoptResult,
+  type AdoptContext,
+  type PlatformCf,
+  type PlatformArg,
+} from './core/adopt'
+export { stableJson } from './core/stable'
+export {
+  readPlatformState,
+  handBackCf,
+  sameCf,
+  type PlatformState,
+  type PlatformCfRow,
+  type PlatformChainRow,
+  type PlatformOwner,
+} from './writer/sync'
 export { resolveAggMembers, buildAggCfs } from './core/aggregate'
 export { rollupGroups, rollupMetadata } from './core/rollup'
 export { alarmMetadata, alarmStateAttr, cascadeGuardScript } from './core/alarm'
@@ -97,11 +115,15 @@ export {
   ensureAsset,
   ensureChain,
   listCfs,
+  type TbCf,
 } from './writer/api'
 export {
   publish,
+  ensureResultAssets,
+  versionConflict,
   wireRootChain,
   unwireRootChain,
+  type ResultAssetsReport,
   type ChainKind,
   type StaleChainPrune,
   type PublishOptions,

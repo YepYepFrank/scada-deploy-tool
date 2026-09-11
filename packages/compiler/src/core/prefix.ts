@@ -23,11 +23,17 @@ export const withPrefix = (prefix: string, name: string): string =>
  */
 export function applyOutputPrefix(computations: Computation[], prefix: string): Computation[] {
   if (!prefix) return computations
-  const raw = new Set(computations.map(c => c.output).filter((x): x is string => !!x))
+  // 接管来的运算保持原输出名(页面、历史都认它),不加前缀,引用它的也不改名
+  const raw = new Set(
+    computations
+      .filter(c => !c.adopted)
+      .map(c => c.output)
+      .filter((x): x is string => !!x)
+  )
   const ren = (k: string | undefined) => (k && raw.has(k) ? withPrefix(prefix, k) : k)
   return computations.map(src => {
     const c = JSON.parse(JSON.stringify(src)) as Computation
-    if (c.output) c.output = withPrefix(prefix, c.output)
+    if (c.output && !c.adopted) c.output = withPrefix(prefix, c.output)
     if (c.key) c.key = ren(c.key)
     if (c.keys) c.keys = c.keys.map(k => ren(k) as string)
     for (const ref of Object.values(c.inputs ?? {})) ref.key = ren(ref.key) as string
@@ -45,6 +51,10 @@ export interface OutputKey {
   key: string
   kind: 'cf' | 'agg' | 'rollup' | 'cascade' | 'revenue'
   template: string
+  /** 计算字段在 TB 上的名字(接管来的字段名常与输出测点名不同;没有 = 同 key) */
+  cfName?: string
+  /** 接管来的运算(交还后不删) */
+  adopted?: boolean
 }
 
 /** 这份配置会写出的全部 key(含分层汇聚的分组键、级联各级、收益的派生键),供白名单 / 迁移表 / 编辑器提示用 */
@@ -58,7 +68,15 @@ export function outputInventory(cfg: TbsiteConfig, computations: Computation[], 
     const t = c.template
     if (t.startsWith('expr.') || t.startsWith('formula.')) {
       const host = cfHost(c)
-      push({ entityType: host.entityType, entity: host.name, key: c.output as string, kind: 'cf', template: t })
+      push({
+        entityType: host.entityType,
+        entity: host.name,
+        key: c.output as string,
+        kind: 'cf',
+        template: t,
+        ...(c.cfName ? { cfName: c.cfName } : {}),
+        ...(c.adopted ? { adopted: true } : {}),
+      })
     } else if (t === 'aggregate.crossEntity') {
       const n = resolveAggMembers(cfg, c).length
       const asset = c.asset as string

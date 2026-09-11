@@ -48,6 +48,10 @@ export interface Computation {
   discharge?: KeyRef
   /** 展开来源模板名(仅 TS 版携带,写入计划对比时忽略) */
   _tpl?: string
+  /** 接管来的计算字段在 TB 上的名字(与输出测点名不同时才有;见 core/adopt.ts) */
+  cfName?: string
+  /** 从平台接管的运算:保持原实体 / 原字段名 / 原输出名(不加输出前缀),可以挂在非本工具建的资产上 */
+  adopted?: boolean
   [k: string]: unknown
 }
 
@@ -88,6 +92,10 @@ export interface CfArgument {
 
 export interface CalculatedField {
   id?: unknown
+  /** 乐观锁:更新时带上 TB 读回的版本,别人先改过会回 409(写入器才填,计划里没有) */
+  version?: number
+  /** 归属标记 { managedBy, site }(写入器才填,计划里没有) */
+  additionalInfo?: Record<string, unknown> | null
   entityId?: EntityId
   type: 'SIMPLE'
   name: string
@@ -152,7 +160,15 @@ export interface WritePlan {
    * 即时派生 CF(expr.* / formula.*):输入在一台设备上 → device(建在该设备);
    * 输入跨设备、声明了 asset → asset(建在该独立资产上,结果是资产遥测)。两者恰有其一。
    */
-  cfs: { device?: string; asset?: string; output: string; template: string; body: CalculatedField }[]
+  cfs: {
+    device?: string
+    asset?: string
+    output: string
+    template: string
+    /** 接管来的(core/adopt.ts) */
+    adopted?: boolean
+    body: CalculatedField
+  }[]
   /** 跨设备汇聚:目标资产(tbsite-agg)+ 成员关系 + 资产上的 CF(分层时 分组N + 汇总1) */
   aggregates: { output: string; asset: string; members: string[]; layered: boolean; bodies: CalculatedField[] }[]
   revenue: { chainName: string; assets: string[]; items: Computation[]; metadata: RuleChainMetadata } | null
