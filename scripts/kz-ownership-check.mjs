@@ -1,4 +1,5 @@
-// 复核联调环境待办 ⑤b:kz 的 tskv/** 是否按实体归属过滤。
+// 复核联调环境待办 ⑤b:kz 是否按归属过滤 —— tskv/**(通用历史,按实体)与
+// biz/**(收益趋势,按站点)两段。也是给高潮的验收脚本(docs/给同事的-kz待改清单-2026-09-10.md)。
 // 一条命令重复复测:node scripts/kz-ownership-check.mjs
 //
 // 判法要小心:kz 对「无权」和「无数据」的回法都是 `code 200` + 空,单看一个结果分不清。
@@ -105,4 +106,44 @@ for (const r of rows) {
   if (r.kzTen.pts <= 0) console.log(`  ${r.name}:租户查也只有 ${r.kzTen.pts} 点,这台判不了(没有归档数据)`)
   else if (r.kzCust.pts > 0) console.log(`  ${r.name}:❌ 未拦 —— 客户 token 读到了 ${r.kzCust.pts} 点(⑤b 仍在)`)
   else console.log(`  ${r.name}:✅ 拦住了 —— 租户 ${r.kzTen.pts} 点,客户 ${r.kzCust.txt} / ${r.kzCust.pts} 点`)
+}
+
+// ── 收益趋势(biz/**)也按站点归属判一次(2026-09-10 补)──────────────────
+// stationId 就是 TB 里 gateway 类型设备的 id。同样用租户 / 客户两个 token 对照,
+// 不看单个结果(kz 对「无权」「没数据」的回法一样)。
+const STATIONS = [
+  ['bs_1_ems', '84a690c0-7381-11f1-8007-51b9f7714bbe'],
+  ['bs_2_ems', '96424640-7c36-11f1-8007-51b9f7714bbe'],
+]
+async function revenue(token, stationId) {
+  const r = await fetch(`${KZ}/kzserver/biz/power/stationRevenueTrend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...H(token) },
+    body: JSON.stringify({ queryType: 3, stationId }),
+  })
+  if (!r.ok) return { txt: `HTTP ${r.status}`, rows: -1 }
+  const b = await r.json()
+  return {
+    txt: `code ${b.code}${b.code === 200 ? '' : ' ' + (b.msg ?? '')}`,
+    rows: b.code === 200 ? (b.data ?? []).length : 0,
+  }
+}
+console.log('\n收益趋势(本年逐月)          TB(客户)  kz(租户)          kz(客户)')
+console.log('─'.repeat(80))
+for (const [name, id] of STATIONS) {
+  const tb = (await j(cust, `/api/device/${id}`)).status
+  const ten = await revenue(tenant, id)
+  const cu = await revenue(cust, id)
+  const own = tb === 200 ? '本客户' : '非本客户'
+  console.log(
+    `${name} (${own})`.padEnd(30) +
+      String(tb).padEnd(10) +
+      `${ten.txt} / ${ten.rows} 行`.padEnd(18) +
+      `${cu.txt} / ${cu.rows} 行`
+  )
+  if (tb !== 200) {
+    if (ten.rows <= 0) console.log(`  ${name}:租户也没数据,判不了`)
+    else if (cu.rows > 0) console.log(`  ${name}:❌ 未拦 —— 客户 token 读到了 ${cu.rows} 行收益`)
+    else console.log(`  ${name}:✅ 拦住了 —— 客户 ${cu.txt}`)
+  }
 }
