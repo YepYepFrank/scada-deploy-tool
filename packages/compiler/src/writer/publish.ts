@@ -25,7 +25,7 @@ import {
 } from '../core/constants'
 import { cascadeWhitelist, outputInventory, outputPrefixOf, type OutputKey } from '../core/prefix'
 import { ConfigError, expandConfig, siteChainNames } from '../core/plan'
-import { cfPrint, chainPrint, metaCovers, type ChainMetaLike } from '../core/print'
+import { cfItemKey, cfPrint, chainItemKey, chainPrint, metaCovers, type ChainMetaLike } from '../core/print'
 import { revenueMetadata } from '../core/revenue'
 import { rollupGroups, rollupMetadata } from '../core/rollup'
 import { stableJson } from '../core/stable'
@@ -55,6 +55,11 @@ export interface PublishOptions {
   checkHealth?: boolean
   /** 自检等事件落库的毫秒数(测试可设 0) */
   healthWaitMs?: number
+  /**
+   * 这次不写的对象(第 3 步冲突选「待定」的,cfItemKey / chainItemKey);与配置里的 keepPlatform(「以 TB 为准」)
+   * 合并。被跳过的规则链沿用上次记下的写入指纹,所以下次同步仍判冲突。2026-09-11
+   */
+  skip?: string[]
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -484,7 +489,9 @@ export async function publish(
   report: Reporter,
   opts: PublishOptions = {}
 ): Promise<PublishFailure[]> {
-  const { publishedBy = '', retry = null, layeredSettleMs = 3000, checkHealth = true, healthWaitMs } = opts
+  const { publishedBy = '', retry = null, layeredSettleMs = 3000, checkHealth = true, healthWaitMs, skip = [] } = opts
+  /** 保留平台版本、这次不写的对象:配置里「以 TB 为准」的 + 这次「待定」的 */
+  const keep = new Set([...(original.keepPlatform ?? []), ...skip])
   const startedAt = Date.now()
   const failures: PublishFailure[] = []
   const stepOn = (id: RetryScope['steps'][number]) => !retry || retry.steps.includes(id)
@@ -546,6 +553,7 @@ export async function publish(
     let created = 0,
       updated = 0,
       failed = 0
+    let keptCfs = 0
     const cfCache: Record<string, TbCf[]> = {}
     const assetIds: Record<string, string> = {}
     /**
@@ -570,6 +578,10 @@ export async function publish(
       const host = cfHost(c)
       const output = c.output as string
       const cfName = c.cfName || output
+      if (keep.has(cfItemKey(host.entityType, host.name, cfName))) {
+        keptCfs++ // 第 3 步选了「以 TB 为准」(向导表达不了)或「待定」:保留平台上的版本
+        continue
+      }
       try {
         const hostId = host.entityType === 'ASSET' ? await resultAsset(c, host.name) : (devIds[host.name] as string)
         const body = buildCf(c, hostId, devIds, host.entityType)
@@ -599,6 +611,7 @@ export async function publish(
     const detail = cfComps.length
       ? `新建 ${created} · 更新 ${updated}` +
         (onAssets ? ` · 跨设备结果存到 ${onAssets} 个资产` : '') +
+        (keptCfs ? ` · 保留平台版本 ${keptCfs}(第 3 步冲突选了以 TB 为准 / 待定)` : '') +
         (pruned ? ` · 清理旧输出 ${pruned}` : '') +
         (failed ? ` · 失败 ${failed}(见下方失败清单)` : '') +
         (retry?.cf?.length ? ` · 重试范围 ${cfComps.length} 条` : '')
@@ -614,7 +627,9 @@ export async function publish(
     if (retry?.agg?.length) aggs = aggs.filter(c => retry.agg!.includes(c.output as string))
     if (aggs.length) {
       let cfCount = 0,
-        aggFailed = 0
+        aggFailed = 0,
+        aggKept = 0
+      const keptAgg = (c: Computation, name: string) => keep.has(cfItemKey('ASSET', c.asset as string, name))
       for (const c of aggs) {
         try {
           const members = resolveAggMembers(cfg, c)
@@ -631,6 +646,10 @@ export async function publish(
           const layered = bodies.length > 1
           // CF 只在创建时初始化计算——分层时汇总 CF 须等分组遥测落库后删除重建
           for (const body of layered ? bodies.slice(0, -1) : bodies) {
+            if (keptAgg(c, body.name)) {
+              aggKept++
+              continue
+            }
             body.entityId = { entityType: 'ASSET', id: aid }
             body.additionalInfo = { ...mark, print: cfPrint(body) }
             const ex = existing.find(x => x.name === body.name)
@@ -638,7 +657,9 @@ export async function publish(
             await api('/api/calculatedField', body)
             cfCount++
           }
-          if (layered) {
+          const finalKept = layered && keptAgg(c, bodies[bodies.length - 1]!.name)
+          if (finalKept) aggKept++
+          if (layered && !finalKept) {
             if (layeredSettleMs > 0) await sleep(layeredSettleMs)
             const final = bodies[bodies.length - 1]!
             final.entityId = { entityType: 'ASSET', id: aid }
@@ -657,6 +678,7 @@ export async function publish(
         'agg',
         aggFailed ? 'err' : 'ok',
         `${aggs.length - aggFailed} 项汇聚 · ${cfCount} 个资产计算字段` +
+          (aggKept ? ` · 保留平台版本 ${aggKept}` : '') +
           (aggFailed ? ` · 失败 ${aggFailed}(见下方失败清单)` : '')
       )
     } else report('agg', 'ok', '无')
@@ -693,6 +715,14 @@ export async function publish(
   const written: Record<ChainKind, boolean> = { alarm: false, rollup: false, revenue: false }
   let rootWritten = false
   const unchanged = '(未变,未重写)'
+  /** 第 3 步冲突选了「以 TB 为准」或「待定」的链:不重写,保留平台上的版本(这次新建的链不算,平台上本来没有) */
+  const heldChains = new Set<string>()
+  const holdChain = (name: string, created: boolean) => {
+    if (created || !keep.has(chainItemKey(name))) return false
+    heldChains.add(name)
+    return true
+  }
+  const keptNote = '(保留平台上的版本,未覆盖)'
 
   // 3c. 分时电价收益 → 独立规则链 + 收益资产
   report('revenue', 'run')
@@ -707,12 +737,15 @@ export async function publish(
           assetIds[c.asset as string] = id
         }
         const { id, created } = await ensureChain(api, names.revenue, mark)
-        written.revenue = await writeChainMeta(api, id, created, revenueMetadata(id, revs, devIds, assetIds))
+        const hold = holdChain(names.revenue, created)
+        written.revenue = hold
+          ? false
+          : await writeChainMeta(api, id, created, revenueMetadata(id, revs, devIds, assetIds))
         report(
           'revenue',
           'ok',
           `${revs.length} 项收益统计 → ${names.revenue}` +
-            (created ? '(新建定时链需 TB 重启后才开始跑)' : written.revenue ? '' : unchanged) +
+            (created ? '(新建定时链需 TB 重启后才开始跑)' : hold ? keptNote : written.revenue ? '' : unchanged) +
             prunedNote('revenue')
         )
       } else report('revenue', 'ok', '无' + prunedNote('revenue'))
@@ -729,12 +762,15 @@ export async function publish(
       const cascades = computations.filter(c => c.template === 'window.cascade')
       if (Object.keys(groups).length || cascades.length) {
         const { id, created } = await ensureChain(api, names.rollup, mark)
-        written.rollup = await writeChainMeta(api, id, created, rollupMetadata(id, groups, devIds, cascades, prefix))
+        const hold = holdChain(names.rollup, created)
+        written.rollup = hold
+          ? false
+          : await writeChainMeta(api, id, created, rollupMetadata(id, groups, devIds, cascades, prefix))
         report(
           'rollup',
           'ok',
           `${Object.keys(groups).length} 条流水线 · ${cascades.length} 项多级归档 → ${names.rollup}` +
-            (created ? '(新建定时链需 TB 重启后才开始跑)' : written.rollup ? '' : unchanged) +
+            (created ? '(新建定时链需 TB 重启后才开始跑)' : hold ? keptNote : written.rollup ? '' : unchanged) +
             prunedNote('rollup')
         )
       } else report('rollup', 'ok', '无' + prunedNote('rollup'))
@@ -750,23 +786,27 @@ export async function publish(
       const alarms = computations.filter(c => c.template === 'alarm.threshold')
       if (alarms.length) {
         const { id, created } = await ensureChain(api, names.alarm, mark)
-        written.alarm = await writeChainMeta(
-          api,
-          id,
-          created,
-          alarmMetadata(
-            id,
-            alarms,
-            prefix ? { prefix, whitelist: cascadeWhitelist(cfg, computations, prefix) } : undefined,
-            { propagate: !!cfg.alarm?.propagate }
-          )
-        )
+        // 保留平台版本时照样确认 Root 上本站点的转发节点在(那是本工具自己的节点,与链内容无关)
+        const hold = holdChain(names.alarm, created)
+        written.alarm = hold
+          ? false
+          : await writeChainMeta(
+              api,
+              id,
+              created,
+              alarmMetadata(
+                id,
+                alarms,
+                prefix ? { prefix, whitelist: cascadeWhitelist(cfg, computations, prefix) } : undefined,
+                { propagate: !!cfg.alarm?.propagate }
+              )
+            )
         const wired = await wireRootChain(api, id, cfg.site.name)
         rootWritten = wired === 'Root 链已接线'
         report(
           'alarm',
           'ok',
-          `${alarms.length} 条规则${written.alarm ? '' : unchanged} · ${wired}` + prunedNote('alarm')
+          `${alarms.length} 条规则${hold ? keptNote : written.alarm ? '' : unchanged} · ${wired}` + prunedNote('alarm')
         )
       } else report('alarm', 'ok', '无' + prunedNote('alarm'))
     } catch (e) {
@@ -781,14 +821,18 @@ export async function publish(
       const { id } = await ensureAsset(api, cfg.site.name, SITE_ASSET_TYPE, mark)
       // 发布历史:上一版配置入栈,保留最近 10 版(约 <300KB,属性存储可承受)
       let history: unknown[] = []
+      let prevPrints: Record<string, string> = {}
       try {
         const attrs: { key: string; value: unknown }[] =
           (await api(
-            `/api/plugins/telemetry/ASSET/${id}/values/attributes/SERVER_SCOPE?keys=siteConfig,siteConfigHistory`
+            `/api/plugins/telemetry/ASSET/${id}/values/attributes/SERVER_SCOPE?keys=siteConfig,siteConfigHistory,deployPrints`
           )) || []
         const prev = attrs.find(a => a.key === 'siteConfig')?.value
         const rawHist = attrs.find(a => a.key === 'siteConfigHistory')?.value
         history = ((typeof rawHist === 'string' ? JSON.parse(rawHist) : rawHist) as unknown[]) || []
+        const rawPrints = attrs.find(a => a.key === 'deployPrints')?.value
+        prevPrints =
+          ((typeof rawPrints === 'string' ? JSON.parse(rawPrints) : rawPrints) as Record<string, string>) || {}
         if (prev) {
           const prevCfg = typeof prev === 'string' ? JSON.parse(prev) : prev
           history.unshift({ ts: Date.now(), by: publishedBy, cfg: prevCfg })
@@ -806,6 +850,11 @@ export async function publish(
         const all: { id: { id: string }; name: string; root?: boolean }[] =
           (await api('/api/ruleChains?pageSize=100&page=0'))?.data || []
         for (const name of [names.alarm, names.rollup, names.revenue]) {
+          // 保留平台版本、没重写的链沿用上次的指纹:别人改的版本不能记成本工具写的(「待定」下次同步仍是冲突)
+          if (heldChains.has(name)) {
+            if (prevPrints[name]) deployPrints[name] = prevPrints[name]
+            continue
+          }
           const ch = all.find(c => c.name === name && !c.root)
           if (!ch) continue
           const m = (await api(`/api/ruleChain/${ch.id.id}/metadata`)) as ChainMetaLike | null

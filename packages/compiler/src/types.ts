@@ -78,6 +78,11 @@ export interface TbsiteConfig {
    * 派生名(PAvg5m、级联各级、收益 Income/Cost/Daily)同样加前缀;引用其它运算输出的 key 由编译器同步改名。
    */
   outputPrefix?: string
+  /**
+   * 第 3 步冲突选了「以 TB 为准」、而向导表达不了 TB 上的改法的对象(规则链、模板展开的字段、汇聚字段等):
+   * 发布时不覆盖,保留 TB 上的版本。元素是 cfItemKey / chainItemKey(core/print.ts)。2026-09-11
+   */
+  keepPlatform?: string[]
   [k: string]: unknown
 }
 

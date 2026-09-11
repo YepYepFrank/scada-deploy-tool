@@ -23,8 +23,13 @@ export {
   handBackCf,
   findAsset,
   listCfs,
+  // 第 3 步冲突的「以 TB 为准 / 待定」(2026-09-11)
+  adoptCf,
+  cfItemKey,
+  chainItemKey,
 } from '@grid/tbsite-compiler'
 
-export function publish(cfg, devIds, api, report, publishedBy = '', retry = null) {
-  return publishPlan(cfg, devIds, api, report, { publishedBy, retry })
+/** skip:这次发布不写的对象(第 3 步冲突选「待定」的,cfItemKey / chainItemKey) */
+export function publish(cfg, devIds, api, report, publishedBy = '', retry = null, skip = []) {
+  return publishPlan(cfg, devIds, api, report, { publishedBy, retry, skip })
 }

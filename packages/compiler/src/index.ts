@@ -26,6 +26,8 @@ export {
   chainPrint,
   diffCf,
   diffChainMeta,
+  cfItemKey,
+  chainItemKey,
   type ConfigDiff,
   type ChainMetaLike,
 } from './core/print'

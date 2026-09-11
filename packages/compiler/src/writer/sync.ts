@@ -10,7 +10,17 @@ import type { CalculatedField, RuleChainMetadata, TbsiteConfig } from '../types'
 import { adoptCf, type AdoptResult, type PlatformCf } from '../core/adopt'
 import { chainNames, OWNER_TAG, ownerOf, SITE_ASSET_TYPE } from '../core/constants'
 import { compile } from '../core/plan'
-import { cfPrint, cfSignature, chainPrint, diffChainMeta, diffCf, metaCovers, type ConfigDiff } from '../core/print'
+import {
+  cfItemKey,
+  cfPrint,
+  cfSignature,
+  chainItemKey,
+  chainPrint,
+  diffChainMeta,
+  diffCf,
+  metaCovers,
+  type ConfigDiff,
+} from '../core/print'
 import type { TbApi, TbCf } from './api'
 
 export type PlatformOwner = 'mine' | 'otherSite' | 'foreign'
@@ -18,6 +28,8 @@ export type PlatformOwner = 'mine' | 'otherSite' | 'foreign'
 export type DriftState = 'same' | 'conflict' | 'pending' | 'mismatch' | 'orphan'
 
 export interface PlatformCfRow {
+  /** cfItemKey:给「以 TB 为准 / 待定」对上发布时的写入对象 */
+  key: string
   entityType: 'DEVICE' | 'ASSET'
   entity: string
   entityId: string
@@ -38,6 +50,8 @@ export interface PlatformCfRow {
 }
 
 export interface PlatformChainRow {
+  /** chainItemKey */
+  key: string
   id: string
   name: string
   root: boolean
@@ -149,7 +163,7 @@ export async function readPlatformState(
       const key = `${entityType}|${e.name}|${cf.name}`
       const mark = ownerOf(cf)
       const exp = expected.get(key)
-      const base = { entityType, entity: e.name, entityId: e.id.id, cf }
+      const base = { key: cfItemKey(entityType, e.name, cf.name), entityType, entity: e.name, entityId: e.id.id, cf }
       if (mark && mark.site !== site) {
         rows.push({ ...base, owner: 'otherSite', site: mark.site })
         continue
@@ -224,6 +238,7 @@ export async function readPlatformState(
     const mark = ownerOf(c)
     const mine = !c.root && (mark ? mark.site === site : ours.has(c.name))
     const row: PlatformChainRow = {
+      key: chainItemKey(c.name),
       id: c.id.id,
       name: c.name,
       root: !!c.root,

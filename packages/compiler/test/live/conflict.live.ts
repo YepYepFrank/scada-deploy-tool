@@ -2,7 +2,8 @@
 // 只用两台测试设备(Test Device A1 / A2)和临时站点;不建告警,不碰 Root 链。凭据见 env.ts;没凭据整组 skip。
 //   ① 发布(跨设备运算整体取 abs + A1 上一条 5 分钟周期统计)→ 同步:全部一致;abs 的结果 ≥ 0
 //   ② 模拟同事在 TB 里手工改:计算字段去掉 abs、周期统计链的定时周期 300 → 600 → 同步:两处都判冲突,差异精确
-//   ③ 再发布(以向导为准)→ 同步:回到一致
+//   ③ 冲突选「待定」再发布(skip)→ TB 上两处都没被覆盖、同步仍是冲突(规则链沿用旧写入指纹)
+//   ④ 再发布(以向导为准)→ 同步:回到一致
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   cleanup,
@@ -108,6 +109,26 @@ describe.skipIf(!hasCreds)(`写入指纹与冲突检测(live @ ${TB_BASE})`, () 
     expect(cfOf(st).diff).toEqual([{ item: '表达式', tool: 'abs(a - b)', platform: 'a - b' }])
     expect(chainOf(st)).toMatchObject({ drift: 'conflict' })
     expect(chainOf(st).diff).toEqual([{ item: `节点「${gen.name}」· periodInSeconds`, tool: 300, platform: 600 }])
+  }, 120000)
+
+  it('冲突选「待定」:发布时这两处都不覆盖,再同步仍是冲突', async () => {
+    let st = await sync()
+    const keys = [cfOf(st).key, chainOf(st).key]
+    expect(
+      await publish(cfg, devIds, api, () => {}, { publishedBy: 'live-test', checkHealth: false, skip: keys })
+    ).toEqual([])
+    const a = await findAsset(api, asset)
+    const cf = (await listCfs(api, 'ASSET', a.id.id)).find(c => c.name === out) as unknown as {
+      configuration: { expression: string }
+    }
+    expect(cf.configuration.expression).toBe('a - b')
+    const chains: { id: { id: string }; name: string }[] = (await api('/api/ruleChains?pageSize=100&page=0')).data
+    const meta = await api(`/api/ruleChain/${chains.find(c => c.name === chainName)!.id.id}/metadata`)
+    const gen = meta.nodes.find((n: { type: string }) => n.type.endsWith('TbMsgGeneratorNode'))
+    expect(gen.configuration.periodInSeconds).toBe(600)
+    st = await sync()
+    expect(cfOf(st).drift).toBe('conflict')
+    expect(chainOf(st).drift).toBe('conflict')
   }, 120000)
 
   it('再发布(以向导为准)→ 同步回到一致', async () => {

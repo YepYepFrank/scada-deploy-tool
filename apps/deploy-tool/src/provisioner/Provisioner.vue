@@ -27,6 +27,7 @@ import {
   handBackCf,
   findAsset,
   listCfs,
+  adoptCf,
 } from './publisher.js'
 import KeyPicker from '../components/KeyPicker.vue'
 import {
@@ -614,10 +615,13 @@ async function connect() {
       sites.value = sites.value.filter(s => perm.sites.includes(s.name))
       if (!perm.sites.includes(site.name)) site.name = perm.sites[0] || ''
     }
-    if (sites.value.length) {
-      selectedSite.value = sites.value.find(s => s.name === site.name)?.name || sites.value[0].name
-      await loadSite(selectedSite.value)
-    }
+    // 只自动载入与站点标识同名的站点(2026-09-11):原来找不到同名就载入平台上第一个,新站点会被带上别的站点的
+    // 设备模板与运算(镜像上是 xrs-mirror-test 的「IED 功率监控」「IED 多级归档(代表间隔)」),站点标识也被悄悄换掉
+    const same = sites.value.find(s => s.name === site.name)
+    selectedSite.value = same?.name || ''
+    if (same) await loadSite(same.name)
+    else if (sites.value.length)
+      restoreMsg.value = `平台上有 ${sites.value.length} 个已发布站点;要改已有站点,请在「载入已发布站点」里选`
     checkDraft()
   } catch (e) {
     conn.status = 'err'
@@ -647,6 +651,7 @@ async function loadSite(name, advance = false) {
 
 function hydrate(cfg) {
   site.name = cfg.site?.name || site.name
+  keepPlatform.value = Array.isArray(cfg.keepPlatform) ? [...cfg.keepPlatform] : []
   rollupChainName.value = cfg.rollup?.chainName || rollupChainName.value
   // 旧站点(有运算但没声明前缀)不改名;新站点 / 已声明的照声明
   outputPrefix.value =
@@ -1336,9 +1341,98 @@ const driftLabel = r =>
     : r.drift === 'mismatch'
       ? '和向导不一致(旧对象没有写入记录,分不清是谁改的)'
       : ''
+/* ── 冲突怎么处理(2026-09-11):每条冲突三选一,没选的按「待定」——
+   · 待定:这次发布不动它(传给发布的 skip),下次同步仍列为冲突;
+   · 以 TB 为准:计算字段能翻成向导运算的,直接把向导里那条改成 TB 上的写法(可撤回),发布时照它写回;
+     翻不了的(规则链、模板 / 汇聚展开的字段、表达式超出模板的)记进 keepPlatform,发布时保留 TB 版本、不覆盖;
+   · 以本工具为准:发布时用向导里的配置覆盖 TB 上的改动。 */
+const keepPlatform = ref([]) // 持久:随草稿与发布的配置走(siteJson.keepPlatform)
+const decisions = reactive({}) // 本次会话:key → { choice, now?, backup? }(now / backup:改过向导时的新旧运算)
+const choiceOf = key => (keepPlatform.value.includes(key) ? 'tb' : decisions[key]?.choice || 'hold')
+const conflictRows = () => [...(platView.value?.conflicts || []), ...(platView.value?.chainConflicts || [])]
+const EXPR_TPLS = ['expr.add', 'expr.subtract', 'expr.custom']
+/** 平台字段对应的向导运算:只找手工的即时运算;模板 / 汇聚展开出来的对不上单独一条 */
+function compIndexOfRow(r) {
+  const pre = outputPrefix.value
+  return computations.value.findIndex(c => {
+    if (!EXPR_TPLS.includes(c.template)) return false
+    const [t, n] = c.asset ? ['ASSET', c.asset] : ['DEVICE', c.device]
+    const name = c.cfName || (c.adopted || !pre || c.output.startsWith(pre) ? c.output : pre + c.output)
+    return t === r.entityType && n === r.entity && name === r.cf.name
+  })
+}
+/** 「以 TB 为准」能不能直接改向导:能的话给出改好的运算,不能的给原因(那就改为保留 TB 版本) */
+function importPlan(r) {
+  const keepIt = '选「以 TB 为准」= 发布时保留 TB 上的版本、不覆盖'
+  if (!r.cf) return { ok: false, reason: `规则链向导没法反推;${keepIt}` }
+  const i = compIndexOfRow(r)
+  if (i < 0) return { ok: false, reason: `这个字段是设备模板 / 汇聚展开出来的,向导里没有单独一条可改;${keepIt}` }
+  const idName = Object.fromEntries(devices.value.map(d => [d.tbId, d.name]))
+  const a = adoptCf(r.cf, {
+    hostType: r.entityType,
+    hostName: r.entity,
+    nameOfId: id => idName[id],
+    claimed: new Set(claimedDevices.value.map(d => d.name)),
+  })
+  if (!a.ok) return { ok: false, reason: `TB 上的写法向导表达不了(${a.reason});${keepIt}` }
+  const comp = JSON.parse(JSON.stringify(computations.value[i]))
+  delete comp.inputs
+  delete comp.absAll
+  Object.assign(comp, { template: 'expr.custom', terms: a.computation.terms, ops: a.computation.ops })
+  if (a.computation.absAll) comp.absAll = true
+  return { ok: true, index: i, comp }
+}
+const tbHint = r => {
+  const p = importPlan(r)
+  return p.ok ? '把向导里这条运算改成 TB 上的写法,发布时照它写回(可撤回)' : p.reason
+}
+function setChoice(r, choice) {
+  const key = r.key
+  const prev = decisions[key]
+  // 先撤回之前的「以 TB 为准」:改过向导的换回原运算,记进保留清单的移出
+  if (prev?.backup) {
+    const j = computations.value.indexOf(prev.now)
+    if (j >= 0) computations.value.splice(j, 1, prev.backup)
+  }
+  keepPlatform.value = keepPlatform.value.filter(k => k !== key)
+  delete decisions[key]
+  if (choice === 'tb') {
+    const p = importPlan(r)
+    if (!p.ok) {
+      keepPlatform.value = [...keepPlatform.value, key]
+      return
+    }
+    const backup = computations.value[p.index]
+    computations.value.splice(p.index, 1, p.comp)
+    decisions[key] = { choice: 'tb', backup, now: computations.value[p.index] }
+    return
+  }
+  decisions[key] = { choice }
+}
+const choiceNote = r =>
+  choiceOf(r.key) !== 'tb'
+    ? ''
+    : decisions[r.key]?.backup
+      ? '已把向导里这条改成 TB 上的写法'
+      : '发布时保留 TB 上的版本'
+/** 这次发布要跳过的:还是「待定」的冲突 */
+const holdKeys = () => conflictRows().filter(r => choiceOf(r.key) === 'hold').map(r => r.key)
+const keepLabel = k => {
+  if (k.startsWith('chain:')) return { where: '规则链', name: k.slice(6) }
+  const [, entity, ...name] = k.slice(3).split('|')
+  return { where: entity, name: name.join('|') }
+}
+const unkeep = k => (keepPlatform.value = keepPlatform.value.filter(x => x !== k))
 const conflictWarn = () => {
-  const n = (platView.value?.conflicts.length || 0) + (platView.value?.chainConflicts.length || 0)
-  return n ? `⚠ 第 3 步同步发现 ${n} 处冲突(平台上被人改过),发布会以向导里的配置为准覆盖它们。\n\n` : ''
+  const rows = conflictRows()
+  const n = c => rows.filter(r => choiceOf(r.key) === c).length
+  const imported = rows.filter(r => decisions[r.key]?.backup).length
+  const bits = []
+  if (n('tool')) bits.push(`${n('tool')} 处以本工具为准,发布会覆盖 TB 上的改动`)
+  if (n('hold')) bits.push(`${n('hold')} 处待定,这次不动`)
+  if (imported) bits.push(`${imported} 处已按 TB 改好向导,发布时照 TB 的写法写回`)
+  if (keepPlatform.value.length) bits.push(`${keepPlatform.value.length} 处以 TB 为准,保留 TB 上的版本`)
+  return bits.length ? `⚠ 第 3 步的冲突:${bits.join(';')}。\n\n` : ''
 }
 /** 差异表:一行一项;长文本(脚本、表达式、JSON)用 pre 上下对照,缺的一边显示「—」 */
 const DiffTable = {
@@ -1874,6 +1968,8 @@ const siteJson = computed(() => ({
   schema: 'tbsite/v2',
   site: { name: site.name },
   ...(outputPrefix.value ? { outputPrefix: outputPrefix.value } : {}),
+  // 冲突选了「以 TB 为准」、向导又表达不了的对象:发布时不覆盖(2026-09-11)
+  ...(keepPlatform.value.length ? { keepPlatform: [...keepPlatform.value] } : {}),
   devices: claimedDevices.value.map(d => ({
     name: d.name,
     type: d.profile || 'simulator',
@@ -1975,9 +2071,17 @@ async function doPublish(openAfter) {
   const devIds = Object.fromEntries(claimedDevices.value.map(d => [d.name, d.tbId]))
   try {
     pub.failures =
-      (await publish(siteJson.value, devIds, (url, data, method) => api(url, data, method), report, conn.username)) ||
-      []
+      (await publish(
+        siteJson.value,
+        devIds,
+        (url, data, method) => api(url, data, method),
+        report,
+        conn.username,
+        null,
+        holdKeys() // 第 3 步冲突还是「待定」的:这次不写
+      )) || []
     pub.done = pub.failures.length === 0
+    if (pub.done) for (const k of Object.keys(decisions)) delete decisions[k] // 已落到 TB,下次进第 3 步重新同步
     if (pub.done && pendingWin) pendingWin.location = frontendUrl()
     else if (pub.done && openAfter) openFrontend()
     else if (pendingWin) pendingWin.close() // 有失败项:不跳大屏,留在向导处理失败清单
@@ -2015,7 +2119,8 @@ async function retryFailed() {
         (url, data, method) => api(url, data, method),
         report,
         conn.username,
-        scope
+        scope,
+        holdKeys()
       )) || []
     pub.done = pub.failures.length === 0
   } catch {
@@ -2204,6 +2309,7 @@ function openFrontend() {
         <div class="field">
           <label>载入已发布站点</label>
           <select v-model="selectedSite" @change="loadSite(selectedSite, true)">
+            <option value="" disabled>选择要载入的站点…</option>
             <option v-for="s in sites" :key="s.name" :value="s.name">{{ s.name }}</option>
           </select>
         </div>
@@ -2431,11 +2537,31 @@ function openFrontend() {
           <div v-if="platView.conflicts.length || platView.chainConflicts.length" class="plat-group warn">
             <div class="plat-gt">
               ⚠ 冲突:本工具配置过、平台上被改过({{ platView.conflicts.length + platView.chainConflicts.length }})——
-              第 5 步发布会以向导里的配置为准覆盖;要保留平台上的改法,先把向导里对应的配置改成一样
+              每条选一种处理:待定(这次发布不动)/ 以 TB 为准 / 以本工具为准(发布时覆盖 TB);没选的按待定
             </div>
             <div v-for="r in platView.conflicts" :key="'cf' + r.cf.id?.id" class="plat-row">
               <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }}</span>
               <span class="plat-tag warn">{{ driftLabel(r) }}</span>
+              <span class="choice-seg">
+                <button
+                  :class="{ on: choiceOf(r.key) === 'hold' }"
+                  title="这次发布不动它,下次同步仍列为冲突"
+                  @click="setChoice(r, 'hold')"
+                >
+                  待定
+                </button>
+                <button :class="{ on: choiceOf(r.key) === 'tb' }" :title="tbHint(r)" @click="setChoice(r, 'tb')">
+                  以 TB 为准
+                </button>
+                <button
+                  :class="{ on: choiceOf(r.key) === 'tool' }"
+                  title="发布时用向导里的配置覆盖 TB 上的改动"
+                  @click="setChoice(r, 'tool')"
+                >
+                  以本工具为准
+                </button>
+              </span>
+              <span v-if="choiceNote(r)" class="choice-note">{{ choiceNote(r) }}</span>
               <button class="btn ghost sm" @click="toggleDiff('cf:' + r.entity + '|' + r.cf.name)">
                 {{ diffOpen['cf:' + r.entity + '|' + r.cf.name] ? '收起差异' : '查看差异' }}
               </button>
@@ -2444,10 +2570,39 @@ function openFrontend() {
             <div v-for="c in platView.chainConflicts" :key="'ch' + c.id" class="plat-row">
               <span class="pe">规则链</span><span class="pn">{{ c.name }}</span>
               <span class="plat-tag warn">{{ driftLabel(c) }}</span>
+              <span class="choice-seg">
+                <button
+                  :class="{ on: choiceOf(c.key) === 'hold' }"
+                  title="这次发布不动它,下次同步仍列为冲突"
+                  @click="setChoice(c, 'hold')"
+                >
+                  待定
+                </button>
+                <button :class="{ on: choiceOf(c.key) === 'tb' }" :title="tbHint(c)" @click="setChoice(c, 'tb')">
+                  以 TB 为准
+                </button>
+                <button
+                  :class="{ on: choiceOf(c.key) === 'tool' }"
+                  title="发布时用向导里的配置覆盖 TB 上的改动"
+                  @click="setChoice(c, 'tool')"
+                >
+                  以本工具为准
+                </button>
+              </span>
+              <span v-if="choiceNote(c)" class="choice-note">{{ choiceNote(c) }}</span>
               <button class="btn ghost sm" @click="toggleDiff('chain:' + c.name)">
                 {{ diffOpen['chain:' + c.name] ? '收起差异' : '查看差异' }}
               </button>
               <DiffTable v-if="diffOpen['chain:' + c.name]" :rows="c.diff" />
+            </div>
+          </div>
+          <div v-if="keepPlatform.length" class="plat-group">
+            <div class="plat-gt">
+              以 TB 为准、发布时不覆盖({{ keepPlatform.length }})—— 本工具不再改写它们,直到取消保留
+            </div>
+            <div v-for="k in keepPlatform" :key="k" class="plat-row">
+              <span class="pe">{{ keepLabel(k).where }}</span><span class="pn">{{ keepLabel(k).name }}</span>
+              <button class="btn ghost sm" @click="unkeep(k)">取消保留</button>
             </div>
           </div>
           <div v-if="platView.pending.length || platView.chainPending.length" class="plat-group">

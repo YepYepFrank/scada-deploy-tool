@@ -822,6 +822,48 @@ describe('写入指纹与冲突(2026-09-11)', () => {
     expect(hit.drift).toBe('conflict')
     expect(hit.diff).toEqual([{ item: `节点「${gen.name}」· periodInSeconds`, tool: 300, platform: 60 }])
   })
+
+  it('冲突的处理:待定(skip)与以 TB 为准(keepPlatform)发布时都不覆盖;以本工具为准照常覆盖', async () => {
+    const { tb, devIds } = await setup([pq, roll])
+    const chainName = 'Site Rollups · S'
+    const chain = tb.chains.find(c => c.name === chainName)!
+    const period = () =>
+      tb.metadata[chain.id.id]!.nodes.find(n => n.type.endsWith('TbMsgGeneratorNode'))!.configuration.periodInSeconds
+    // 有人在 TB 里改了计算字段和统计链
+    cfRow(tb, 'calc_pq').configuration.expression = 'a * b'
+    tb.metadata[chain.id.id]!.nodes.find(n => n.type.endsWith('TbMsgGeneratorNode'))!.configuration.periodInSeconds = 60
+    let st = await readPlatformState(tb.api, cfgOf([pq, roll]), devIds)
+    const cfKey = pqRow(st).key
+    const chKey = st.chains.find(c => c.name === chainName)!.key
+    expect([cfKey, chKey]).toEqual(['cf:DEVICE|D1|calc_pq', 'chain:Site Rollups · S'])
+
+    // 待定:这次发布跳过两处;链的指纹沿用旧的 → 下次同步仍是冲突
+    const detail: Record<string, string> = {}
+    const rec = (id: string, s: string, d?: string) => {
+      if (s !== 'run') detail[id] = d ?? ''
+    }
+    expect(await publish(cfgOf([pq, roll]), devIds, tb.api, rec, { ...opts, skip: [cfKey, chKey] })).toEqual([])
+    expect(cfRow(tb, 'calc_pq').configuration.expression).toBe('a * b')
+    expect(period()).toBe(60)
+    expect(detail.cf).toContain('保留平台版本 1')
+    expect(detail.rollup).toContain('保留平台上的版本')
+    st = await readPlatformState(tb.api, cfgOf([pq, roll]), devIds)
+    expect(pqRow(st).drift).toBe('conflict')
+    expect(st.chains.find(c => c.name === chainName)!.drift).toBe('conflict')
+
+    // 以 TB 为准(记进配置 keepPlatform):链照样不覆盖;没保留的计算字段照常按向导写
+    const pinned = { ...cfgOf([pq, roll]), keepPlatform: [chKey] } as TbsiteConfig
+    expect(await publish(pinned, devIds, tb.api, () => {}, opts)).toEqual([])
+    expect(period()).toBe(60)
+    expect(cfRow(tb, 'calc_pq').configuration.expression).toBe('a + b')
+
+    // 以本工具为准:不跳过 → 覆盖,回到一致
+    expect(await publish(cfgOf([pq, roll]), devIds, tb.api, () => {}, opts)).toEqual([])
+    expect(period()).toBe(300)
+    st = await readPlatformState(tb.api, cfgOf([pq, roll]), devIds)
+    expect(st.chains.find(c => c.name === chainName)!.drift).toBe('same')
+    expect(pqRow(st).drift).toBe('same')
+  })
 })
 
 describe('cleanup', () => {

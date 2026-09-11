@@ -726,6 +726,37 @@ select {
 }
 
 /* 权限分级 */
+/* 第 3 步冲突的三选一:待定 / 以 TB 为准 / 以本工具为准(2026-09-11) */
+.choice-seg {
+  display: inline-flex;
+  border: 1px solid var(--line-1);
+  border-radius: 4px;
+  overflow: hidden;
+  vertical-align: middle;
+}
+.choice-seg button {
+  background: transparent;
+  color: var(--ink-2);
+  border: 0;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.choice-seg button + button {
+  border-left: 1px solid var(--line-1);
+}
+.choice-seg button:hover {
+  color: var(--accent);
+}
+.choice-seg button.on {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.choice-note {
+  font-size: 12px;
+  color: var(--ink-2);
+}
 /* 第 1 步站点标识下的说明与校验(2026-09-11) */
 .site-id-hint {
   margin: 6px 0 0;

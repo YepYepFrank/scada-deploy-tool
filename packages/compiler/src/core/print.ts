@@ -96,6 +96,14 @@ export const chainPrint = (m: ChainMetaLike): string =>
     })
   )
 
+/**
+ * 冲突项的标识(2026-09-11):第 3 步同步里的一行、发布时的一个写入对象都用它对上——
+ * 「以 TB 为准」记进 keepPlatform、「待定」传进发布的 skip,都是这个串。
+ */
+export const cfItemKey = (entityType: string, entity: string, name: string): string =>
+  `cf:${entityType}|${entity}|${name}`
+export const chainItemKey = (name: string): string => `chain:${name}`
+
 /** 「查看差异」的一行:某一项在本工具里(向导当前配置)和平台上现在各是什么;undefined = 这一边没有 */
 export interface ConfigDiff {
   item: string
