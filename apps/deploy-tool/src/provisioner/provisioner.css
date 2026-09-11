@@ -726,6 +726,19 @@ select {
 }
 
 /* 权限分级 */
+/* 第 1 步站点标识下的说明与校验(2026-09-11) */
+.site-id-hint {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.site-id-hint b {
+  color: var(--warn, #f0b429);
+}
+.site-id-err {
+  margin: 4px 0 0;
+}
 .perm-badge {
   margin-top: 10px;
   padding: 8px 12px;

@@ -248,7 +248,8 @@ function switchEnv() {
   restoreMsg.value = ''
   loadSavedLogin()
 }
-const site = reactive({ name: 'demo-site', label: 'GRID·OPS 演示站' })
+// 「站点名称」2026-09-11 去掉(YY):不参与 TB 命名、不上大屏,只存进配置;旧配置里的 site.label 读进来不再用
+const site = reactive({ name: 'demo-site' })
 const devices = ref([]) // { name, tbId, open, claimed, keys: [{key,label,unit,claimed,latest,cn}] }
 const keyDict = ref({}) // 测点中文字典 key → {name, unit, type}(来自生产平台的测量点定义)
 
@@ -326,7 +327,7 @@ function writeDrafts(list) {
   }
 }
 async function saveDraft(advance = false) {
-  const def = lastDraftName.value || `${site.label || site.name} 草稿`
+  const def = lastDraftName.value || `${site.name} 草稿`
   // 第 3 步「保存并进入展示配置」同时把结果资产建到平台上(2026-09-11),第 4 步就能选中
   const writesTb = advance && step.value === 2
   const name = await askPrompt({
@@ -424,6 +425,15 @@ const perm = reactive({ role: 'admin', sites: [], cfgAssetId: null, roles: {}, e
 const permEdit = ref([]) // 权限管理面板编辑区 [{email, role, sites(逗号分隔文本)}]
 const permMsg = ref('')
 const canPublishSite = computed(() => perm.role !== 'field' || perm.sites.includes(site.name))
+/* 站点标识只限英文(2026-09-11):它是 TB 里站点资产、规则链、结果资产、页面资产的名字和归属标记,
+   也是大屏地址参数。平台上已有的站点(发布过的)照旧放行,不逼人改名——发布后本来就不该改 */
+const SITE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/
+const siteIdError = computed(() => {
+  const n = site.name.trim()
+  if (!n) return '请填写站点标识'
+  if (SITE_ID_RE.test(n) || sites.value.some(s => s.name === n)) return ''
+  return '站点标识只能用英文字母、数字、- 和 _(如 xrs-mirror-test)'
+})
 function permAddRow() {
   permEdit.value.push({ email: '', role: 'field', sites: '' })
 }
@@ -640,7 +650,6 @@ async function loadSite(name, advance = false) {
 
 function hydrate(cfg) {
   site.name = cfg.site?.name || site.name
-  site.label = cfg.site?.label || site.label
   rollupChainName.value = cfg.rollup?.chainName || rollupChainName.value
   // 旧站点(有运算但没声明前缀)不改名;新站点 / 已声明的照声明
   outputPrefix.value =
@@ -1432,6 +1441,7 @@ async function writeResultAssets() {
   if (conn.status !== 'ok') return '未连接 TB,结果资产留到第 5 步发布时建'
   if (!canPublishSite.value)
     throw new Error(`当前账号(现场)只能写以下站点:${perm.sites.join('、') || '(未授权任何站点)'}`)
+  if (siteIdError.value) throw new Error(`${siteIdError.value},请回第 1 步改好`)
   const r = await ensureResultAssets(siteJson.value, claimedIdMap(), tbApi)
   if (r.conflicts.length)
     throw new Error(
@@ -1848,7 +1858,7 @@ const rollupChainName = ref('Periodic Rollups')
 const outputPrefix = ref('calc_')
 const siteJson = computed(() => ({
   schema: 'tbsite/v2',
-  site: { name: site.name, label: site.label },
+  site: { name: site.name },
   ...(outputPrefix.value ? { outputPrefix: outputPrefix.value } : {}),
   devices: claimedDevices.value.map(d => ({
     name: d.name,
@@ -1916,6 +1926,10 @@ async function doPublish(openAfter) {
   if (pub.running) return
   if (!canPublishSite.value) {
     alert(`当前账号(现场)只能发布以下站点:${perm.sites.join('、') || '(未授权任何站点)'}`)
+    return
+  }
+  if (siteIdError.value) {
+    alert(`${siteIdError.value}。请回第 1 步改好再发布。`)
     return
   }
   if (
@@ -2197,14 +2211,17 @@ function openFrontend() {
       </div>
       <div class="frow" style="margin-top: 20px">
         <div class="field">
-          <label>站点标识 (英文)</label>
+          <label>站点标识</label>
           <select v-if="perm.role === 'field'" v-model="site.name">
             <option v-for="s in perm.sites" :key="s" :value="s">{{ s }}</option>
           </select>
-          <input v-else type="text" v-model="site.name" />
+          <input v-else type="text" v-model="site.name" placeholder="如 xrs-mirror-test" />
         </div>
-        <div class="field"><label>站点名称</label><input type="text" v-model="site.label" /></div>
       </div>
+      <p class="site-id-hint">
+        只限英文(字母、数字、- 和 _)。<b>发布后不要改</b>——改了会被当成一个新站点,旧站点的规则链、资产还留在平台上,大屏地址也会变。
+      </p>
+      <p v-if="siteIdError && perm.role !== 'field'" class="err-msg site-id-err">{{ siteIdError }}</p>
       <p v-if="perm.role === 'field'" class="perm-badge">
         👷 现场账号({{ perm.email }})— 仅可发布授权站点:{{ perm.sites.join('、') || '(未授权)' }};无清理权限
       </p>
