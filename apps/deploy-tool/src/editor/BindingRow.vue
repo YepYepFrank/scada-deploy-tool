@@ -7,7 +7,8 @@
  *            形状与校验规则在 `ext-params.ts`,与校验层共用一份
  * 只负责产出契约形状的 Binding;校验(必填 / 类型)由 BindingsPanel 与校验层做。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
+import { dual, type KeyCnFn } from '../naming'
 import type { Binding, BindingMode, BindingSlotSpec } from '@grid/scada-renderer'
 import type { EntityRef } from '@grid/tb-client'
 import KeyPicker from '../components/KeyPicker.vue'
@@ -44,6 +45,9 @@ const props = defineProps<{
   declared?: Declared | null
 }>()
 const emit = defineEmits<{ 'update:modelValue': [b: Binding | null]; split: [keys: string[]] }>()
+/** 测点中文名(EditorApp 从 useMeta 提供;没有就只显示英文)——名称一律「中文(英文)」(2026-09-11) */
+const keyCn = inject<KeyCnFn>('keyCn', () => '')
+const keyText = (key: string) => dual(keyCn(key), key)
 
 const ALL_MODES: BindingMode[] = ['ts', 'ts-history', 'attr', 'alarm', 'const', 'ext']
 const MODE_LABEL: Record<BindingMode, string> = {
@@ -177,7 +181,7 @@ type PickItem = { value: string; label: string; badge?: string }
 const keyGroups = computed(() => {
   const item = (k: KeyInfo): PickItem => ({
     value: k.key,
-    label: `${k.key}${kindMark(k) ? ' ' + kindMark(k) : ''}${k.latest !== undefined ? ' · ' + String(k.latest) : ''}`,
+    label: `${keyText(k.key)}${kindMark(k) ? ' ' + kindMark(k) : ''}${k.latest !== undefined ? ' · ' + String(k.latest) : ''}`,
   })
   const have = new Map(keys.value.map(k => [k.key, k]))
   const decl = declKeys.value
@@ -190,7 +194,7 @@ const keyGroups = computed(() => {
       pinned: true,
       items: decl.map(d => {
         const k = have.get(d.key)
-        return k ? item(k) : { value: d.key, label: d.key, badge: '待发布' }
+        return k ? item(k) : { value: d.key, label: keyText(d.key), badge: '待发布' }
       }),
     })
   const rest = keys.value.filter(k => !declSet.has(k.key))
@@ -210,8 +214,13 @@ const alarmChoices = computed<{ type: string; pending: boolean }[]>(() => {
   ]
 })
 const attrGroups = computed(() => [
-  { label: `属性(${attrKeys.value.length})`, items: attrKeys.value.map(k => ({ value: k, label: k })) },
+  { label: `属性(${attrKeys.value.length})`, items: attrKeys.value.map(k => ({ value: k, label: keyText(k) })) },
 ])
+/** 已选实体按钮上的名字:设备 / 网关 TB 标签是中文就「中文(英文)」 */
+const entityText = computed(() => {
+  const e = entity.value
+  return e?.id ? dual(findNode(props.tree, e.id)?.label, e.name || e.id) : ''
+})
 
 /**
  * ts-history:一条绑定 = 一条序列 = 一个测点。渲染器按绑定条数出 SeriesValue,一条绑定里写多个
@@ -311,7 +320,7 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
         >
           {{
             entity?.id
-              ? `${entity.type === 'ASSET' ? '◆' : '▫'} ${entity.name || entity.id}`
+              ? `${entity.type === 'ASSET' ? '◆' : '▫'} ${entityText}`
               : tree
                 ? extK === 'revenue'
                   ? '选择站点(网关设备)…'

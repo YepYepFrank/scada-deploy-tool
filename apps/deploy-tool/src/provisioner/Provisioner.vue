@@ -43,6 +43,7 @@ import {
   renameBuiltin,
   hideBuiltin,
 } from './envs'
+import { deviceCn, dual, hasCn, isKeyDictAsset, keyCnFrom, parseKeyDict } from '../naming'
 
 const STEPS = ['连接与站点', '设备与测点', '运算配置', '组态编辑', '发布上线']
 const step = ref(0)
@@ -273,39 +274,15 @@ const PROFILE_CN = {
   JIZHAN_P1_DEVICELIST: '基站设备清单',
 }
 const profileCn = p => PROFILE_CN[p] || ''
-// 派生测点(PAvg5m / totalP / revenue5mCostDaily 等)的中文合成
-const AGG_CN2 = { Avg: '均值', Min: '最小', Max: '最大', Sum: '求和' }
-const WIN_CN = { '5m': '5分钟', '15m': '15分钟', '1h': '1小时', '1d': '1天' }
-function smartCn(key) {
-  if (!key) return ''
-  const direct = keyDict.value[key]?.name
-  if (direct) return direct
-  let m = key.match(/^(.*?)(Avg|Min|Max|Sum)(5m|15m|1h|1d)$/)
-  if (m) return `${keyDict.value[m[1]]?.name || m[1]} · ${AGG_CN2[m[2]]}(${WIN_CN[m[3]]})`
-  m = key.match(/^(.*?)(Used|Energy)(5m|15m|1h|1d)$/)
-  if (m) return `${keyDict.value[m[1]]?.name || m[1]} · ${m[2] === 'Used' ? '区间用量' : '积分电量'}(${WIN_CN[m[3]]})`
-  m = key.match(/^(.*?)(IncomeDaily|CostDaily|Income|Cost|Daily)$/)
-  if (m) {
-    const sfx = {
-      IncomeDaily: '放电收入·当日累计',
-      CostDaily: '充电成本·当日累计',
-      Income: '放电收入',
-      Cost: '充电成本',
-      Daily: '净收益·当日累计',
-    }[m[2]]
-    return `收益 · ${sfx}`
-  }
-  if (key.startsWith('total')) {
-    const base = keyDict.value[key.slice(5)]?.name
-    if (base) return `全站合计 · ${base}`
-  }
-  return ''
-}
-// 测点键名 → 「键名(中文)」,用于各处描述文本
-const kd = key => {
-  const cn = smartCn(key)
-  return cn ? `${key}(${cn})` : key
-}
+// 派生测点(PAvg5m / totalP / revenue5mCostDaily 等)的中文合成:规则在 naming.ts(第 4 步编辑器共用)
+const smartCn = key => keyCnFrom(keyDict.value, key)
+// 名称显示一律「中文(英文)」(2026-09-11 YY,naming.ts):测点、设备 / 网关都走下面这几个
+const kd = key => dual(smartCn(key), key)
+/** 测点的中文:第 2 步人工填的中文名优先,其次字典 / 派生规则 */
+const keyCn = k => (hasCn(k.label) && k.label !== k.key ? k.label : '') || k.cn || smartCn(k.key)
+const devByName = computed(() => new Map(devices.value.map(d => [d.name, d])))
+/** 设备 / 网关名 → 「中文(英文)」;不是设备的名字(资产等)原样 */
+const dn = name => (name ? dual(devByName.value.get(name)?.cn, name) : name)
 const sites = ref([]) // 已发布的站点资产 [{name, id}]
 const selectedSite = ref('')
 const restoreMsg = ref('')
@@ -522,7 +499,12 @@ async function connect() {
     }
     // 网关识别:profile 为 gateway,或 additionalInfo.gateway 标记
     const gwById = {}
-    for (const d of all) if (d.type === 'gateway' || d.additionalInfo?.gateway) gwById[d.id.id] = d.name
+    const gwCnById = {} // 网关的中文名(TB 标签 / 描述),网关分组头显示「中文(英文)」
+    for (const d of all)
+      if (d.type === 'gateway' || d.additionalInfo?.gateway) {
+        gwById[d.id.id] = d.name
+        gwCnById[d.id.id] = deviceCn(d)
+      }
     // 探测测点(2026-09-11 提速):每台只发一次请求——values/timeseries 不带 keys 参数,TB 返回这台设备全部测点的最新值,
     // 测点名就是返回对象的键(和 keys/timeseries 读的是同一张最新值表,镜像 231 台逐台核对一致);
     // 并发池:谁先完谁接下一台,不再「12 台一批、等最慢的那台」。原来每台先取测点名、再按 60 个一段顺序取值,
@@ -534,6 +516,8 @@ async function connect() {
         tbId: d.id.id,
         profile: d.type || 'default',
         desc: d.additionalInfo?.description || '',
+        label: d.label || '',
+        cn: deviceCn(d), // 设备中文名:TB 标签优先,其次描述(镜像 231 台里 209 台有中文标签)
         gwId: d.additionalInfo?.lastConnectedGateway || null,
         isGateway: !!gwById[d.id.id],
         open: false,
@@ -561,7 +545,10 @@ async function connect() {
       })
     )
     conn.progress = ''
-    for (const d of found) d.gwName = d.gwId ? gwById[d.gwId] || null : null
+    for (const d of found) {
+      d.gwName = d.gwId ? gwById[d.gwId] || null : null
+      d.gwCn = d.gwId ? gwCnById[d.gwId] || '' : ''
+    }
     devices.value = found
 
     conn.status = 'ok'
@@ -589,15 +576,11 @@ async function connect() {
     }
     // 测点中文字典:生产平台把 key→{name,unit,type} 存在「单位名称匹配表」资产的服务端属性上
     keyDict.value = {}
-    const dictAsset = assets.find(a => a.type === '单位名称匹配表' || a.name === '遥测单位名称匹配接口')
+    const dictAsset = assets.find(isKeyDictAsset)
     if (dictAsset) {
       try {
         const attrs = await api(`/api/plugins/telemetry/ASSET/${dictAsset.id.id}/values/attributes/SERVER_SCOPE`)
-        const dict = {}
-        for (const a of attrs) {
-          const v = typeof a.value === 'string' ? JSON.parse(a.value) : a.value
-          if (v && v.name) dict[a.key] = { name: v.name, unit: v.unit || '', type: v.type || '' }
-        }
+        const dict = parseKeyDict(attrs)
         keyDict.value = dict
         // 自动补全业务名称/单位(仅填空,不覆盖人工修改)
         for (const d of devices.value)
@@ -728,17 +711,21 @@ function matchDev(d) {
   if (devFilter.profile && d.profile !== devFilter.profile) return false
   const q = devFilter.q.trim().toLowerCase()
   if (!q) return true
+  // 中文英文都能搜:设备名 / 中文名 / 描述、测点键名 / 字典中文 / 人工填的中文名
   return (
     d.name.toLowerCase().includes(q) ||
+    (d.cn && d.cn.toLowerCase().includes(q)) ||
     (d.desc && d.desc.toLowerCase().includes(q)) ||
-    d.keys.some(k => k.key.toLowerCase().includes(q))
+    d.keys.some(
+      k => k.key.toLowerCase().includes(q) || (k.cn && k.cn.includes(q)) || (k.label && k.label.includes(q))
+    )
   )
 }
 const deviceGroups = computed(() => {
   const map = new Map()
   for (const d of devices.value) {
     if (d.isGateway || !matchDev(d)) continue
-    const g = d.gwName ? `网关 · ${d.gwName}` : '直连 / 未挂网关'
+    const g = d.gwName ? `网关 · ${dual(d.gwCn, d.gwName)}` : '直连 / 未挂网关'
     if (!map.has(g)) map.set(g, { name: g, withData: [], empty: [] })
     ;(d.keys.length ? map.get(g).withData : map.get(g).empty).push(d)
   }
@@ -752,7 +739,7 @@ const deviceGroups = computed(() => {
 })
 const claimedKeys = computed(() =>
   claimedDevices.value.flatMap(d =>
-    d.keys.filter(k => k.claimed).map(k => ({ device: d.name, key: k.key, label: k.label || k.key, cn: k.cn || '' }))
+    d.keys.filter(k => k.claimed).map(k => ({ device: d.name, key: k.key, label: k.label || k.key, cn: keyCn(k) }))
   )
 )
 
@@ -817,8 +804,8 @@ const keyPickerGroups = computed(() => {
     by.get(k.device).push(k)
   }
   return [...by.entries()].map(([device, items]) => ({
-    label: device,
-    items: items.map(k => ({ value: `${device}||${k.key}`, label: `${k.key}${k.cn ? ' · ' + k.cn : ''}` })),
+    label: dn(device),
+    items: items.map(k => ({ value: `${device}||${k.key}`, label: dual(k.cn, k.key) })),
   }))
 })
 
@@ -1087,10 +1074,7 @@ const tplKeyOptions = computed(() => {
   for (const d of matched) for (const k of d.keys.filter(k => k.claimed)) cover.set(k.key, (cover.get(k.key) || 0) + 1)
   return [...cover.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([key, n]) => {
-      const cn = keyDict.value[key]?.name
-      return { key, label: `${key}${cn ? ' · ' + cn : ''} (${n}/${matched.length} 台)` }
-    })
+    .map(([key, n]) => ({ key, label: `${kd(key)} · ${n}/${matched.length} 台` }))
 })
 
 function tplItemDesc(item) {
@@ -1159,10 +1143,7 @@ const aggKeyOptions = computed(() => {
   for (const d of matched) for (const k of d.keys.filter(k => k.claimed)) cover.set(k.key, (cover.get(k.key) || 0) + 1)
   return [...cover.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([key, n]) => {
-      const cn = keyDict.value[key]?.name
-      return { key, label: `${key}${cn ? ' · ' + cn : ''} (${n}/${matched.length} 台)` }
-    })
+    .map(([key, n]) => ({ key, label: `${kd(key)} · ${n}/${matched.length} 台` }))
 })
 
 /* ── 自定义四则运算 ── */
@@ -1181,7 +1162,7 @@ function removeTerm(i) {
 function termLabel(t) {
   if (t.src === '__const__') return t.constVal === '' ? '?' : t.constVal
   if (!t.src) return '?'
-  const k = t.src.split('||')[1]
+  const k = kd(t.src.split('||')[1])
   return t.abs ? `|${k}|` : k
 }
 // 从左到右依次计算的表达式预览(带括号,消除歧义)
@@ -1226,7 +1207,7 @@ const modalAssetProblem = computed(() => {
   if (modalCfDevices.value.length < 2 || modalAdopted.value) return ''
   const name = modalResultAsset.value
   if (name === site.name) return '结果资产名不能与站点同名'
-  if (claimedDevices.value.some(d => d.name === name)) return `结果资产名与设备 ${name} 重名`
+  if (claimedDevices.value.some(d => d.name === name)) return `结果资产名与设备 ${dn(name)} 重名`
   const others = computations.value.filter((_, i) => i !== modal.editIndex)
   const probe = { ...siteJson.value, computations: [...others, { template: modal.tplId, asset: name, output: '_' }] }
   const n = assetCfLoad(probe)[name] || 0
@@ -1243,12 +1224,12 @@ function placeCf(c) {
 /** 运算清单里的「结果存在哪」;旧配置里跨设备却挂在设备上的,提示编辑一次即改存资产 */
 function cfWhere(c) {
   const tag = c.adopted ? `(接管 · 平台字段「${c.cfName || c.output}」)` : ''
-  if (c.asset) return `资产 ${c.asset}.${c.output}${tag}`
+  if (c.asset) return `资产 ${c.asset} · ${kd(c.output)}${tag}`
   const legacy =
     !c.adopted && cfInputDevices(c).length > 1
       ? '(旧配置:跨设备结果仍存在这台设备上,点「编辑」再保存即改存资产)'
       : ''
-  return `${c.device}.${c.output}${tag}${legacy}`
+  return `${dn(c.device)} · ${kd(c.output)}${tag}${legacy}`
 }
 
 /* ── 接管来的运算在弹窗里:保持接管身份和原实体(换了宿主就不是原来那个字段了) ── */
@@ -1424,7 +1405,7 @@ const holdKeys = () => conflictRows().filter(r => choiceOf(r.key) === 'hold').ma
 const keepLabel = k => {
   if (k.startsWith('chain:')) return { where: '规则链', name: k.slice(6) }
   const [, entity, ...name] = k.slice(3).split('|')
-  return { where: entity, name: name.join('|') }
+  return { where: dn(entity), name: name.join('|') }
 }
 const unkeep = k => (keepPlatform.value = keepPlatform.value.filter(x => x !== k))
 const conflictWarn = () => {
@@ -1466,7 +1447,7 @@ async function adoptRow(r) {
     !(await askConfirm({
       title: '接管这条计算',
       text:
-        `把「${r.entity}」上的计算字段「${r.cf.name}」交给本工具管理?\n` +
+        `把「${dn(r.entity)}」上的计算字段「${r.cf.name}」交给本工具管理?\n` +
         `· 原字段名、原输出测点「${c.output}」、原实体都不变,历史曲线接得上;\n` +
         '· 之后以向导里的配置为准,第 5 步发布时写回(表达式换成等价的向导写法并打上归属标记);\n' +
         `· 随时可以「交还」:本工具不再管,字段原样留在平台上。${notes}`,
@@ -1511,7 +1492,7 @@ async function handBackRow(r) {
   if (
     !(await askConfirm({
       title: '交还给平台',
-      text: `「${r.entity}」上的「${r.cf.name}」带着本站点的标记,但声明里已经没有了——不处理的话第 5 步发布时会被删掉。交还后标记去掉、字段留着,本工具不再管它。`,
+      text: `「${dn(r.entity)}」上的「${r.cf.name}」带着本站点的标记,但声明里已经没有了——不处理的话第 5 步发布时会被删掉。交还后标记去掉、字段留着,本工具不再管它。`,
       okLabel: '交还',
     }))
   )
@@ -1681,7 +1662,7 @@ const modalSlotProblem = computed(() => {
     o => o.kind === 'cf' && o.entityType === 'DEVICE' && o.entity === dev
   ).length
   return foreign + planned > MAX_CF_PER_ENTITY
-    ? `设备 ${dev} 上平台已有 ${foreign} 个别人的计算字段,加上本站点的 ${planned} 个,超过 TB 单个实体上限 ${MAX_CF_PER_ENTITY}`
+    ? `设备 ${dn(dev)} 上平台已有 ${foreign} 个别人的计算字段,加上本站点的 ${planned} 个,超过 TB 单个实体上限 ${MAX_CF_PER_ENTITY}`
     : ''
 })
 
@@ -1832,7 +1813,7 @@ function keyRef(encoded) {
 /* ── 统计测点多选(周期统计/多级归档):过滤 + 限高滚动列表 ──
    旧的 checkbox 流式布局在 250+ 测点的设备上会把弹窗撑出视口且无法滚动 */
 const kmFilter = ref('')
-const kmLabel = k => (modal.target !== null ? k.label : `${k.key}${k.cn ? ' · ' + k.cn : ''}`)
+const kmLabel = k => (modal.target !== null ? k.label : dual(keyCn(k), k.key))
 const kmAll = computed(() => (modal.target !== null ? tplKeyOptions.value : modalDeviceKeys.value))
 const kmOptions = computed(() => {
   const f = kmFilter.value.trim().toLowerCase()
@@ -2001,17 +1982,17 @@ function compDesc(c) {
   if (c.template === 'aggregate.crossEntity') {
     const sel = [...(c.selector?.profiles || []), ...(c.selector?.prefixes || [])].join('/')
     const n = tplMatched({ selector: c.selector || {} }).length
-    return `「${c.name}」${sel} × ${kd(c.key)} ${c.agg === 'avg' ? '平均' : '求和'}(${n} 台)→ 资产 ${c.asset}.${c.output}`
+    return `「${c.name}」${sel} × ${kd(c.key)} ${c.agg === 'avg' ? '平均' : '求和'}(${n} 台)→ 资产 ${c.asset} · ${kd(c.output)}`
   }
   if (c.template === 'revenue.periodic') {
-    return `「${c.name}」放电 ${c.discharge.device}.${kd(c.discharge.key)} − 充电 ${c.charge.device}.${kd(c.charge.key)} × 分时电价 @ ${c.window || '1h'} → 资产 ${c.asset}.${c.output}(含当日累计)`
+    return `「${c.name}」放电 ${dn(c.discharge.device)} · ${kd(c.discharge.key)} − 充电 ${dn(c.charge.device)} · ${kd(c.charge.key)} × 分时电价 @ ${c.window || '1h'} → 资产 ${c.asset} · ${kd(c.output)}(含当日累计)`
   }
   if (c.template === 'alarm.threshold') {
     const ops = { gt: '>', lt: '<', gte: '≥', lte: '≤', eq: '=', ne: '≠' }
-    return `「${c.name}」${c.device}.${kd(c.key)} ${ops[c.condition.op]} ${c.condition.value} → ${c.severity}${c.trigger === 'edge' ? ' · 变化才报' : ''} · ${c.message}`
+    return `「${c.name}」${dn(c.device)} · ${kd(c.key)} ${ops[c.condition.op]} ${c.condition.value} → ${c.severity}${c.trigger === 'edge' ? ' · 变化才报' : ''} · ${c.message}`
   }
   if (c.template === 'window.cascade') {
-    return `${c.device} · ${c.keys.map(kd).join('/')} · ${c.aggs.join('/')} · 5分钟→1小时→1天 三级归档`
+    return `${dn(c.device)} · ${c.keys.map(kd).join('/')} · ${c.aggs.join('/')} · 5分钟→1小时→1天 三级归档`
   }
   if (c.template === 'expr.custom') {
     let s =
@@ -2025,18 +2006,18 @@ function compDesc(c) {
   }
   if (c.template.startsWith('expr.')) {
     const op = c.template === 'expr.add' ? '+' : '−'
-    return `${c.inputs.a.device}.${kd(c.inputs.a.key)} ${op} ${c.inputs.b.device}.${kd(c.inputs.b.key)} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}`
+    return `${dn(c.inputs.a.device)} · ${kd(c.inputs.a.key)} ${op} ${dn(c.inputs.b.device)} · ${kd(c.inputs.b.key)} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}`
   }
   if (tpl.kind === 'cf') {
-    return `${c.device} → ${c.output}`
+    return `${dn(c.device)} → ${kd(c.output)}`
   }
   if (c.template === 'window.aggregate') {
-    return `${c.device} · ${c.keys.join(', ')} · ${c.aggs.join('/')} @ ${c.window}`
+    return `${dn(c.device)} · ${c.keys.map(kd).join('、')} · ${c.aggs.join('/')} @ ${c.window}`
   }
   if (c.template === 'window.integrate') {
-    return `${c.device}.${c.key} 积分电量 @ ${c.window} → ${c.output} (kWh)`
+    return `${dn(c.device)} · ${kd(c.key)} 积分电量 @ ${c.window} → ${kd(c.output)} (kWh)`
   }
-  return `${c.device}.${c.key} 差值 @ ${c.window} → ${c.output}`
+  return `${dn(c.device)} · ${kd(c.key)} 差值 @ ${c.window} → ${kd(c.output)}`
 }
 
 /* ── 第 4 步的数据源清单(metricList)随旧组态编辑器一起删除(T3.7) ── */
@@ -2273,7 +2254,7 @@ async function retryFailed() {
   }
 }
 function failureLabel(f) {
-  if (f.step === 'cf') return `${f.device} → ${f.output}`
+  if (f.step === 'cf') return `${dn(f.device)} → ${kd(f.output)}`
   if (f.step === 'agg') return f.output || '汇聚'
   return STEP_CN[f.step] || f.step
 }
@@ -2533,12 +2514,10 @@ function openFrontend() {
       </div>
       <p v-if="!devices.length" class="err-msg">尚未发现设备——请先在第 1 步连接 ThingsBoard。</p>
       <div v-if="devices.length" class="disc-toolbar">
-        <input type="text" v-model="devFilter.q" class="disc-search" placeholder="搜索:设备名 / 中文描述 / 测点键名…" />
+        <input type="text" v-model="devFilter.q" class="disc-search" placeholder="搜索:设备 / 测点(中文或英文)…" />
         <select v-model="devFilter.profile" title="按设备类型筛选">
           <option value="">全部类型</option>
-          <option v-for="p in profileList" :key="p" :value="p">
-            {{ p }}{{ profileCn(p) ? ' · ' + profileCn(p) : '' }}
-          </option>
+          <option v-for="p in profileList" :key="p" :value="p">{{ dual(profileCn(p), p) }}</option>
         </select>
         <button class="btn ghost sm" title="把当前筛选出的设备连同全部测点一次认领" @click="claimFiltered(true)">
           ✓ 认领筛选结果
@@ -2583,11 +2562,9 @@ function openFrontend() {
                 title="勾选 = 认领这台设备的全部测点"
                 @change="claimDevice(d, $event.target.checked)"
               />
-              <span class="name">{{ d.name }}</span>
-              <span class="profile-chip" :title="profileCn(d.profile)"
-                >{{ d.profile }}<template v-if="profileCn(d.profile)"> · {{ profileCn(d.profile) }}</template></span
-              >
-              <span v-if="d.desc" class="dev-desc">{{ d.desc }}</span>
+              <span class="name">{{ dual(d.cn, d.name) }}</span>
+              <span class="profile-chip" :title="profileCn(d.profile)">{{ dual(profileCn(d.profile), d.profile) }}</span>
+              <span v-if="d.desc && d.desc !== d.cn" class="dev-desc">{{ d.desc }}</span>
               <span class="cnt" :class="{ some: d.keys.some(k => k.claimed) }">
                 {{ d.keys.filter(k => k.claimed).length }}/{{ d.keys.length }} 测点 ·
                 {{ d.open ? '收起 ▲' : '展开 ▼' }}</span
@@ -2605,7 +2582,7 @@ function openFrontend() {
                 <template v-for="k in d.keys" :key="k.key">
                   <input type="checkbox" v-model="k.claimed" />
                   <span class="kname"
-                    >{{ k.key }}<span v-if="k.cn" class="kcn">{{ k.cn }}</span>
+                    >{{ dual(k.cn || smartCn(k.key), k.key) }}
                     <span style="opacity: 0.55">= {{ k.latest }}</span></span
                   >
                   <input type="text" v-model="k.label" :placeholder="k.cn || k.key" />
@@ -2620,9 +2597,9 @@ function openFrontend() {
             </div>
             <div v-show="emptyOpen[g.name]" class="empty-list">
               <div v-for="d in g.empty" :key="d.tbId" class="empty-row">
-                <span class="name">{{ d.name }}</span>
-                <span class="profile-chip">{{ d.profile }}</span>
-                <span v-if="d.desc" class="dev-desc">{{ d.desc }}</span>
+                <span class="name">{{ dual(d.cn, d.name) }}</span>
+                <span class="profile-chip">{{ dual(profileCn(d.profile), d.profile) }}</span>
+                <span v-if="d.desc && d.desc !== d.cn" class="dev-desc">{{ d.desc }}</span>
               </div>
             </div>
           </div>
@@ -2686,7 +2663,7 @@ function openFrontend() {
               每条选一种处理:待定(这次发布不动)/ 以 TB 为准 / 以本工具为准(发布时覆盖 TB);没选的按待定
             </div>
             <div v-for="r in platView.conflicts" :key="'cf' + r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }}</span>
+              <span class="pe">{{ dn(r.entity) }}</span><span class="pn">{{ r.cf.name }}</span>
               <span class="plat-tag warn">{{ driftLabel(r) }}</span>
               <span class="choice-seg">
                 <button
@@ -2757,7 +2734,7 @@ function openFrontend() {
               步发布后生效
             </div>
             <div v-for="r in platView.pending" :key="'pcf' + r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }}</span>
+              <span class="pe">{{ dn(r.entity) }}</span><span class="pn">{{ r.cf.name }}</span>
               <button class="btn ghost sm" @click="toggleDiff('cf:' + r.entity + '|' + r.cf.name)">
                 {{ diffOpen['cf:' + r.entity + '|' + r.cf.name] ? '收起差异' : '查看差异' }}
               </button>
@@ -2776,21 +2753,21 @@ function openFrontend() {
               带本站点标记、声明里已没有({{ platView.orphans.length }})—— 不处理的话第 5 步发布会删掉
             </div>
             <div v-for="r in platView.orphans" :key="r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }}</span><code>{{ cfExprOf(r) }}</code>
+              <span class="pe">{{ dn(r.entity) }}</span><span class="pn">{{ r.cf.name }}</span><code>{{ cfExprOf(r) }}</code>
               <button class="btn ghost sm" @click="handBackRow(r)">交还(保留字段)</button>
             </div>
           </div>
           <div v-if="platView.missing.length" class="plat-group">
             <div class="plat-gt">声明里有、平台上还没有({{ platView.missing.length }})—— 第 5 步发布时建</div>
             <div v-for="m in platView.missing" :key="m.entity + m.name" class="plat-row">
-              <span class="pe">{{ m.entity }}</span><span class="pn">{{ m.name }}</span>
+              <span class="pe">{{ dn(m.entity) }}</span><span class="pn">{{ m.name }}</span>
             </div>
           </div>
           <div v-if="platView.adoptable.length" class="plat-group">
             <div class="plat-gt">别人配的、可以接管({{ platView.adoptable.length }})</div>
             <div v-for="r in platView.adoptable" :key="r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ r.entity }}</span>
-              <span class="pn">{{ r.cf.name }} → {{ cfOutOf(r) }}</span>
+              <span class="pe">{{ dn(r.entity) }}</span>
+              <span class="pn">{{ r.cf.name }} → {{ kd(cfOutOf(r)) }}</span>
               <code>{{ cfExprOf(r) }}</code>
               <span v-if="r.taken" class="plat-tag mine">已接管,第 5 步发布后生效</span>
               <button v-else class="btn ghost sm" @click="adoptRow(r)">接管</button>
@@ -2803,11 +2780,11 @@ function openFrontend() {
               TB 里改
             </summary>
             <div v-for="r in platView.readonly" :key="r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }} → {{ cfOutOf(r) }}</span>
+              <span class="pe">{{ dn(r.entity) }}</span><span class="pn">{{ r.cf.name }} → {{ kd(cfOutOf(r)) }}</span>
               <code>{{ cfExprOf(r) }}</code><span class="plat-why">{{ r.adopt.reason }}</span>
             </div>
             <div v-for="r in platView.otherSite" :key="r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }}</span>
+              <span class="pe">{{ dn(r.entity) }}</span><span class="pn">{{ r.cf.name }}</span>
               <span class="plat-why">本工具 · 站点「{{ r.site }}」在管</span>
             </div>
           </details>
@@ -3127,7 +3104,7 @@ function openFrontend() {
               <label>设备</label>
               <select v-model="modal.form.device">
                 <option v-for="d in claimedDevices" :key="d.name" :value="d.name">
-                  {{ d.name }}{{ d.desc ? ' · ' + d.desc : '' }}
+                  {{ dual(d.cn, d.name) }}
                 </option>
               </select>
             </div>
@@ -3183,7 +3160,7 @@ function openFrontend() {
               <label>{{ modal.tplId === 'window.delta' ? '累计测点' : '功率测点' }}</label>
               <select v-if="modal.target === null" v-model="modal.form.key">
                 <option v-for="k in modalDeviceKeys" :key="k.key" :value="modal.form.device + '||' + k.key">
-                  {{ k.key }}{{ k.cn ? ' · ' + k.cn : '' }}
+                  {{ dual(keyCn(k), k.key) }}
                 </option>
               </select>
               <select v-else v-model="modal.form.key">
@@ -3413,7 +3390,7 @@ function openFrontend() {
         </div>
         <div v-if="modalCfDevices.length" class="frow">
           <p v-if="modalAdopted" class="hint" style="margin: 4px 0 0">
-            接管来的运算:结果仍存在原来的 <b>{{ modalEditing.asset || modalEditing.device }}</b> 上,平台字段名「{{
+            接管来的运算:结果仍存在原来的 <b>{{ modalEditing.asset || dn(modalEditing.device) }}</b> 上,平台字段名「{{
               modalEditing.cfName || modalEditing.output
             }}」不变。
           </p>
@@ -3432,7 +3409,7 @@ function openFrontend() {
             <div v-if="modalAssetProblem" class="err-msg">{{ modalAssetProblem }}</div>
           </div>
           <p v-else class="hint" style="margin: 4px 0 0">
-            输入都在设备 <b>{{ modalCfDevices[0] }}</b> 上,结果存到这台设备。
+            输入都在设备 <b>{{ dn(modalCfDevices[0]) }}</b> 上,结果存到这台设备。
           </p>
           <div v-if="modalSlotProblem" class="err-msg" style="flex-basis: 100%">{{ modalSlotProblem }}</div>
         </div>

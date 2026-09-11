@@ -3,6 +3,7 @@
 import { computed, ref } from 'vue'
 import type { EntityRef } from '@grid/tb-client'
 import { flattenTree, type MetaNode } from '../meta/MetaNode'
+import { dual } from '../naming'
 
 const props = withDefaults(
   defineProps<{
@@ -73,8 +74,8 @@ const ICON: Record<string, string> = { site: '🏭', gateway: '📡', device: '�
           <span v-if="r.hasChildren" class="et-fold" @click.stop="toggle(r.node.id)">{{ r.expanded ? '▾' : '▸' }}</span>
           <span v-else class="et-fold et-leaf"></span>
           <span class="et-icon">{{ ICON[r.node.kind] }}</span>
-          <span class="et-name">{{ r.node.name }}</span>
-          <span v-if="r.node.label && r.node.label !== r.node.name" class="et-label">{{ r.node.label }}</span>
+          <!-- 名称一律「中文(英文)」(2026-09-11 YY):TB 标签是中文就放前面 -->
+          <span class="et-name">{{ r.node.kind === 'group' ? r.node.name : dual(r.node.label, r.node.name) }}</span>
           <span v-if="r.node.profile && r.node.kind !== 'group'" class="et-profile">{{ r.node.profile }}</span>
           <span v-if="r.hasChildren" class="et-count">{{ r.node.children.length }}</span>
         </div>

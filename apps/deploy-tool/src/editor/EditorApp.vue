@@ -3,7 +3,7 @@
  * 组态编辑器(T3.2 起,独立页 editor.html;T3.7 发布器完成后接入向导第 4 步):
  * 左:模板卡片;中:槽位示意图(点槽位选组件);右:当前槽位、撤销 / 重做、校验结果、JSON。
  */
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, provide, reactive, ref, watch } from 'vue'
 import {
   getTemplate,
   listTemplates,
@@ -54,6 +54,8 @@ const initial: PageConfig = { schemaVersion: 1, template: templates[0]!.id, titl
 const ed = useEditorState(initial)
 // TB 连接 + 元数据树(绑定选择器用);凭据只在内存
 const meta = useMeta()
+// 测点中文名给各绑定行(BindingRow 注入):网关 / 设备 / 测点一律「中文(英文)」(2026-09-11)
+provide('keyCn', meta.keyCn)
 watch(
   () => props.session,
   s => {

@@ -4,6 +4,7 @@
  */
 import { computed, reactive, shallowRef } from 'vue'
 import { buildMetaTree, countEntities, MetaClient, type MetaNode } from './MetaNode'
+import { isKeyDictAsset, keyCnFrom, parseKeyDict, type KeyDict } from '../naming'
 
 export const IDENTITIES = [
   { id: 'customer', label: '客户视角', user: import.meta.env.VITE_TB_USER, pass: import.meta.env.VITE_TB_PASSWORD },
@@ -38,6 +39,9 @@ export function useMeta() {
   })
   const tree = shallowRef<MetaNode | null>(null)
   const client = shallowRef<MetaClient | null>(null)
+  /** 测点中文字典(2026-09-11):绑定选择器里测点显示「中文(英文)」;读不到(如客户账号看不到字典资产)就只显示英文 */
+  const keyDict = shallowRef<KeyDict>({})
+  const keyCn = (key: string) => keyCnFrom(keyDict.value, key)
 
   /** 与编译器 TbApi 同签名:(url, data?, method?);data 为 undefined/null 不发 body */
   const api = async (url: string, data?: unknown, method?: 'GET' | 'POST' | 'DELETE') => {
@@ -99,6 +103,19 @@ export function useMeta() {
       conn.authority = me.authority
       const [devices, assets] = await Promise.all([c.devices(me), c.assets(me)])
       const contains = await c.assetContains(assets)
+      keyDict.value = {}
+      const dictAsset = assets.find(isKeyDictAsset)
+      if (dictAsset)
+        try {
+          keyDict.value = parseKeyDict(
+            ((await api(`/api/plugins/telemetry/ASSET/${dictAsset.id.id}/values/attributes/SERVER_SCOPE`)) as {
+              key: string
+              value: unknown
+            }[]) ?? []
+          )
+        } catch {
+          /* 字典读不到只影响中文显示 */
+        }
       tree.value = buildMetaTree(conn.siteName || '站点', devices, assets, contains)
       conn.msg = `${me.authority} · ${devices.length} 台设备 · ${assets.length} 个资产(${contains.length} 条 Contains)`
     } catch (e) {
@@ -126,6 +143,7 @@ export function useMeta() {
     adopt,
     refresh,
     api,
+    keyCn,
   }
 }
 
