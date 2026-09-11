@@ -29,6 +29,15 @@ import {
   listCfs,
 } from './publisher.js'
 import KeyPicker from '../components/KeyPicker.vue'
+import {
+  LS_ENVS,
+  LS_BUILTIN_ENVS,
+  mergeEnvs,
+  labelTaken,
+  fallbackEnv,
+  renameBuiltin,
+  hideBuiltin,
+} from './envs'
 
 const STEPS = ['连接与站点', '设备与测点', '运算配置', '组态编辑', '发布上线']
 const step = ref(0)
@@ -85,39 +94,50 @@ const ENVS = {
 
 /* ── 自定义项目环境:工程人员手动录入新项目的 TB 地址,存本机 ──
    内置环境走 vite 代理;自定义环境直连 http://IP:端口(需 TB 允许跨域,
-   内网 TB CE 默认放行 /api)。 */
-const LS_ENVS = 'gridops_custom_envs'
+   内网 TB CE 默认放行 /api)。
+   2026-09-11 起内置环境也能重命名、删除(envs.ts):本机覆盖——改显示名、在下拉里隐藏;
+   删除与自定义项目一样清掉本机为它存的登录与草稿,不提供恢复。 */
 const customEnvs = ref([])
+const builtinOverrides = ref({})
 try {
   customEnvs.value = JSON.parse(localStorage.getItem(LS_ENVS)) || []
+  builtinOverrides.value = JSON.parse(localStorage.getItem(LS_BUILTIN_ENVS)) || {}
 } catch {
   /* 忽略损坏数据 */
 }
-const allEnvs = computed(() => {
-  const m = { ...ENVS }
-  for (const e of customEnvs.value)
-    m[e.id] = { label: e.label, base: e.base, defUser: 'tenant@thingsboard.org', defPass: '', custom: true }
-  return m
-})
+const allEnvs = computed(() => mergeEnvs(ENVS, builtinOverrides.value, customEnvs.value))
 const curEnv = computed(() => allEnvs.value[conn.env] || ENVS.mirror)
 function persistEnvs() {
   try {
     localStorage.setItem(LS_ENVS, JSON.stringify(customEnvs.value))
+    localStorage.setItem(LS_BUILTIN_ENVS, JSON.stringify(builtinOverrides.value))
   } catch {
     /* 存储不可用时静默 */
   }
 }
-const envModal = reactive({ open: false, editId: null, name: '', addr: '', msg: '' })
+const envModal = reactive({ open: false, editId: null, builtin: false, name: '', addr: '', msg: '' })
 function openEnvModal(editId = null) {
+  const e = editId ? allEnvs.value[editId] : null
   envModal.editId = editId
-  const e = editId ? customEnvs.value.find(x => x.id === editId) : null
+  envModal.builtin = !!e?.builtin
   envModal.name = e?.label || ''
-  envModal.addr = e?.base || ''
+  envModal.addr = e?.custom ? e.base : ''
   envModal.msg = ''
   envModal.open = true
 }
 function saveEnvModal() {
   const name = envModal.name.trim()
+  if (name && labelTaken(allEnvs.value, name, envModal.editId)) {
+    envModal.msg = `已经有叫「${name}」的环境了,换个名字,免得在下拉里分不清`
+    return
+  }
+  if (envModal.builtin) {
+    // 内置环境只改显示名(地址写在代码里);清空 = 恢复默认名。不断开当前连接
+    builtinOverrides.value = renameBuiltin(builtinOverrides.value, ENVS, envModal.editId, name)
+    persistEnvs()
+    envModal.open = false
+    return
+  }
   let addr = envModal.addr.trim().replace(/\/+$/, '')
   if (!name) {
     envModal.msg = '请给项目起个名字'
@@ -128,9 +148,11 @@ function saveEnvModal() {
     return
   }
   if (!/^https?:\/\//i.test(addr)) addr = 'http://' + addr
+  let moved = true // 新建或改了地址才需要断开重连;只改名不动连接
   if (envModal.editId) {
     const e = customEnvs.value.find(x => x.id === envModal.editId)
     if (e) {
+      moved = e.base !== addr
       e.label = name
       e.base = addr
     }
@@ -141,30 +163,34 @@ function saveEnvModal() {
   }
   persistEnvs()
   envModal.open = false
-  switchEnv()
+  if (moved) switchEnv()
 }
-async function removeCustomEnv() {
-  const e = customEnvs.value.find(x => x.id === conn.env)
-  if (!e) return
+async function removeEnv() {
+  const id = conn.env
+  const e = allEnvs.value[id]
+  if (!e || Object.keys(allEnvs.value).length <= 1) return // 至少留一个环境(按钮也已禁用)
   if (
     !(await askConfirm({
-      title: '删除项目',
-      text: `删除项目「${e.label}」(${e.base})?本机为它保存的登录与草稿会一并清除。`,
+      title: e.builtin ? '删除环境' : '删除项目',
+      text:
+        `从下拉里删除「${e.label}」${e.custom ? `(${e.base})` : ''}?\n` +
+        '本机为它保存的登录与草稿会一并清除,删除后不能恢复。',
       okLabel: '删除',
       danger: true,
     }))
   )
     return
   try {
-    localStorage.removeItem(`gridops_login_${e.id}`)
-    localStorage.removeItem(`gridops_drafts_${e.id}`)
-    localStorage.removeItem(`gridops_draft_${e.id}`)
+    localStorage.removeItem(`gridops_login_${id}`)
+    localStorage.removeItem(`gridops_drafts_${id}`)
+    localStorage.removeItem(`gridops_draft_${id}`)
   } catch {
     /* 忽略 */
   }
-  customEnvs.value = customEnvs.value.filter(x => x.id !== e.id)
+  if (e.builtin) builtinOverrides.value = hideBuiltin(builtinOverrides.value, id)
+  else customEnvs.value = customEnvs.value.filter(x => x.id !== id)
   persistEnvs()
-  conn.env = 'mirror'
+  conn.env = fallbackEnv(allEnvs.value) ?? 'mirror'
   switchEnv()
 }
 const conn = reactive({
@@ -209,6 +235,7 @@ function persistLogin() {
     /* 隐私模式等存储不可用时静默 */
   }
 }
+if (!allEnvs.value[conn.env]) conn.env = fallbackEnv(allEnvs.value) ?? 'mirror' // 默认环境在本机被删了
 loadSavedLogin() // 启动时恢复本环境已保存的登录
 
 function switchEnv() {
@@ -2111,12 +2138,26 @@ function openFrontend() {
               <option v-for="(e, id) in allEnvs" :key="id" :value="id">{{ e.label }}</option>
             </select>
             <button class="btn ghost sm" title="录入新项目的 TB 地址" @click="openEnvModal()">＋ 新项目</button>
-            <template v-if="curEnv.custom">
-              <button class="btn ghost sm" @click="openEnvModal(conn.env)">编辑</button>
-              <button class="btn ghost sm" @click="removeCustomEnv">删除</button>
-            </template>
+            <button
+              class="btn ghost sm"
+              :title="curEnv.custom ? '改项目名称或 TB 地址' : '改这个环境在下拉里显示的名字'"
+              @click="openEnvModal(conn.env)"
+            >
+              {{ curEnv.custom ? '编辑' : '重命名' }}
+            </button>
+            <button
+              class="btn ghost sm"
+              :disabled="Object.keys(allEnvs).length <= 1"
+              :title="Object.keys(allEnvs).length <= 1 ? '至少要留一个环境' : '从下拉里删掉当前环境'"
+              @click="removeEnv"
+            >
+              删除
+            </button>
           </div>
         </div>
+      </div>
+      <!-- 账号、密码、连接放同一行(2026-09-11 YY:原来环境按钮一多,账号挤到右边、密码掉到下一行) -->
+      <div class="frow">
         <div class="field"><label>账号</label><input type="text" v-model="conn.username" /></div>
         <div class="field"><label>密码</label><input type="password" v-model="conn.password" /></div>
         <button class="btn" :disabled="conn.status === 'busy'" @click="connect">
@@ -3122,12 +3163,21 @@ function openFrontend() {
     <!-- 新项目(自定义 TB 环境)弹窗 -->
     <div v-if="envModal.open" class="modal-mask confirm-mask" @click.self="envModal.open = false">
       <div class="modal confirm-modal">
-        <h3>{{ envModal.editId ? '编辑项目' : '新项目' }}</h3>
-        <p class="confirm-text">录入项目名称与 ThingsBoard 地址,保存后在环境下拉中随时可选(保存在本机浏览器)。</p>
+        <h3>{{ envModal.builtin ? '重命名环境' : envModal.editId ? '编辑项目' : '新项目' }}</h3>
+        <p v-if="envModal.builtin" class="confirm-text">
+          内置环境的地址是固定的(经本工具代理转发),这里只改它在下拉里显示的名字;名称清空即恢复默认名。
+        </p>
+        <p v-else class="confirm-text">录入项目名称与 ThingsBoard 地址,保存后在环境下拉中随时可选(保存在本机浏览器)。</p>
         <div class="field" style="margin-bottom: 10px">
-          <label>项目名称</label> <input type="text" v-model="envModal.name" placeholder="如:仙人山二期" />
+          <label>{{ envModal.builtin ? '显示名称' : '项目名称' }}</label>
+          <input
+            type="text"
+            v-model="envModal.name"
+            :placeholder="envModal.builtin ? ENVS[envModal.editId]?.label : '如:仙人山二期'"
+            @keyup.enter="envModal.builtin && saveEnvModal()"
+          />
         </div>
-        <div class="field">
+        <div v-if="!envModal.builtin" class="field">
           <label>TB 地址</label>
           <input
             type="text"
