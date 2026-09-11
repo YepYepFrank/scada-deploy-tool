@@ -518,46 +518,43 @@ async function connect() {
     // 网关识别:profile 为 gateway,或 additionalInfo.gateway 标记
     const gwById = {}
     for (const d of all) if (d.type === 'gateway' || d.additionalInfo?.gateway) gwById[d.id.id] = d.name
-    // 并发探测测点(分批,避免打爆浏览器/TB)
-    const found = []
-    for (let i = 0; i < all.length; i += 12) {
-      conn.progress = `探测测点 ${Math.min(i + 12, all.length)}/${all.length}`
-      const batch = await Promise.all(
-        all.slice(i, i + 12).map(async d => {
-          const keys = await api(`/api/plugins/telemetry/DEVICE/${d.id.id}/keys/timeseries`).catch(() => [])
-          // 最新值分批获取——中文键名多的设备(如 PCS 250+ 测点)一次拼 URL 会超长导致 400
-          const latest = {}
-          for (let j = 0; j < keys.length; j += 60) {
-            const part = keys
-              .slice(j, j + 60)
-              .map(encodeURIComponent)
-              .join(',')
-            Object.assign(
-              latest,
-              await api(`/api/plugins/telemetry/DEVICE/${d.id.id}/values/timeseries?keys=${part}`).catch(() => ({}))
-            )
-          }
-          return {
-            name: d.name,
-            tbId: d.id.id,
-            profile: d.type || 'default',
-            desc: d.additionalInfo?.description || '',
-            gwId: d.additionalInfo?.lastConnectedGateway || null,
-            isGateway: !!gwById[d.id.id],
-            open: false,
-            claimed: false,
-            keys: keys.map(k => ({
-              key: k,
-              label: '',
-              unit: '',
-              claimed: false,
-              latest: latest[k] ? latest[k][0].value : '—',
-            })),
-          }
-        })
-      )
-      found.push(...batch)
+    // 探测测点(2026-09-11 提速):每台只发一次请求——values/timeseries 不带 keys 参数,TB 返回这台设备全部测点的最新值,
+    // 测点名就是返回对象的键(和 keys/timeseries 读的是同一张最新值表,镜像 231 台逐台核对一致);
+    // 并发池:谁先完谁接下一台,不再「12 台一批、等最慢的那台」。原来每台先取测点名、再按 60 个一段顺序取值,
+    // 镜像实测 451 次请求 / 9.9s → 231 次 / 2~5s。池开 8:浏览器对同一地址本来最多同时 6 个连接,多开无益
+    const probe = async d => {
+      const latest = (await api(`/api/plugins/telemetry/DEVICE/${d.id.id}/values/timeseries`).catch(() => null)) || {}
+      return {
+        name: d.name,
+        tbId: d.id.id,
+        profile: d.type || 'default',
+        desc: d.additionalInfo?.description || '',
+        gwId: d.additionalInfo?.lastConnectedGateway || null,
+        isGateway: !!gwById[d.id.id],
+        open: false,
+        claimed: false,
+        keys: Object.keys(latest).map(k => ({
+          key: k,
+          label: '',
+          unit: '',
+          claimed: false,
+          latest: latest[k]?.[0] ? latest[k][0].value : '—',
+        })),
+      }
     }
+    const found = new Array(all.length)
+    let next = 0
+    let done = 0
+    conn.progress = `探测测点 0/${all.length}`
+    await Promise.all(
+      Array.from({ length: Math.min(8, all.length) }, async () => {
+        while (next < all.length) {
+          const i = next++
+          found[i] = await probe(all[i])
+          conn.progress = `探测测点 ${++done}/${all.length}`
+        }
+      })
+    )
     conn.progress = ''
     for (const d of found) d.gwName = d.gwId ? gwById[d.gwId] || null : null
     devices.value = found
@@ -776,6 +773,23 @@ const isGwOpen = g =>
   devFilter.q ? true : g.name in gwOpen ? gwOpen[g.name] : groupClaimed(g) > 0 || deviceGroups.value.length === 1
 const toggleGw = g => {
   gwOpen[g.name] = !isGwOpen(g)
+}
+/* 一键认领 / 取消某网关下的全部有数据设备(整机全测点,2026-09-11)。
+   组里只有当前搜索 / 类型筛选出来的设备,所以筛选时只作用于筛出来的那些 */
+const groupAllClaimed = g => g.withData.length > 0 && g.withData.every(d => d.keys.every(k => k.claimed))
+async function claimGroup(g, v) {
+  if (
+    v &&
+    g.withData.length > 20 &&
+    !(await askConfirm({
+      title: '全选本网关',
+      text: `将认领「${g.name}」下 ${g.withData.length} 台设备的全部测点,继续?`,
+      okLabel: '认领',
+    }))
+  )
+    return
+  for (const d of g.withData) claimDevice(d, v)
+  if (v) gwOpen[g.name] = true // 选完展开,看得到选了谁
 }
 
 /* 第 3 步 方式一/方式二 折叠(默认折叠,组头带摘要) */
@@ -2292,6 +2306,20 @@ function openFrontend() {
             ></span
           >
           <span v-if="groupClaimed(g)" class="gw-claimed">已认领 {{ groupClaimed(g) }} 台</span>
+          <button
+            v-if="g.withData.length"
+            class="btn ghost sm gw-all"
+            :title="
+              groupAllClaimed(g)
+                ? '取消认领本组全部设备'
+                : devFilter.q || devFilter.profile
+                  ? '认领本组筛选出来的全部设备(整机全测点)'
+                  : '认领本网关下全部有数据的设备(整机全测点)'
+            "
+            @click.stop="claimGroup(g, !groupAllClaimed(g))"
+          >
+            {{ groupAllClaimed(g) ? '取消全选' : `全选本网关(${g.withData.length} 台)` }}
+          </button>
         </div>
         <template v-if="isGwOpen(g)">
           <div v-for="d in g.withData" :key="d.tbId" class="dev-block">

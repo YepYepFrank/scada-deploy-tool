@@ -1128,6 +1128,14 @@ select {
   font-size: 11px;
   color: var(--accent);
 }
+/* 网关组头的「全选本网关 / 取消全选」(2026-09-11):靠右;有「已认领」字样时紧跟其后 */
+.gw-all {
+  margin-left: auto;
+  align-self: center;
+}
+.gw-claimed + .gw-all {
+  margin-left: 0;
+}
 .dev-head .cnt.some {
   color: var(--accent);
 }
