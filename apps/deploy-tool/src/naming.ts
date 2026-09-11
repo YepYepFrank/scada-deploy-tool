@@ -1,6 +1,6 @@
 // 名称显示约定(2026-09-11 YY):部署工具里网关、设备、测点一律「中文(英文)」——中文在前,英文用全角括号包住;
 // 没有中文就只显示英文。所有显示处都走这里,改格式只改这一个文件。
-// 中文从哪来:设备 / 网关取 TB 设备的「标签」(label,镜像 231 台里 209 台是中文名),标签不是中文再看描述;
+// 中文从哪来:设备 / 网关只取 TB 设备的「标签」(label,工程人员维护的;镜像 231 台里 209 台是中文名),不看「说明」;
 // 测点取「遥测单位名称匹配接口」字典(k.cn)或人工填的中文业务名。
 
 const CN = /[一-龥]/
@@ -73,12 +73,10 @@ export function keyCnFrom(dict: KeyDict, key: string): string {
   return ''
 }
 
-/** 设备 / 网关的中文名:标签优先,其次描述;都不含汉字 → '' */
-export function deviceCn(d: {
-  label?: string | null
-  desc?: string | null
-  additionalInfo?: { description?: string | null } | null
-}): string {
-  for (const s of [d.label, d.desc, d.additionalInfo?.description]) if (hasCn(s)) return (s as string).trim()
-  return ''
+/**
+ * 设备 / 网关的中文名:只取 TB 设备的「标签」(label)——工程人员维护的是标签;「说明」(additionalInfo.description)
+ * 不作名称来源(2026-09-11 现场反馈:原来读说明,和工程人员填的对不上)。标签不含汉字 → ''。
+ */
+export function deviceCn(d: { label?: string | null }): string {
+  return hasCn(d.label) ? (d.label as string).trim() : ''
 }

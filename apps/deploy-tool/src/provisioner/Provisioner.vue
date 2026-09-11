@@ -515,9 +515,9 @@ async function connect() {
         name: d.name,
         tbId: d.id.id,
         profile: d.type || 'default',
-        desc: d.additionalInfo?.description || '',
+        // 设备中文名只取 TB「标签」——工程人员维护的是标签;「说明」(additionalInfo.description)不再读(2026-09-11 现场反馈)
         label: d.label || '',
-        cn: deviceCn(d), // 设备中文名:TB 标签优先,其次描述(镜像 231 台里 209 台有中文标签)
+        cn: deviceCn(d),
         gwId: d.additionalInfo?.lastConnectedGateway || null,
         isGateway: !!gwById[d.id.id],
         open: false,
@@ -711,11 +711,10 @@ function matchDev(d) {
   if (devFilter.profile && d.profile !== devFilter.profile) return false
   const q = devFilter.q.trim().toLowerCase()
   if (!q) return true
-  // 中文英文都能搜:设备名 / 中文名 / 描述、测点键名 / 字典中文 / 人工填的中文名
+  // 中文英文都能搜:设备名 / 标签、测点键名 / 字典中文 / 人工填的中文名
   return (
     d.name.toLowerCase().includes(q) ||
-    (d.cn && d.cn.toLowerCase().includes(q)) ||
-    (d.desc && d.desc.toLowerCase().includes(q)) ||
+    (d.label && d.label.toLowerCase().includes(q)) ||
     d.keys.some(
       k => k.key.toLowerCase().includes(q) || (k.cn && k.cn.includes(q)) || (k.label && k.label.includes(q))
     )
@@ -2564,7 +2563,6 @@ function openFrontend() {
               />
               <span class="name">{{ dual(d.cn, d.name) }}</span>
               <span class="profile-chip" :title="profileCn(d.profile)">{{ dual(profileCn(d.profile), d.profile) }}</span>
-              <span v-if="d.desc && d.desc !== d.cn" class="dev-desc">{{ d.desc }}</span>
               <span class="cnt" :class="{ some: d.keys.some(k => k.claimed) }">
                 {{ d.keys.filter(k => k.claimed).length }}/{{ d.keys.length }} 测点 ·
                 {{ d.open ? '收起 ▲' : '展开 ▼' }}</span
@@ -2599,7 +2597,6 @@ function openFrontend() {
               <div v-for="d in g.empty" :key="d.tbId" class="empty-row">
                 <span class="name">{{ dual(d.cn, d.name) }}</span>
                 <span class="profile-chip">{{ dual(profileCn(d.profile), d.profile) }}</span>
-                <span v-if="d.desc && d.desc !== d.cn" class="dev-desc">{{ d.desc }}</span>
               </div>
             </div>
           </div>

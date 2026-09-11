@@ -12,12 +12,14 @@ describe('名称显示:中文(英文)', () => {
     expect(dual('温度', '温度')).toBe('温度') // 键名本身就是中文
   })
 
-  it('设备 / 网关的中文名:标签优先,其次描述;都不含汉字就没有', () => {
-    expect(deviceCn({ label: '仙人山服务区北区一级开闭所', additionalInfo: { description: '别的' } })).toBe(
-      '仙人山服务区北区一级开闭所'
+  it('设备 / 网关的中文名只取标签(工程人员维护的是标签),不看说明;标签不含汉字就没有', () => {
+    const d = { label: '郭村_充电桩2主板', additionalInfo: { description: '郭村_充电桩2主板(说明)' } }
+    expect(deviceCn(d)).toBe('郭村_充电桩2主板')
+    expect(dual(deviceCn(d), 'GUOC_CP_2')).toBe('郭村_充电桩2主板（GUOC_CP_2）')
+    // 标签是英文、说明是中文:不拿说明兜底
+    expect(deviceCn({ label: 'Gateway', additionalInfo: { description: '润扬大桥储能' } } as { label: string })).toBe(
+      ''
     )
-    expect(deviceCn({ label: 'Gateway', additionalInfo: { description: '润扬大桥储能' } })).toBe('润扬大桥储能')
-    expect(deviceCn({ label: 'Gateway', desc: 'Gateway for project' })).toBe('')
     expect(deviceCn({})).toBe('')
     expect(hasCn('SSP1')).toBe(false)
   })
