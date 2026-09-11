@@ -5,8 +5,9 @@
 //   · 写进 TB 的计算字段 / 资产 / 规则链带归属标记(core/constants ownerInfo),清理只认本站点的标记或上一版声明;
 //   · 更新计算字段带 version(乐观锁)——别人先改过就报冲突、不覆盖;
 //   · 规则链内容没变就不重写(TB 每写一次元数据就重启链上全部节点,定时器从头计时);
-//   · **Root 链由高潮维护,部署工具永远不写它**(YY 定):告警链靠 Root 上的转发节点收遥测,
-//     工具只读核对这个节点在不在,不在就报出来请高潮加;Root 还转发着的链只清空、不删。
+//   · **Root 链上只动本工具自己的那部分**(YY 定:Root 由高潮维护,工具可以写,但只能改自己配的):
+//     本站点的转发节点由工具加 / 改 / 摘;写 Root 之前核对「别人的节点与连线」与读出来时一字不差才写,
+//     带 version 防覆盖;只在接线 / 摘线时写,平时发布不碰 Root。
 import type { Computation, RuleChainMetadata, TbsiteConfig } from '../types'
 import { alarmMetadata } from '../core/alarm'
 import { buildAggCfs, resolveAggMembers } from '../core/aggregate'
@@ -24,6 +25,7 @@ import { cascadeWhitelist, outputInventory, outputPrefixOf, type OutputKey } fro
 import { ConfigError, expandConfig, siteChainNames } from '../core/plan'
 import { revenueMetadata } from '../core/revenue'
 import { rollupGroups, rollupMetadata } from '../core/rollup'
+import { stableJson } from '../core/stable'
 import { validateConfig } from '../core/validate'
 import { checkChainHealth, type ChainTarget } from './health'
 import {
@@ -64,27 +66,129 @@ export function versionConflict(e: unknown, what: string): Error {
       : new Error(m)
 }
 
+// ── Root 链:只动本站点自己的转发节点 ───────────────────────────────────────
+
+type RootNode = {
+  id?: { id: string }
+  type: string
+  name: string
+  configuration?: Record<string, unknown>
+  additionalInfo?: Record<string, unknown> | null
+  [k: string]: unknown
+}
+type RootConn = { fromIndex: number; toIndex: number; type: string; [k: string]: unknown }
+type RootMeta = { firstNodeIndex?: number | null; nodes: RootNode[]; connections?: RootConn[]; [k: string]: unknown }
+
+const INPUT_NODE = 'org.thingsboard.rule.engine.flow.TbRuleChainInputNode'
+const isInputNode = (n: RootNode) => n.type.endsWith('TbRuleChainInputNode')
+
 /**
- * 只读:Root 链上有没有「Rule Chain」节点(TbRuleChainInputNode)把消息转给指定的链。
- * Root 链由高潮维护,部署工具永远不写它(2026-09-11 YY 定)——告警链靠这个转发才收得到遥测,
- * 没有就报出来请高潮加;删自己的链之前也用它看 Root 还转不转给这条链。节点叫什么名字不重要,只认指向。
+ * 这个 Root 节点是不是本站点自己的:转发节点(TbRuleChainInputNode),且带本站点归属标记;
+ * 打标记之前(2026-09-11 前)建的按约定名 `site alarms flow · <站点>` 认。其余一律是别人的,不碰。
  */
-export async function rootForwardsTo(api: TbApi, chainId: string): Promise<boolean> {
-  const page = await api('/api/ruleChains?pageSize=100&page=0')
-  const root = ((page?.data || []) as { id: { id: string }; root?: boolean }[]).find(c => c.root)
-  if (!root) return false
-  const meta = await api(`/api/ruleChain/${root.id.id}/metadata`)
-  return ((meta?.nodes || []) as { type: string; configuration?: { ruleChainId?: string } }[]).some(
-    n => n.type.endsWith('TbRuleChainInputNode') && n.configuration?.ruleChainId === chainId
-  )
+export const isOwnRootFlow = (n: RootNode, site: string): boolean => {
+  if (!isInputNode(n)) return false
+  const mark = ownerOf(n)
+  return mark ? mark.site === site : n.name === chainNames.rootFlow(site)
 }
 
-/** 告警链写好了、但 Root 上没有转发节点时,给现场 / 高潮的说明 */
-export const rootForwardHint = (chainName: string, chainId: string, site: string) =>
-  `告警链「${chainName}」已写好,但 Root 链上还没有转发到它的节点,告警不会触发。` +
-  'Root 链由高潮维护,部署工具不改它:请高潮在 Root Rule Chain 里从「Message Type Switch」的 Post telemetry ' +
-  `连一个「Rule Chain」节点(建议命名「${chainNames.rootFlow(site)}」)到规则链「${chainName}」(id ${chainId})。` +
-  '加好后点「重试失败项」复核。'
+/**
+ * Root 上「除本站点自己节点以外」的全部内容:别人的节点(原样)、别人之间的连线、起点。
+ * 写 Root 之前拿它和读出来时比,一字不差才写——保证别人的部分一个字节都不变。
+ */
+function othersPrint(meta: RootMeta, site: string): string {
+  const nodes = meta.nodes
+  const own = new Set(nodes.map((n, i) => (isOwnRootFlow(n, site) ? i : -1)).filter(i => i >= 0))
+  const key = (i: number) => nodes[i]?.id?.id ?? `#${i}`
+  const first = meta.firstNodeIndex
+  return stableJson({
+    first: first === null || first === undefined ? null : own.has(first) ? 'own' : key(first),
+    nodes: nodes.filter((_, i) => !own.has(i)),
+    connections: (meta.connections ?? [])
+      .filter(c => !own.has(c.fromIndex) && !own.has(c.toIndex))
+      .map(c => `${key(c.fromIndex)}>${key(c.toIndex)}:${c.type}`)
+      .sort(),
+  })
+}
+
+async function readRoot(api: TbApi): Promise<RootMeta | null> {
+  const page = await api('/api/ruleChains?pageSize=100&page=0')
+  const root = ((page?.data || []) as { id: { id: string }; root?: boolean }[]).find(c => c.root)
+  return root ? ((await api(`/api/ruleChain/${root.id.id}/metadata`)) as RootMeta) : null
+}
+
+/** 写 Root:别人的部分与读出来时一字不差才写;读出来的元数据带 version,别人先改过 TB 会回 409 */
+async function saveRoot(api: TbApi, meta: RootMeta, site: string, before: string): Promise<void> {
+  if (othersPrint(meta, site) !== before)
+    throw new Error('内部检查未通过:这次改动会碰到 Root 链上别人的节点或连线,已中止,没有写 Root')
+  try {
+    await api('/api/ruleChain/metadata', meta)
+  } catch (e) {
+    throw versionConflict(e, 'Root 规则链')
+  }
+}
+
+/** 只读:Root 链上有没有转发节点(不论谁加的)把消息转给指定的链 */
+export async function rootForwardsTo(api: TbApi, chainId: string): Promise<boolean> {
+  const meta = await readRoot(api)
+  return !!meta?.nodes.some(n => isInputNode(n) && n.configuration?.ruleChainId === chainId)
+}
+
+export type RootWire = '转发已就位' | 'Root 链已接线'
+
+/**
+ * 让 Root 把遥测转给本站点的告警链。只在需要时写 Root,且只动本站点自己的节点:
+ *   · Root 上已有节点(自己的或别人的)转发到这条链 → 不写;
+ *   · 自己的节点指向了别的链(改过链名)→ 只改它的指向;
+ *   · 没有 → 从 Message Type Switch 的 Post telemetry 接一个带归属标记的转发节点。
+ */
+export async function wireRootChain(api: TbApi, alarmChainId: string, site: string): Promise<RootWire> {
+  const meta = await readRoot(api)
+  if (!meta) throw new Error('未找到 Root 规则链')
+  if (meta.nodes.some(n => isInputNode(n) && n.configuration?.ruleChainId === alarmChainId)) return '转发已就位'
+  const before = othersPrint(meta, site)
+  const own = meta.nodes.find(n => isOwnRootFlow(n, site))
+  if (own) {
+    own.configuration = { ...(own.configuration ?? {}), ruleChainId: alarmChainId }
+    own.additionalInfo = { ...(own.additionalInfo ?? {}), ...ownerInfo(site) }
+  } else {
+    const switchI = meta.nodes.findIndex(n => n.type.endsWith('TbMsgTypeSwitchNode'))
+    if (switchI < 0) throw new Error('Root 链缺少 Message Type Switch 节点,没法接转发(请高潮看一下 Root)')
+    meta.nodes.push({
+      type: INPUT_NODE,
+      name: chainNames.rootFlow(site),
+      configuration: { ruleChainId: alarmChainId, forwardMsgToDefaultRuleChain: false },
+      additionalInfo: { layoutX: 900, layoutY: 600, ...ownerInfo(site) },
+    })
+    meta.connections = meta.connections ?? []
+    meta.connections.push({ fromIndex: switchI, toIndex: meta.nodes.length - 1, type: 'Post telemetry' })
+  }
+  await saveRoot(api, meta, site, before)
+  return 'Root 链已接线'
+}
+
+/** 摘掉 Root 上本站点自己的转发节点和连到它的线(别人的节点、连线原样,索引重排);返回是否摘到了 */
+export async function unwireRootChain(api: TbApi, site: string): Promise<boolean> {
+  const meta = await readRoot(api)
+  if (!meta) return false
+  const own = new Set(meta.nodes.map((n, i) => (isOwnRootFlow(n, site) ? i : -1)).filter(i => i >= 0))
+  if (!own.size) return false
+  const before = othersPrint(meta, site)
+  const remap = new Map<number, number>()
+  meta.nodes.forEach((_, i) => {
+    if (!own.has(i)) remap.set(i, remap.size)
+  })
+  meta.nodes = meta.nodes.filter((_, i) => !own.has(i))
+  meta.connections = (meta.connections ?? [])
+    .filter(c => !own.has(c.fromIndex) && !own.has(c.toIndex))
+    .map(c => ({ ...c, fromIndex: remap.get(c.fromIndex)!, toIndex: remap.get(c.toIndex)! }))
+  if (typeof meta.firstNodeIndex === 'number')
+    meta.firstNodeIndex = own.has(meta.firstNodeIndex) ? null : remap.get(meta.firstNodeIndex)!
+  await saveRoot(api, meta, site, before)
+  return true
+}
+
+// ── 本站点自己的规则链 ─────────────────────────────────────────────────────
 
 type MetaLike = {
   firstNodeIndex?: number | null
@@ -127,7 +231,7 @@ const sameMeta = (planned: MetaLike, cur: MetaLike): boolean => {
 /**
  * 写规则链元数据——内容没变就不写(2026-09-11)。TB 每保存一次元数据就重启链上所有节点、定时器从头计时:
  * 小时级归档要连续跑满 1 小时才出点,反复发布会让它一直出不了数(core/scripts.ts 2026-09-09 的教训)。
- * 返回是否真的写了。只用于本站点自己的链,Root 链从不经过这里。
+ * 返回是否真的写了。只用于本站点自己的链;Root 走 wireRootChain / unwireRootChain。
  */
 async function writeChainMeta(api: TbApi, id: string, created: boolean, planned: RuleChainMetadata): Promise<boolean> {
   if (!created) {
@@ -139,8 +243,8 @@ async function writeChainMeta(api: TbApi, id: string, created: boolean, planned:
 }
 
 /**
- * 把本站点的一条链清空(不删):Root 链上还有节点转发给它时用——删了会让高潮的 Root 指向一条不存在的链。
- * 等高潮摘掉那个节点,下次发布 / 清理再删。已经是空的就不写。
+ * 把本站点的一条链清空(不删):Root 上还有别人的节点转发给它时用——删了会让那个节点指向一条不存在的链,
+ * 而别人的节点我们不能摘。等对方摘掉,下次发布 / 清理再删。已经是空的就不写。
  */
 export async function emptyChain(api: TbApi, id: string): Promise<boolean> {
   return writeChainMeta(api, id, false, {
@@ -157,8 +261,10 @@ export type ChainKind = 'alarm' | 'rollup' | 'revenue'
 export interface StaleChainPrune {
   /** 按种类记下删掉的链名 */
   deleted: Partial<Record<ChainKind, string[]>>
-  /** Root 上还有转发到它的节点:只清空、没删的链名(等高潮摘掉节点) */
+  /** Root 上还有别人的节点转发到它:只清空、没删的链名 */
   kept: Partial<Record<ChainKind, string[]>>
+  /** 是否摘掉了 Root 上本站点自己的转发节点 */
+  unwired: boolean
   /** 发现了疑似残留但没敢删的情况 */
   notes: string[]
 }
@@ -173,7 +279,8 @@ export interface StaleChainPrune {
  * 只删两类名字,都是我们自己建的:
  *   1. 本站点的默认链名(`Site Alarms · <站点>` 等)—— 也能收拾早就孤立的旧链;
  *   2. 上一版已发布配置声明过的链名 —— 覆盖用户自定义 `chainName` 以及改名的情况。
- * 除此之外一律不碰,免得误删同事的链。Root 上还转发着的链只清空不删(Root 由高潮维护,我们不摘节点)。
+ * 除此之外一律不碰,免得误删同事的链。删告警链前先摘 Root 上本站点自己的转发节点;
+ * 摘完 Root 上还有别人的节点转发给它的,只清空不删。
  */
 async function pruneStaleChains(
   cfg: TbsiteConfig,
@@ -181,7 +288,7 @@ async function pruneStaleChains(
   scoped: (k: ChainKind) => boolean,
   api: TbApi
 ): Promise<StaleChainPrune> {
-  const out: StaleChainPrune = { deleted: {}, kept: {}, notes: [] }
+  const out: StaleChainPrune = { deleted: {}, kept: {}, unwired: false, notes: [] }
   const site = cfg.site.name
   const current = siteChainNames(cfg)
   const defaults: Record<ChainKind, string> = {
@@ -219,6 +326,8 @@ async function pruneStaleChains(
       if (keep.has(name)) continue // 改名场景:这个名字这一版还在用
       const found = chains.find(c => c.name === name && !c.root)
       if (!found) continue
+      // 删告警链之前先把 Root 上本站点自己的转发节点摘掉
+      if (kind === 'alarm' && !out.unwired) out.unwired = await unwireRootChain(api, site)
       if (await rootForwardsTo(api, found.id.id)) {
         await emptyChain(api, found.id.id)
         ;(out.kept[kind] ||= []).push(name)
@@ -228,6 +337,8 @@ async function pruneStaleChains(
       ;(out.deleted[kind] ||= []).push(name)
     }
   }
+  // 声明里没有告警了,但 Root 上还挂着本站点自己的转发节点(链可能早被人手工删了)
+  if (scoped('alarm') && !needed.alarm && !out.unwired) out.unwired = await unwireRootChain(api, site)
   return out
 }
 
@@ -593,7 +704,7 @@ export async function publish(
     rollup: Object.keys(rollupGroups(computations)).length > 0 || cascadesAll.length > 0,
     revenue: computations.some(c => c.template === 'revenue.periodic'),
   }
-  let pruned: StaleChainPrune = { deleted: {}, kept: {}, notes: [] }
+  let pruned: StaleChainPrune = { deleted: {}, kept: {}, unwired: false, notes: [] }
   try {
     pruned = await pruneStaleChains(cfg, needed, k => stepOn(k), api)
   } catch (e) {
@@ -607,12 +718,14 @@ export async function publish(
     const bits: string[] = []
     const del = pruned.deleted[k] ?? []
     if (del.length) bits.push(`已删上一版的 ${del.join('、')}`)
+    if (k === 'alarm' && pruned.unwired) bits.push('已摘除 Root 上本站点的转发节点')
     const kept = pruned.kept[k] ?? []
-    if (kept.length) bits.push(`${kept.join('、')} 已清空未删:Root 链上还有转发到它的节点,请高潮摘除后下次发布再删`)
+    if (kept.length) bits.push(`${kept.join('、')} 已清空未删:Root 上还有别人的节点转发到它`)
     return bits.length ? `(${bits.join(',')})` : ''
   }
   /** 这次真正重写了哪些链(没变的不写,也就不用自检) */
   const written: Record<ChainKind, boolean> = { alarm: false, rollup: false, revenue: false }
+  let rootWritten = false
   const unchanged = '(未变,未重写)'
 
   // 3c. 分时电价收益 → 独立规则链 + 收益资产
@@ -663,7 +776,7 @@ export async function publish(
       fail('rollup', e)
     }
 
-  // 5. 告警链(Root 上的转发节点由高潮维护,这里只读核对)
+  // 5. 告警链 + Root 上本站点自己的转发节点
   report('alarm', 'run')
   if (!stepOn('alarm')) report('alarm', 'ok', '跳过(上次已成功)')
   else
@@ -682,16 +795,13 @@ export async function publish(
             { propagate: !!cfg.alarm?.propagate }
           )
         )
-        const forwarded = await rootForwardsTo(api, id)
-        const detail =
-          `${alarms.length} 条规则${written.alarm ? '' : unchanged} · ` +
-          (forwarded ? 'Root 转发已就位' : 'Root 链上还没有转发到本链的节点') +
-          prunedNote('alarm')
-        if (forwarded) report('alarm', 'ok', detail)
-        else {
-          report('alarm', 'err', detail)
-          failures.push({ step: 'alarm', output: names.alarm, error: rootForwardHint(names.alarm, id, site) })
-        }
+        const wired = await wireRootChain(api, id, cfg.site.name)
+        rootWritten = wired === 'Root 链已接线'
+        report(
+          'alarm',
+          'ok',
+          `${alarms.length} 条规则${written.alarm ? '' : unchanged} · ${wired}` + prunedNote('alarm')
+        )
       } else report('alarm', 'ok', '无' + prunedNote('alarm'))
     } catch (e) {
       fail('alarm', e)
@@ -738,11 +848,12 @@ export async function publish(
 
   // 7. 发布后自检:刚写进去的规则节点是不是真的起来了(配置字段名不对时 TB 只在 LC_EVENT 里留痕,
   //    消息会被静默丢弃 —— 2026-09-08 建告警节点就这样悄悄失败了一天多)。没重写的链不查——它们没重启过。
-  //    Root 链不在此列:它归高潮管,我们既不写它,也不替它判定。
   if (checkHealth) {
     report('health', 'run')
     const targets: ChainTarget[] = []
     if (written.alarm) targets.push({ name: names.alarm })
+    // Root 链上只查我们自己的那条转发节点,别人的节点不归我们管、也不该由我们的发布来判定
+    if (rootWritten) targets.push({ root: true, nodes: [chainNames.rootFlow(cfg.site.name)] })
     if (written.rollup) targets.push({ name: names.rollup })
     if (written.revenue) targets.push({ name: names.revenue })
     if (!targets.length) report('health', 'ok', '跳过(这次没有重写任何规则链,节点没有重启)')

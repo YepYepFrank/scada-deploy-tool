@@ -179,7 +179,7 @@ export function summarizePlan(p: WritePlan): string[] {
       ? `聚合链「${p.rollup.chainName}」· ${Object.keys(p.rollup.groups).length} 条流水线 · ${p.rollup.cascades.length} 项多级归档 · ${p.rollup.metadata.nodes.length} 节点`
       : '聚合链:无',
     p.alarm
-      ? `告警链「${p.alarm.chainName}」· ${p.alarm.items.length} 条规则 · ${p.alarm.metadata.nodes.length} 节点(Root 上的转发节点「${p.alarm.rootFlowName}」由高潮维护,工具不写)`
+      ? `告警链「${p.alarm.chainName}」· ${p.alarm.items.length} 条规则 · ${p.alarm.metadata.nodes.length} 节点 + Root 转发「${p.alarm.rootFlowName}」(Root 上只动这一个本站点节点)`
       : '告警链:无',
     `站点资产「${p.siteAsset.name}」(${p.siteAsset.type})写入 siteConfig 属性` +
       (p.outputPrefix ? ` + calcCascadeKeys(${p.cascadeKeys.length} 个级联键)` : ''),

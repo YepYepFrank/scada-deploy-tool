@@ -1823,7 +1823,7 @@ const PUB_STEPS = [
   { id: 'agg', label: '全站汇聚(虚拟资产)' },
   { id: 'revenue', label: '分时电价收益' },
   { id: 'rollup', label: '定时聚合链' },
-  { id: 'alarm', label: '告警链(Root 转发由高潮维护)' },
+  { id: 'alarm', label: '告警链 + Root 转发(只动本站点自己的节点)' },
   { id: 'asset', label: '站点配置写入 TB' },
   { id: 'health', label: '规则节点自检' },
 ]
@@ -1983,7 +1983,7 @@ async function doCleanup() {
   if (
     !(await askConfirm({
       title: '清理站点生成物',
-      text: `将删除站点「${site.name}」发布过的全部生成物:\n· 声明的计算字段\n· Site Alarms / Site Rollups 规则链(Root 链上还转发着的只清空不删——Root 由高潮维护,本工具不改)\n· 站点配置资产\n\n不会碰任何非本站点的存量对象。确认清理?`,
+      text: `将删除站点「${site.name}」发布过的全部生成物:\n· 声明的计算字段\n· Site Alarms / Site Rollups 规则链\n· Root 链上本站点自己的转发节点(高潮配的节点不动;还有别人的节点转发着的链只清空不删)\n· 站点配置资产\n\n不会碰任何非本站点的存量对象。确认清理?`,
       okLabel: '清理',
       danger: true,
     }))
@@ -2345,7 +2345,7 @@ function openFrontend() {
           </details>
           <details class="plat-group">
             <summary class="plat-gt">
-              规则链({{ platView.chains.length }})—— 只读;Root 链由高潮维护,本工具不写,只管本站点自己的链
+              规则链({{ platView.chains.length }})—— 只读;Root 链由高潮维护,本工具只动 Root 上本站点那一个转发节点
             </summary>
             <div v-for="c in platView.chains" :key="c.id" class="plat-row">
               <span class="pn">{{ c.root ? '[Root] ' : '' }}{{ c.name }}</span>
