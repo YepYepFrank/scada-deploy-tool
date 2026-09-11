@@ -2289,17 +2289,33 @@ function openFrontend() {
           </div>
         </div>
       </div>
-      <!-- 账号、密码、连接放同一行(2026-09-11 YY:原来环境按钮一多,账号挤到右边、密码掉到下一行) -->
+      <!-- 第 1 步自上而下:环境 → 账号密码 → 站点标识 → 连接(2026-09-11 YY)。
+           站点标识放在连接前:连接后按它自动载入同名站点 -->
       <div class="frow">
         <div class="field"><label>账号</label><input type="text" v-model="conn.username" /></div>
         <div class="field"><label>密码</label><input type="password" v-model="conn.password" /></div>
-        <button class="btn" :disabled="conn.status === 'busy'" @click="connect">
-          {{ conn.status === 'busy' ? conn.progress || '发现中…' : '连接并发现设备' }}
-        </button>
       </div>
       <label class="remember-check">
         <input type="checkbox" v-model="rememberLogin" />记住账号(30 天,只记账号名不记密码,保存在本机浏览器)
       </label>
+      <div class="frow" style="margin-top: 20px">
+        <div class="field">
+          <label>站点标识</label>
+          <select v-if="perm.role === 'field'" v-model="site.name">
+            <option v-for="s in perm.sites" :key="s" :value="s">{{ s }}</option>
+          </select>
+          <input v-else type="text" v-model="site.name" placeholder="如 xrs-mirror-test" />
+        </div>
+      </div>
+      <p class="site-id-hint">
+        只限英文(字母、数字、- 和 _)。<b>发布后不要改</b>——改了会被当成一个新站点,旧站点的规则链、资产还留在平台上,大屏地址也会变。
+      </p>
+      <p v-if="siteIdError && perm.role !== 'field'" class="err-msg site-id-err">{{ siteIdError }}</p>
+      <div class="connect-go">
+        <button class="btn" :disabled="conn.status === 'busy'" @click="connect">
+          {{ conn.status === 'busy' ? conn.progress || '发现中…' : '连接并发现设备' }}
+        </button>
+      </div>
       <p v-if="conn.status === 'ok'" class="ok-msg">
         已发现 {{ devices.length }} 台设备({{ dataDeviceCount }} 台有数据
         <template v-if="gatewayCount"> · {{ gatewayCount }} 个网关</template>),请进入「设备与测点」认领。
@@ -2329,19 +2345,6 @@ function openFrontend() {
           <button class="btn ghost sm" @click="dropDraftAt(i)">删除</button>
         </div>
       </div>
-      <div class="frow" style="margin-top: 20px">
-        <div class="field">
-          <label>站点标识</label>
-          <select v-if="perm.role === 'field'" v-model="site.name">
-            <option v-for="s in perm.sites" :key="s" :value="s">{{ s }}</option>
-          </select>
-          <input v-else type="text" v-model="site.name" placeholder="如 xrs-mirror-test" />
-        </div>
-      </div>
-      <p class="site-id-hint">
-        只限英文(字母、数字、- 和 _)。<b>发布后不要改</b>——改了会被当成一个新站点,旧站点的规则链、资产还留在平台上,大屏地址也会变。
-      </p>
-      <p v-if="siteIdError && perm.role !== 'field'" class="err-msg site-id-err">{{ siteIdError }}</p>
       <p v-if="perm.role === 'field'" class="perm-badge">
         👷 现场账号({{ perm.email }})— 仅可发布授权站点:{{ perm.sites.join('、') || '(未授权)' }};无清理权限
       </p>
