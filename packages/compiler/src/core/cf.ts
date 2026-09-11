@@ -1,4 +1,7 @@
-// 即时派生:expr.* / formula.* → 设备上的 SIMPLE 计算字段
+// 即时派生:expr.* / formula.* → SIMPLE 计算字段
+// 宿主规则(2026-09-10):输入全在一台设备上 → CF 建在这台设备;声明了 asset(向导对「输入跨设备」的运算
+// 一律写上)→ CF 建在这个独立资产(tbsite-agg)上,结果是该资产的遥测,页面直接绑资产取数。
+// 没写 asset 的跨设备运算是旧配置,仍按 device 字段挂在设备上,保证旧站点重发布时输出位置不变。
 import type { CalculatedField, CfArgument, Computation, ExprTerm, KeyRef } from '../types'
 
 export function tsArg(key: string, deviceId: string | null): CfArgument {
@@ -7,10 +10,36 @@ export function tsArg(key: string, deviceId: string | null): CfArgument {
   return a
 }
 
-export function buildCf(comp: Computation, hostId: string, devIds: Record<string, string>): CalculatedField {
+/** 即时派生运算的全部测点输入(常数项不算) */
+export function cfInputRefs(c: Computation): KeyRef[] {
+  if (Array.isArray(c.terms))
+    return (c.terms as ExprTerm[])
+      .filter((t): t is Extract<ExprTerm, { kind: 'key' }> => t.kind === 'key')
+      .map(t => ({ device: t.device, key: t.key }))
+  return Object.values(c.inputs ?? {})
+}
+
+/** 输入涉及的设备(去重,保持出现顺序) */
+export const cfInputDevices = (c: Computation): string[] => [...new Set(cfInputRefs(c).map(r => r.device))]
+
+export type CfHost = { entityType: 'DEVICE' | 'ASSET'; name: string }
+
+/** CF 建在哪:声明了 asset → 该资产;否则 → device 字段指的设备 */
+export const cfHost = (c: Computation): CfHost =>
+  typeof c.asset === 'string' && c.asset
+    ? { entityType: 'ASSET', name: c.asset }
+    : { entityType: 'DEVICE', name: c.device as string }
+
+export function buildCf(
+  comp: Computation,
+  hostId: string,
+  devIds: Record<string, string>,
+  hostType: 'DEVICE' | 'ASSET' = 'DEVICE'
+): CalculatedField {
   const out = comp.output as string
-  // 引用宿主设备自身的测点不写 refEntityId(TB 默认取 CF 所在实体)
-  const arg = (ref: KeyRef) => tsArg(ref.key, devIds[ref.device] !== hostId ? (devIds[ref.device] as string) : null)
+  // 引用宿主设备自身的测点不写 refEntityId(TB 默认取 CF 所在实体);宿主是资产时每个输入都指向设备
+  const arg = (ref: KeyRef) =>
+    tsArg(ref.key, hostType === 'ASSET' || devIds[ref.device] !== hostId ? (devIds[ref.device] as string) : null)
   let expression: string
   const args: Record<string, CfArgument> = {}
   if (comp.template === 'expr.add' || comp.template === 'expr.subtract') {
@@ -36,7 +65,7 @@ export function buildCf(comp: Computation, hostId: string, devIds: Record<string
   }
   const toAttr = comp.outputMode === 'attr'
   return {
-    entityId: { entityType: 'DEVICE', id: hostId },
+    entityId: { entityType: hostType, id: hostId },
     type: 'SIMPLE',
     name: out,
     configurationVersion: 1,

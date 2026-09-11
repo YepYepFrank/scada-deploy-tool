@@ -2,8 +2,9 @@
 // 只清理「当前配置声明过的东西」,不碰任何存量对象。
 import type { TbsiteConfig } from '../types'
 import { AGG_ASSET_TYPE, isCfTemplate, SITE_ASSET_TYPE } from '../core/constants'
+import { cfHost } from '../core/cf'
 import { expandConfig, siteChainNames } from '../core/plan'
-import { listCfs, type Reporter, type TbApi } from './api'
+import { findAsset, listCfs, type Reporter, type TbApi } from './api'
 import { unwireRootChain } from './publish'
 
 const q = (s: string) => encodeURIComponent(s)
@@ -18,22 +19,25 @@ export async function cleanup(
   const log: string[] = []
   const { cfg, computations } = expandConfig(original)
   const names = siteChainNames(cfg)
-  // 1. 计算字段
-  const outputsByDev: Record<string, Set<string>> = {}
+  // 1. 计算字段(宿主是设备,或跨设备运算的结果资产)
+  const outputsByHost: Record<string, { entityType: 'DEVICE' | 'ASSET'; name: string; outs: Set<string> }> = {}
   for (const c of computations)
-    if (isCfTemplate(c.template)) (outputsByDev[c.device as string] ||= new Set()).add(c.output as string)
+    if (isCfTemplate(c.template)) {
+      const h = cfHost(c)
+      ;(outputsByHost[`${h.entityType}|${h.name}`] ||= { ...h, outs: new Set() }).outs.add(c.output as string)
+    }
   let cfDel = 0
-  for (const [dev, outs] of Object.entries(outputsByDev)) {
-    const hostId = devIds[dev]
-    if (!hostId) continue
+  for (const { entityType, name, outs } of Object.values(outputsByHost)) {
     try {
-      for (const f of await listCfs(api, 'DEVICE', hostId))
+      const hostId = entityType === 'DEVICE' ? devIds[name] : (await findAsset(api, name))?.id.id
+      if (!hostId) continue
+      for (const f of await listCfs(api, entityType, hostId))
         if (outs.has(f.name)) {
           await api(`/api/calculatedField/${f.id.id}`, null, 'DELETE')
           cfDel++
         }
     } catch (e) {
-      log.push(`CF ${dev}: ${msg(e)}`)
+      log.push(`CF ${name}: ${msg(e)}`)
     }
   }
   report?.('cleanup', 'run', `已删计算字段 ${cfDel}`)
@@ -53,11 +57,18 @@ export async function cleanup(
   } catch (e) {
     log.push(`规则链清理: ${msg(e)}`)
   }
-  // 4. 汇聚 / 收益资产(工具创建的 tbsite-agg 类型,连同其上的 CF 一并删除)
-  for (const c of computations.filter(
-    x => x.template === 'aggregate.crossEntity' || x.template === 'revenue.periodic'
-  )) {
-    const asset = c.asset as string
+  // 4. 汇聚 / 收益 / 跨设备运算结果资产(工具创建的 tbsite-agg 类型,连同其上的 CF 一并删除)
+  const toolAssets = new Set(
+    computations
+      .filter(
+        x =>
+          x.template === 'aggregate.crossEntity' ||
+          x.template === 'revenue.periodic' ||
+          (isCfTemplate(x.template) && cfHost(x).entityType === 'ASSET')
+      )
+      .map(x => x.asset as string)
+  )
+  for (const asset of toolAssets) {
     try {
       const assets: { id: { id: string }; name: string; type: string }[] =
         (await api(`/api/tenant/assets?pageSize=100&page=0&textSearch=${q(asset)}`))?.data || []

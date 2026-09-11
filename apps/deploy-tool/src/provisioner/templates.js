@@ -20,7 +20,7 @@ export const TEMPLATES = {
     name: '两量相加',
     kind: 'cf',
     category: 'elec',
-    desc: 'A + B,输出为新测点。两个输入可以来自不同设备。',
+    desc: 'A + B,输出为新测点。两个输入在同一台设备 → 结果存这台设备;来自不同设备 → 结果存为独立资产。',
     params: [
       { id: 'a', label: '输入 A', type: 'key' },
       { id: 'b', label: '输入 B', type: 'key' },
@@ -43,7 +43,7 @@ export const TEMPLATES = {
     kind: 'cf',
     category: 'elec',
     custom: true,
-    desc: '多个测点/常数的连续加减乘除,按从左到右依次计算(如 A + B + C ÷ 3 表示先求和再除)。测点全部下拉选择,可跨设备;每项可勾选取绝对值。',
+    desc: '多个测点/常数的连续加减乘除,按从左到右依次计算(如 A + B + C ÷ 3 表示先求和再除)。测点全部下拉选择,可跨设备(跨设备时结果存为独立资产,单设备时存这台设备);每项可勾选取绝对值。',
     params: [],
     needsOutput: true,
   },

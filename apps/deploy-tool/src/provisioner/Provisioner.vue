@@ -14,7 +14,7 @@ import EditorApp from '../editor/EditorApp.vue'
 import PublishPanel from '../editor/PublishPanel.vue'
 import { listSitePages, readPageState } from '../publish/publishPage'
 import { declaredFromSiteConfig } from '../editor/declared-keys'
-import { publish, cleanup } from './publisher.js'
+import { publish, cleanup, cfInputDevices, assetCfLoad, MAX_CF_PER_ENTITY } from './publisher.js'
 import KeyPicker from '../components/KeyPicker.vue'
 
 const STEPS = ['连接与站点', '设备与测点', '运算配置', '组态编辑', '发布上线']
@@ -1042,6 +1042,7 @@ function blankForm() {
     selPrefixes: '',
     agg: 'sum',
     asset: '',
+    resultAsset: '', // 即时计算输入跨设备时,结果存到的资产名(空 = 默认名)
     aggName: '',
     chargeRef: '',
     dischargeRef: '',
@@ -1116,6 +1117,46 @@ const customValid = computed(() => {
   }
   return hasKey && !!f.output.trim()
 })
+
+/* ── 即时计算的结果存哪(2026-09-10):输入都在一台设备上 → 存这台设备;
+   输入跨设备 → 存为独立资产的遥测(不再挂到第一个输入所在的设备上),页面直接绑资产取数 ── */
+const defaultCalcAsset = computed(() => `${site.name}_CALC`)
+/** 弹窗里已选输入涉及的设备;设备模板(方式一)不绑具体设备,回空 */
+const modalCfDevices = computed(() => {
+  const tpl = modalTpl.value
+  if (!tpl || tpl.kind !== 'cf' || modal.target !== null) return []
+  const srcs = tpl.custom
+    ? (modal.form.terms || []).map(t => t.src).filter(s => s && s !== '__const__')
+    : tpl.params.filter(p => p.type === 'key').map(p => modal.form[p.id]).filter(Boolean)
+  return [...new Set(srcs.map(s => s.split('||')[0]))]
+})
+const modalResultAsset = computed(() => (modal.form.resultAsset || '').trim() || defaultCalcAsset.value)
+/** 结果资产名的问题(撞名 / 超 TB 单实体 CF 上限);空串 = 没问题 */
+const modalAssetProblem = computed(() => {
+  if (modalCfDevices.value.length < 2) return ''
+  const name = modalResultAsset.value
+  if (name === site.name) return '结果资产名不能与站点同名'
+  if (claimedDevices.value.some(d => d.name === name)) return `结果资产名与设备 ${name} 重名`
+  const others = computations.value.filter((_, i) => i !== modal.editIndex)
+  const probe = { ...siteJson.value, computations: [...others, { template: modal.tplId, asset: name, output: '_' }] }
+  const n = assetCfLoad(probe)[name] || 0
+  return n > MAX_CF_PER_ENTITY
+    ? `资产 ${name} 上已有 ${n - 1} 个计算结果,TB 单个实体最多 ${MAX_CF_PER_ENTITY} 个,请换一个资产名`
+    : ''
+})
+/** 定宿主:输入都在一台设备 → device;跨设备 → asset */
+function placeCf(c) {
+  const devs = cfInputDevices(c)
+  if (devs.length > 1) c.asset = modalResultAsset.value
+  else c.device = devs[0]
+}
+/** 运算清单里的「结果存在哪」;旧配置里跨设备却挂在设备上的,提示编辑一次即改存资产 */
+function cfWhere(c) {
+  if (c.asset) return `资产 ${c.asset}.${c.output}`
+  const legacy =
+    cfInputDevices(c).length > 1 ? '(旧配置:跨设备结果仍存在这台设备上,点「编辑」再保存即改存资产)' : ''
+  return `${c.device}.${c.output}${legacy}`
+}
 
 function openTpl(id, target = null) {
   const tpl = TEMPLATES[id]
@@ -1204,10 +1245,12 @@ function openEdit(i) {
     f.termOps = [...c.ops]
     f.output = c.output || ''
     f.outputMode = c.outputMode || 'ts'
+    f.resultAsset = c.asset || ''
   } else if (tpl.kind === 'cf') {
     for (const p of tpl.params) f[p.id] = `${c.inputs[p.id].device}||${c.inputs[p.id].key}`
     f.output = c.output || ''
     f.outputMode = c.outputMode || 'ts'
+    f.resultAsset = c.asset || ''
   } else if (c.template === 'window.cascade') {
     f.device = c.device
     f.keys = [...c.keys]
@@ -1263,6 +1306,7 @@ watch(
 const modalValid = computed(() => {
   const tpl = modalTpl.value
   if (!tpl) return false
+  if (modalAssetProblem.value) return false
   if (tpl.custom) return customValid.value
   if (tpl.kind === 'revenue') {
     const f = modal.form
@@ -1372,13 +1416,13 @@ function addComputation() {
         : { kind: 'key', abs: !!t.abs, ...keyRef(t.src) }
     )
     c.ops = [...modal.form.termOps]
-    c.device = c.terms.find(t => t.kind === 'key').device // 宿主 = 第一个测点所在设备
+    placeCf(c) // 单设备 → 存这台设备;跨设备 → 存结果资产
     c.output = modal.form.output.trim()
     c.outputMode = modal.form.outputMode
   } else if (tpl.kind === 'cf') {
     c.inputs = {}
     for (const p of tpl.params) c.inputs[p.id] = keyRef(modal.form[p.id])
-    c.device = c.inputs[tpl.params[0].id].device // 宿主 = 第一个输入所在设备
+    placeCf(c)
     c.output = tpl.fixedOutput || modal.form.output.trim()
     c.outputMode = modal.form.outputMode
   } else if (modal.tplId === 'window.cascade') {
@@ -1426,11 +1470,11 @@ function compDesc(c) {
       const tk = t.kind === 'const' ? t.value : t.abs ? `|${kd(t.key)}|` : kd(t.key)
       s = `(${s}) ${OP_SHOW[c.ops[i - 1]]} ${tk}`
     }
-    return `${s} → ${c.output}${c.outputMode === 'attr' ? '(存属性)' : ''}`
+    return `${s} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}`
   }
   if (c.template.startsWith('expr.')) {
     const op = c.template === 'expr.add' ? '+' : '−'
-    return `${c.inputs.a.device}.${kd(c.inputs.a.key)} ${op} ${c.inputs.b.device}.${kd(c.inputs.b.key)} → ${c.output}${c.outputMode === 'attr' ? '(存属性)' : ''}`
+    return `${c.inputs.a.device}.${kd(c.inputs.a.key)} ${op} ${c.inputs.b.device}.${kd(c.inputs.b.key)} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}`
   }
   if (tpl.kind === 'cf') {
     return `${c.device} → ${c.output}`
@@ -2512,6 +2556,25 @@ function openFrontend() {
               <option value="attr">服务端属性(状态/参数值)</option>
             </select>
           </div>
+        </div>
+        <div v-if="modalCfDevices.length" class="frow">
+          <div v-if="modalCfDevices.length > 1" class="field">
+            <label>结果存到资产 (英文名) · 输入来自 {{ modalCfDevices.length }} 台设备</label>
+            <input
+              type="text"
+              v-model="modal.form.resultAsset"
+              :placeholder="defaultCalcAsset"
+              style="min-width: 260px"
+            />
+            <div class="fhint">
+              跨设备的计算结果存为这个资产的遥测(没有会自动建,并挂到站点下),页面上绑这个资产取数;留空用
+              <b>{{ defaultCalcAsset }}</b>。几条跨设备运算可以共用一个资产,同一资产最多 {{ MAX_CF_PER_ENTITY }} 个结果。
+            </div>
+            <div v-if="modalAssetProblem" class="err-msg">{{ modalAssetProblem }}</div>
+          </div>
+          <p v-else class="hint" style="margin: 4px 0 0">
+            输入都在设备 <b>{{ modalCfDevices[0] }}</b> 上,结果存到这台设备。
+          </p>
         </div>
         <div v-if="modalTpl.fixedOutput" class="frow">
           <div class="field"><label>输出测点名</label><input type="text" :value="modalTpl.fixedOutput" disabled /></div>

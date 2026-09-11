@@ -3,7 +3,7 @@
 import type { Computation, IdMap, TbsiteConfig, WritePlan } from '../types'
 import { alarmMetadata } from './alarm'
 import { buildAggCfs, resolveAggMembers } from './aggregate'
-import { buildCf } from './cf'
+import { buildCf, cfHost } from './cf'
 import { chainNames, isCfTemplate } from './constants'
 import { revenueMetadata } from './revenue'
 import { rollupGroups, rollupMetadata } from './rollup'
@@ -70,12 +70,18 @@ export function compile(
 
   const cfs = computations
     .filter(c => isCfTemplate(c.template))
-    .map(c => ({
-      device: c.device as string,
-      output: c.output as string,
-      template: c.template,
-      body: buildCf(c, devIds[c.device as string] as string, devIds),
-    }))
+    .map(c => {
+      const host = cfHost(c)
+      const base = { output: c.output as string, template: c.template }
+      // 设备宿主的条目形状与冻结的 Python 版一致(parity);资产宿主是 TS 版新增,带 asset 不带 device
+      return host.entityType === 'ASSET'
+        ? {
+            asset: host.name,
+            ...base,
+            body: buildCf(c, pick(ids.assets, 'asset', host.name), devIds, 'ASSET'),
+          }
+        : { device: host.name, ...base, body: buildCf(c, devIds[host.name] as string, devIds) }
+    })
 
   const aggregates = computations
     .filter(c => c.template === 'aggregate.crossEntity')
@@ -157,7 +163,10 @@ export function summarizePlan(p: WritePlan): string[] {
   const lines = [
     `站点 ${p.site.name} · ${p.computations.length} 运算` +
       (p.validation.notes.length ? ` · ${p.validation.notes.join('; ')}` : ''),
-    `计算字段 ${p.cfs.length} 个` + (p.cfs.length ? ':' + p.cfs.map(c => `${c.device}.${c.output}`).join(', ') : ''),
+    `计算字段 ${p.cfs.length} 个` +
+      (p.cfs.length
+        ? ':' + p.cfs.map(c => (c.asset ? `资产 ${c.asset}.${c.output}` : `${c.device}.${c.output}`)).join(', ')
+        : ''),
     `跨设备汇聚 ${p.aggregates.length} 项` +
       (p.aggregates.length
         ? ':' +

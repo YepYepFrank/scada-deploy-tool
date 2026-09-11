@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyOutputPrefix,
+  assetCfLoad,
   cascadeWhitelist,
+  cfHost,
+  cfInputDevices,
   expandConfig,
   outputInventory,
   renameTable,
@@ -170,6 +173,90 @@ describe('buildCf', () => {
     expect(() => buildCf({ template: 'expr.nope', device: 'A1', output: 'x' }, 'id-a1', ids)).toThrow(
       '未知即时派生模板'
     )
+  })
+})
+
+describe('跨设备即时派生 → 结果资产(2026-09-10)', () => {
+  const cross = (extra: Partial<Computation> = {}): Computation => ({
+    template: 'expr.add',
+    asset: 'T_CALC',
+    output: 'sumP',
+    inputs: { a: { device: 'A1', key: 'p' }, b: { device: 'B1', key: 'p' } },
+    ...extra,
+  })
+  const pq: Computation = {
+    template: 'expr.add',
+    device: 'A1',
+    output: 'pq',
+    inputs: { a: { device: 'A1', key: 'p' }, b: { device: 'A1', key: 'q' } },
+  }
+
+  it('cfHost / cfInputDevices:写了 asset 走资产,否则走 device;常数项不算输入', () => {
+    expect(cfHost(cross())).toEqual({ entityType: 'ASSET', name: 'T_CALC' })
+    expect(cfHost(pq)).toEqual({ entityType: 'DEVICE', name: 'A1' })
+    expect(cfInputDevices(cross())).toEqual(['A1', 'B1'])
+    expect(
+      cfInputDevices({
+        template: 'expr.custom',
+        terms: [
+          { kind: 'key', device: 'A2', key: 'p' },
+          { kind: 'const', value: 2 },
+          { kind: 'key', device: 'A2', key: 'q' },
+        ],
+        ops: ['*', '+'],
+      })
+    ).toEqual(['A2'])
+  })
+
+  it('宿主是资产:CF 挂在资产上,每个输入都带设备 refEntityId', () => {
+    const cf = buildCf(cross(), 'id-asset', ids, 'ASSET')
+    expect(cf.entityId).toEqual({ entityType: 'ASSET', id: 'id-asset' })
+    expect(cf.configuration.arguments.a!.refEntityId).toEqual({ entityType: 'DEVICE', id: 'id-a1' })
+    expect(cf.configuration.arguments.b!.refEntityId).toEqual({ entityType: 'DEVICE', id: 'id-b1' })
+  })
+
+  it('compile / outputInventory:资产宿主进 plan.cfs[].asset 与输出清单 ASSET;单设备的仍在设备上', () => {
+    const p = compile(base({ outputPrefix: 'calc_', computations: [cross(), pq] }))
+    expect(p.cfs.map(c => [c.asset ?? null, c.device ?? null, c.output])).toEqual([
+      ['T_CALC', null, 'calc_sumP'],
+      [null, 'A1', 'calc_pq'],
+    ])
+    expect(p.cfs[0]!.body.entityId).toEqual({ entityType: 'ASSET', id: 'asset:T_CALC' })
+    expect(p.outputs.filter(o => o.kind === 'cf').map(o => `${o.entityType}|${o.entity}|${o.key}`)).toEqual([
+      'ASSET|T_CALC|calc_sumP',
+      'DEVICE|A1|calc_pq',
+    ])
+    // 资产上的输出不进级联白名单(白名单只管设备发出的消息)
+    expect(p.cascadeKeys).toEqual([])
+    expect(summarizePlan(p).find(l => l.startsWith('计算字段'))).toContain('资产 T_CALC.calc_sumP')
+  })
+
+  it('校验:资产宿主不查 device;不许与站点 / 设备重名;同一资产 CF 超过 5 个报错(与汇聚合并计数)', () => {
+    expect(validateConfig(base({ computations: [cross()] }))).toEqual([])
+    expect(validateConfig(base({ computations: [cross({ asset: 'T' })] }))).toEqual([
+      '运算 #1 (expr.add): 结果资产名不能与站点同名',
+    ])
+    expect(validateConfig(base({ computations: [cross({ asset: 'A1' })] }))).toEqual([
+      '运算 #1 (expr.add): 结果资产名与设备 A1 重名',
+    ])
+    const six = Array.from({ length: 6 }, (_, i) => cross({ output: `o${i}` }))
+    expect(validateConfig(base({ computations: six }))).toEqual([
+      '资产 T_CALC 上要建 6 个计算字段,超过 TB 单实体上限 5:请给其中几条运算换一个结果资产名',
+    ])
+    const withAgg = base({
+      computations: [
+        cross(),
+        {
+          template: 'aggregate.crossEntity',
+          selector: { profiles: ['PCS'] },
+          key: 'p',
+          agg: 'sum',
+          asset: 'T_CALC',
+          output: 'tot',
+        },
+      ],
+    })
+    expect(assetCfLoad(withAgg)).toEqual({ T_CALC: 2 })
   })
 })
 

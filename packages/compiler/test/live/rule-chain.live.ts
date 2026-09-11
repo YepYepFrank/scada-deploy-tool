@@ -51,7 +51,7 @@ const MAX_CF_PER_ENTITY = 5
 async function moveCfsToDevicesWithHeadroom(cfg: TbsiteConfig, devIds: Record<string, string>, api: TbApi) {
   const plan = compile(cfg, { devices: devIds })
   const need = new Map<string, number>()
-  for (const c of plan.cfs) need.set(c.device, (need.get(c.device) ?? 0) + 1)
+  for (const c of plan.cfs) if (c.device) need.set(c.device, (need.get(c.device) ?? 0) + 1)
   const used = new Map<string, number>()
   const usedOf = async (dev: string) => {
     if (!used.has(dev)) used.set(dev, (await listCfs(api, 'DEVICE', devIds[dev]!)).length)
@@ -118,7 +118,8 @@ describe.skipIf(!hasCreds)(`规则链路径(live @ ${TB_BASE})`, () => {
 
     const snap = await snapshotSite(api, cfg.site.name, devIds)
     // 设备 CF:计划里每个 device.output 都在
-    for (const c of plan.cfs) expect(snap.cfs[c.device]?.[c.output], `CF ${c.device}.${c.output}`).toBeTruthy()
+    for (const c of plan.cfs.filter(x => x.device))
+      expect(snap.cfs[c.device!]?.[c.output], `CF ${c.device}.${c.output}`).toBeTruthy()
     // 规则链:名字来自 siteChainNames,节点 / 连线数与计划元数据一致
     const names = siteChainNames(cfg)
     const expectChains = [
@@ -168,8 +169,8 @@ describe.skipIf(!hasCreds)(`规则链路径(live @ ${TB_BASE})`, () => {
     expect(gone.rootFlow).toBe(false)
     expect(gone.rootNodes).toBe(baseline.rootNodes)
     const plan = compile(cfg, { devices: devIds })
-    for (const c of plan.cfs)
-      expect(gone.cfs[c.device]?.[c.output], `CF ${c.device}.${c.output} 应已删`).toBeUndefined()
+    for (const c of plan.cfs.filter(x => x.device))
+      expect(gone.cfs[c.device!]?.[c.output], `CF ${c.device}.${c.output} 应已删`).toBeUndefined()
     // 汇聚 / 收益资产也没了
     for (const a of plan.aggregates.map(x => x.asset).concat(plan.revenue?.assets ?? [])) {
       const found: { name: string }[] =

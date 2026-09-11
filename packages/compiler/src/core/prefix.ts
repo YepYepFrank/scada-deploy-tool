@@ -2,6 +2,7 @@
 // 前缀只在配置声明了 outputPrefix 时生效(向导新建站点默认 'calc_';旧站点配置没有该字段 → 不改名)。
 import type { Computation, TbsiteConfig } from '../types'
 import { resolveAggMembers } from './aggregate'
+import { cfHost } from './cf'
 import { AGG_SUFFIX, CASCADE_LEVELS, MAX_CF_ARGS } from './constants'
 
 /** 向导新建站点的默认前缀(ADR-003 决定 1) */
@@ -56,7 +57,8 @@ export function outputInventory(cfg: TbsiteConfig, computations: Computation[], 
   for (const c of computations) {
     const t = c.template
     if (t.startsWith('expr.') || t.startsWith('formula.')) {
-      push({ entityType: 'DEVICE', entity: c.device as string, key: c.output as string, kind: 'cf', template: t })
+      const host = cfHost(c)
+      push({ entityType: host.entityType, entity: host.name, key: c.output as string, kind: 'cf', template: t })
     } else if (t === 'aggregate.crossEntity') {
       const n = resolveAggMembers(cfg, c).length
       const asset = c.asset as string

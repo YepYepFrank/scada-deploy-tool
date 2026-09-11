@@ -3,7 +3,7 @@
 import type { Computation, TbsiteConfig } from '../types'
 import { alarmMetadata } from '../core/alarm'
 import { buildAggCfs, resolveAggMembers } from '../core/aggregate'
-import { buildCf } from '../core/cf'
+import { buildCf, cfHost } from '../core/cf'
 import { AGG_ASSET_TYPE, chainNames, customerIdOf, isCfTemplate, SITE_ASSET_TYPE } from '../core/constants'
 import { cascadeWhitelist, outputInventory, outputPrefixOf } from '../core/prefix'
 import { ConfigError, expandConfig, siteChainNames } from '../core/plan'
@@ -227,7 +227,12 @@ async function followSiteAsset(
   const names = [
     ...new Set(
       computations
-        .filter(c => c.template === 'aggregate.crossEntity' || c.template === 'revenue.periodic')
+        .filter(
+          c =>
+            c.template === 'aggregate.crossEntity' ||
+            c.template === 'revenue.periodic' ||
+            (isCfTemplate(c.template) && cfHost(c).entityType === 'ASSET')
+        )
         .map(c => c.asset as string)
     ),
   ]
@@ -309,21 +314,32 @@ export async function publish(
       return 0
     })
     let cfComps = computations.filter(c => isCfTemplate(c.template))
+    // 失败清单与重试范围里的 device 字段存的是宿主名(设备名,或跨设备运算的结果资产名)
     if (retry?.cf?.length) {
       const want = new Set(retry.cf.map(x => `${x.device}@@${x.output}`))
-      cfComps = cfComps.filter(c => want.has(`${c.device}@@${c.output}`))
+      cfComps = cfComps.filter(c => want.has(`${cfHost(c).name}@@${c.output}`))
     }
     let created = 0,
       updated = 0,
       failed = 0
     const cfCache: Record<string, { id: { id: string }; name: string }[]> = {}
+    const assetIds: Record<string, string> = {}
+    /** 跨设备运算的结果资产:没有就建(tbsite-agg);同名但不是本工具建的资产不借用,免得往别人的资产上挂 CF */
+    const resultAsset = async (name: string) => {
+      if (assetIds[name]) return assetIds[name]
+      const found = await findAsset(api, name)
+      if (found && found.type !== AGG_ASSET_TYPE)
+        throw new Error(`资产「${name}」已存在,类型是 ${found.type},不是本工具建的结果资产,请换一个结果资产名`)
+      const id = found ? found.id.id : (await api('/api/asset', { name, type: AGG_ASSET_TYPE })).id.id
+      return (assetIds[name] = id as string)
+    }
     for (const c of cfComps) {
-      const device = c.device as string
+      const host = cfHost(c)
       const output = c.output as string
       try {
-        const hostId = devIds[device] as string
-        const body = buildCf(c, hostId, devIds)
-        cfCache[hostId] ||= await listCfs(api, 'DEVICE', hostId)
+        const hostId = host.entityType === 'ASSET' ? await resultAsset(host.name) : (devIds[host.name] as string)
+        const body = buildCf(c, hostId, devIds, host.entityType)
+        cfCache[hostId] ||= await listCfs(api, host.entityType, hostId)
         const existing = cfCache[hostId].find(x => x.name === output)
         if (existing) {
           body.id = existing.id
@@ -331,14 +347,16 @@ export async function publish(
         } else created++
         const saved = await api('/api/calculatedField', body)
         if (!existing && saved?.id) cfCache[hostId].push({ id: saved.id, name: output })
-        report('cf', 'run', `${created + updated + failed}/${cfComps.length} · ${device}`)
+        report('cf', 'run', `${created + updated + failed}/${cfComps.length} · ${host.name}`)
       } catch (e) {
         failed++
-        failures.push({ step: 'cf', device, output, error: e instanceof Error ? e.message : String(e) })
+        failures.push({ step: 'cf', device: host.name, output, error: e instanceof Error ? e.message : String(e) })
       }
     }
+    const onAssets = Object.keys(assetIds).length
     const detail = cfComps.length
       ? `新建 ${created} · 更新 ${updated}` +
+        (onAssets ? ` · 跨设备结果存到 ${onAssets} 个资产` : '') +
         (pruned ? ` · 清理旧输出 ${pruned}` : '') +
         (failed ? ` · 失败 ${failed}(见下方失败清单)` : '') +
         (retry?.cf?.length ? ` · 重试范围 ${cfComps.length} 条` : '')

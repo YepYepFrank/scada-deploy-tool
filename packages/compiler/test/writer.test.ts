@@ -343,6 +343,110 @@ describe('publish · ADR-003 前缀 / 清理旧输出 / 汇聚资产随站点', 
   })
 })
 
+describe('publish · 跨设备运算的结果存到资产(2026-09-10)', () => {
+  const dev = (name: string, keys: string[]) => ({ name, profile: 'IED', keys: keys.map(key => ({ key })) })
+  const single = {
+    template: 'expr.add',
+    device: 'D1',
+    output: 'pq',
+    inputs: { a: { device: 'D1', key: 'P' }, b: { device: 'D1', key: 'Q' } },
+  }
+  const crossInputs = { a: { device: 'D1', key: 'P' }, b: { device: 'D2', key: 'P' } }
+  const cfgOf = (cross: Record<string, unknown>): TbsiteConfig => ({
+    schema: 'tbsite/v2',
+    site: { name: 'S' },
+    outputPrefix: 'calc_',
+    devices: [dev('D1', ['P', 'Q']), dev('D2', ['P'])],
+    computations: [single, { template: 'expr.subtract', output: 'dP', inputs: crossInputs, ...cross }],
+  })
+  const onAsset = cfgOf({ asset: 'S-CALC' })
+  const legacy = cfgOf({ device: 'D1' }) // 旧配置:跨设备但没写 asset,宿主是第一个输入所在设备
+  type CfRow = {
+    name: string
+    entityId: { entityType: string; id: string }
+    configuration: { arguments: Record<string, { refEntityId?: { id: string } }> }
+  }
+  const where = (tb: ReturnType<typeof fakeTb>, devIds: Record<string, string>) =>
+    (tb.cfs as unknown as CfRow[])
+      .map(c => {
+        const host =
+          tb.assets.find(a => a.id.id === c.entityId.id)?.name ??
+          Object.keys(devIds).find(k => devIds[k] === c.entityId.id)
+        return `${c.name}@${host}`
+      })
+      .sort()
+
+  it('单设备运算的 CF 在设备上;跨设备的在结果资产上,输入全带设备引用;资产随站点;二次发布幂等', async () => {
+    const tb = fakeTb(['D1', 'D2'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1', 'D2'])
+    const r = collect()
+    expect(await publish(onAsset, devIds, tb.api, r.report, { layeredSettleMs: 0 })).toEqual([])
+    const asset = tb.assets.find(a => a.name === 'S-CALC')!
+    expect(asset.type).toBe('tbsite-agg')
+    expect(where(tb, devIds)).toEqual(['calc_dP@S-CALC', 'calc_pq@D1'])
+    const cf = (tb.cfs as unknown as CfRow[]).find(c => c.name === 'calc_dP')!
+    expect(cf.entityId.entityType).toBe('ASSET')
+    expect(cf.configuration.arguments.a!.refEntityId!.id).toBe(devIds.D1)
+    expect(cf.configuration.arguments.b!.refEntityId!.id).toBe(devIds.D2)
+    expect(r.log.find(l => l.startsWith('cf:ok'))).toContain('跨设备结果存到 1 个资产')
+    const site = tb.assets.find(a => a.name === 'S')!
+    expect(
+      tb.relations.some((x: unknown) => {
+        const rel = x as { from: { id: string }; to: { id: string }; type: string }
+        return rel.from.id === site.id.id && rel.to.id === asset.id.id && rel.type === 'Contains'
+      })
+    ).toBe(true)
+    const r2 = collect()
+    expect(await publish(onAsset, devIds, tb.api, r2.report, { layeredSettleMs: 0 })).toEqual([])
+    expect(where(tb, devIds)).toEqual(['calc_dP@S-CALC', 'calc_pq@D1'])
+    expect(r2.log.find(l => l.startsWith('cf:ok'))).toContain('新建 0 · 更新 2')
+    expect(tb.assets.filter(a => a.name === 'S-CALC')).toHaveLength(1)
+  })
+
+  it('旧配置照旧挂设备;改成存资产后再发布:设备上的旧 CF 被清掉,资产上建新的', async () => {
+    const tb = fakeTb(['D1', 'D2'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1', 'D2'])
+    expect(await publish(legacy, devIds, tb.api, () => {}, { layeredSettleMs: 0 })).toEqual([])
+    expect(where(tb, devIds)).toEqual(['calc_dP@D1', 'calc_pq@D1'])
+    const r = collect()
+    expect(await publish(onAsset, devIds, tb.api, r.report, { layeredSettleMs: 0 })).toEqual([])
+    expect(where(tb, devIds)).toEqual(['calc_dP@S-CALC', 'calc_pq@D1'])
+    expect(r.log.find(l => l.startsWith('cf:ok'))).toContain('清理旧输出 1')
+  })
+
+  it('结果资产名撞上别人的资产:这一条失败、不往别人的资产上挂 CF,其余照常;重试只重跑它', async () => {
+    const tb = fakeTb(['D1', 'D2'])
+    tb.assets.push({ id: { id: 'colleague', entityType: 'ASSET' }, name: 'S-CALC', type: 'building' })
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1', 'D2'])
+    const failures = await publish(onAsset, devIds, tb.api, () => {}, { layeredSettleMs: 0 })
+    expect(failures).toHaveLength(1)
+    expect(failures[0]).toMatchObject({ step: 'cf', device: 'S-CALC', output: 'calc_dP' })
+    expect(failures[0]!.error).toContain('不是本工具建的结果资产')
+    expect(where(tb, devIds)).toEqual(['calc_pq@D1'])
+    // 同事把资产改名后按失败清单重试:只重跑这一条
+    tb.assets.find(a => a.id.id === 'colleague')!.name = 'colleague-building'
+    const r = collect()
+    const again = await publish(onAsset, devIds, tb.api, r.report, {
+      layeredSettleMs: 0,
+      retry: { steps: ['cf'], cf: [{ device: 'S-CALC', output: 'calc_dP' }] },
+    })
+    expect(again).toEqual([])
+    expect(where(tb, devIds)).toEqual(['calc_dP@S-CALC', 'calc_pq@D1'])
+    expect(r.log.find(l => l.startsWith('cf:ok'))).toContain('重试范围 1 条')
+  })
+
+  it('cleanup 连结果资产带其上的 CF 一起删,设备上的也删', async () => {
+    const tb = fakeTb(['D1', 'D2'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1', 'D2'])
+    await publish(onAsset, devIds, tb.api, () => {}, { layeredSettleMs: 0 })
+    const msg = await cleanup(onAsset, devIds, tb.api)
+    expect(msg).toContain('计算字段 ×2')
+    expect(msg).toContain('已删汇聚资产 S-CALC')
+    expect(tb.cfs).toHaveLength(0)
+    expect(tb.assets.map(a => a.name)).toEqual([])
+  })
+})
+
 describe('cleanup', () => {
   it('删掉本站点的 CF / 规则链 / Root 转发 / 汇聚资产 / 站点资产,不碰存量', async () => {
     const cfg = fixture('xrs-mirror-test.tbsite.json')

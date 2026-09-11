@@ -148,8 +148,11 @@ export interface WritePlan {
   cascadeKeys: string[]
   /** 模板展开产物在前 + 手工运算项 */
   computations: Computation[]
-  /** 设备上的即时派生 CF(expr.* / formula.*) */
-  cfs: { device: string; output: string; template: string; body: CalculatedField }[]
+  /**
+   * 即时派生 CF(expr.* / formula.*):输入在一台设备上 → device(建在该设备);
+   * 输入跨设备、声明了 asset → asset(建在该独立资产上,结果是资产遥测)。两者恰有其一。
+   */
+  cfs: { device?: string; asset?: string; output: string; template: string; body: CalculatedField }[]
   /** 跨设备汇聚:目标资产(tbsite-agg)+ 成员关系 + 资产上的 CF(分层时 分组N + 汇总1) */
   aggregates: { output: string; asset: string; members: string[]; layered: boolean; bodies: CalculatedField[] }[]
   revenue: { chainName: string; assets: string[]; items: Computation[]; metadata: RuleChainMetadata } | null

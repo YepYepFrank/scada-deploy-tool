@@ -15,6 +15,8 @@ export const CASCADE_LEVELS = [
 export const MAX_CF_ARGS = 10
 /** 4 个分组 CF × 10 参数(单实体 CF 上限 5 = 4 分组 + 1 汇总) */
 export const MAX_AGG_MEMBERS = 40
+/** 租户档案 maxCalculatedFieldsPerEntity(镜像默认 5,live 用例实测撞过) */
+export const MAX_CF_PER_ENTITY = 5
 
 export const AGG_ASSET_TYPE = 'tbsite-agg'
 export const SITE_ASSET_TYPE = 'tbsite'

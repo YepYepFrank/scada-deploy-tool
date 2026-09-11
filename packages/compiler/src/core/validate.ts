@@ -1,6 +1,26 @@
 import type { TbsiteConfig } from '../types'
-import { MAX_AGG_MEMBERS } from './constants'
+import { isCfTemplate, MAX_AGG_MEMBERS, MAX_CF_ARGS, MAX_CF_PER_ENTITY } from './constants'
 import { resolveAggMembers } from './aggregate'
+
+/**
+ * 每个结果资产上要建几个 CF:跨设备运算每条 1 个;跨设备汇聚 ≤10 台 1 个、多了「分组 N + 汇总 1」。
+ * 同一个资产名可以被几条运算共用,但 TB 单实体 CF 有上限(MAX_CF_PER_ENTITY),超了发布会失败。
+ */
+export function assetCfLoad(cfg: TbsiteConfig): Record<string, number> {
+  const load: Record<string, number> = {}
+  for (const c of cfg.computations || []) {
+    const asset = typeof c.asset === 'string' ? c.asset : ''
+    if (!asset) continue
+    if (isCfTemplate(c.template)) load[asset] = (load[asset] ?? 0) + 1
+    else if (c.template === 'aggregate.crossEntity') {
+      const n = resolveAggMembers(cfg, c).length
+      // 成员超上限的汇聚已单独报错,这里不重复算进资产负载
+      if (n <= MAX_AGG_MEMBERS)
+        load[asset] = (load[asset] ?? 0) + (n > MAX_CF_ARGS ? Math.ceil(n / MAX_CF_ARGS) + 1 : 1)
+    }
+  }
+  return load
+}
 
 /** 配置校验:返回错误清单,空即通过。只看结构与引用,不查 TB。 */
 export function validateConfig(cfg: TbsiteConfig): string[] {
@@ -51,7 +71,12 @@ export function validateConfig(cfg: TbsiteConfig): string[] {
         errs.push(`${w}: 成员 ${members.length} 台超过上限 ${MAX_AGG_MEMBERS},请按前缀拆成多个汇聚`)
       continue
     }
-    if (!names.has(c.device as string)) errs.push(`${w}: 设备未认领`)
+    const cfOnAsset = isCfTemplate(c.template) && typeof c.asset === 'string' && !!c.asset
+    if (cfOnAsset) {
+      // 结果资产不能与站点资产 / 已认领设备重名(TB 里按名字找实体,重名会绑错)
+      if (c.asset === cfg.site?.name) errs.push(`${w}: 结果资产名不能与站点同名`)
+      else if (names.has(c.asset as string)) errs.push(`${w}: 结果资产名与设备 ${c.asset} 重名`)
+    } else if (!names.has(c.device as string)) errs.push(`${w}: 设备未认领`)
     if (c.template === 'expr.custom') {
       if (!Array.isArray(c.terms) || c.terms.length < 2) errs.push(`${w}: 至少两项`)
       if ((c.ops || []).length !== (c.terms || []).length - 1) errs.push(`${w}: 运算符数量不匹配`)
@@ -67,5 +92,10 @@ export function validateConfig(cfg: TbsiteConfig): string[] {
       if (typeof c.condition?.value !== 'number') errs.push(`${w}: 阈值必须是数字`)
     }
   }
+  for (const [asset, n] of Object.entries(assetCfLoad(cfg)))
+    if (n > MAX_CF_PER_ENTITY)
+      errs.push(
+        `资产 ${asset} 上要建 ${n} 个计算字段,超过 TB 单实体上限 ${MAX_CF_PER_ENTITY}:请给其中几条运算换一个结果资产名`
+      )
   return errs
 }
