@@ -585,8 +585,8 @@ describe('第 3 步建结果资产 · 归属标记 · 接管 / 交还 · 同步(
         .sort()
     ).toEqual(['calc_dP', 'calc_pq', 'calc_x', '总电压'])
     expect(r.log.find(l => l.startsWith('cf:ok'))).toContain('清理旧输出 1')
-    expect(rows(tb).find(c => c.name === 'calc_pq')!.additionalInfo).toEqual(OWNER_S)
-    expect(rows(tb).find(c => c.name === 'calc_dP')!.additionalInfo).toEqual(OWNER_S)
+    expect(rows(tb).find(c => c.name === 'calc_pq')!.additionalInfo).toMatchObject(OWNER_S)
+    expect(rows(tb).find(c => c.name === 'calc_dP')!.additionalInfo).toMatchObject(OWNER_S)
     // 再发布:更新时把 TB 读回的 version 带上(乐观锁)
     rows(tb).find(c => c.name === 'calc_pq')!.version = 7
     const sent: Record<string, unknown>[] = []
@@ -626,7 +626,7 @@ describe('第 3 步建结果资产 · 归属标记 · 接管 / 交还 · 同步(
     const onCol = rows(tb).filter(c => c.entityId.id === 'col')
     expect(onCol.map(c => c.name)).toEqual(['实时曲线-总功率']) // 原地更新,没多建
     expect(onCol[0]!.configuration!.output!.name).toBe('tsTotal') // 不加 calc_ 前缀
-    expect(onCol[0]!.additionalInfo).toEqual(OWNER_S)
+    expect(onCol[0]!.additionalInfo).toMatchObject(OWNER_S)
     expect(tb.assets.find(a => a.id.id === 'col')).toMatchObject({ type: 'REALTIME' })
     const site = tb.assets.find(a => a.name === 'S')!
     expect(contains(tb, site.id.id, 'col')).toBe(false)
@@ -724,7 +724,9 @@ describe('第 3 步建结果资产 · 归属标记 · 接管 / 交还 · 同步(
     })
     const st = await readPlatformState(tb.api, cfgOf([pq, cross]), devIds)
     const by = (n: string) => st.cfs.find(x => x.cf.name === n)!
-    expect(by('calc_pq')).toMatchObject({ owner: 'mine', drift: 'changed' })
+    // 平台上被人改过(发布时记下的指纹与现在对不上)→ 冲突,附逐项差异
+    expect(by('calc_pq')).toMatchObject({ owner: 'mine', drift: 'conflict' })
+    expect(by('calc_pq').diff).toEqual([{ item: '表达式', tool: 'a + b', platform: 'a * b' }])
     expect(by('calc_gone')).toMatchObject({ owner: 'mine', drift: 'orphan' })
     expect(by('calc_x')).toMatchObject({ owner: 'otherSite', site: 'T' })
     expect(by('总电压')).toMatchObject({ owner: 'foreign' })
@@ -732,6 +734,93 @@ describe('第 3 步建结果资产 · 归属标记 · 接管 / 交还 · 同步(
     expect(st.missing).toEqual([{ entityType: 'ASSET', entity: 'S-CALC', name: 'calc_dP' }])
     expect(st.occupied['DEVICE|D1']).toBe(4)
     expect(st.chains.map(c => [c.name, c.root, c.mine])).toEqual([['Root Rule Chain', true, false]])
+  })
+})
+
+describe('写入指纹与冲突(2026-09-11)', () => {
+  const dev = (name: string, keys: string[]) => ({ name, profile: 'IED', keys: keys.map(key => ({ key })) })
+  const pq = {
+    template: 'expr.add',
+    device: 'D1',
+    output: 'pq',
+    inputs: { a: { device: 'D1', key: 'P' }, b: { device: 'D1', key: 'Q' } },
+  }
+  const roll = { template: 'window.aggregate', device: 'D1', keys: ['P'], aggs: ['avg'], window: '5m' }
+  const cfgOf = (computations: unknown[]) =>
+    ({
+      schema: 'tbsite/v2',
+      site: { name: 'S' },
+      outputPrefix: 'calc_',
+      devices: [dev('D1', ['P', 'Q'])],
+      computations,
+    }) as unknown as TbsiteConfig
+  const opts = { layeredSettleMs: 0, healthWaitMs: 0 }
+  const setup = async (computations: unknown[]) => {
+    const tb = fakeTb(['D1'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1'])
+    expect(await publish(cfgOf(computations), devIds, tb.api, () => {}, opts)).toEqual([])
+    return { tb, devIds }
+  }
+  const cfRow = (tb: ReturnType<typeof fakeTb>, name: string) =>
+    (tb.cfs as unknown as (TbCf & { configuration: { expression: string } })[]).find(c => c.name === name)!
+  const pqRow = (st: Awaited<ReturnType<typeof readPlatformState>>) => st.cfs.find(x => x.cf.name === 'calc_pq')!
+
+  it('发布:计算字段标记里带写入指纹;站点资产上记下本站点规则链的指纹', async () => {
+    const { tb } = await setup([pq, roll])
+    expect(cfRow(tb, 'calc_pq').additionalInfo).toMatchObject({
+      managedBy: 'deploy-tool',
+      site: 'S',
+      print: expect.stringMatching(/^[0-9a-f]{8}$/),
+    })
+    const site = tb.assets.find(a => a.name === 'S')!
+    expect(Object.keys(tb.attrs[site.id.id]!.deployPrints as object)).toEqual(['Site Rollups · S'])
+  })
+
+  it('三方比对:向导改了、平台没动 → 待发布;平台上被人改了 → 冲突;两边都改 → 冲突且标明向导也改了', async () => {
+    const { tb, devIds } = await setup([pq])
+    const edited = { ...pq, template: 'expr.subtract' } // 向导里把 a + b 改成 a - b,还没发布
+    let st = await readPlatformState(tb.api, cfgOf([edited]), devIds)
+    expect(pqRow(st)).toMatchObject({ owner: 'mine', drift: 'pending' })
+    expect(pqRow(st).diff).toEqual([{ item: '表达式', tool: 'a - b', platform: 'a + b' }])
+
+    cfRow(tb, 'calc_pq').configuration.expression = 'a * b' // 有人在 TB 里改了
+    st = await readPlatformState(tb.api, cfgOf([pq]), devIds)
+    expect(pqRow(st)).toMatchObject({ drift: 'conflict' })
+    expect(pqRow(st).localToo).toBeUndefined()
+    expect(pqRow(st).diff).toEqual([{ item: '表达式', tool: 'a + b', platform: 'a * b' }])
+
+    st = await readPlatformState(tb.api, cfgOf([edited]), devIds)
+    expect(pqRow(st)).toMatchObject({ drift: 'conflict', localToo: true })
+
+    // 再发布一次(以向导为准)→ 指纹更新,回到一致
+    expect(await publish(cfgOf([pq]), devIds, tb.api, () => {}, opts)).toEqual([])
+    expect(pqRow(await readPlatformState(tb.api, cfgOf([pq]), devIds))).toMatchObject({ drift: 'same' })
+  })
+
+  it('旧对象没有写入指纹:和向导一样算一致;不一样标「不一致」(分不清是谁改的)', async () => {
+    const { tb, devIds } = await setup([pq])
+    delete (cfRow(tb, 'calc_pq').additionalInfo as Record<string, unknown>).print
+    expect(pqRow(await readPlatformState(tb.api, cfgOf([pq]), devIds))).toMatchObject({ drift: 'same' })
+    cfRow(tb, 'calc_pq').configuration.expression = 'a * b'
+    expect(pqRow(await readPlatformState(tb.api, cfgOf([pq]), devIds))).toMatchObject({ drift: 'mismatch' })
+  })
+
+  it('规则链:向导改了周期 → 待发布;平台上被人改了节点配置 → 冲突,差异精确到节点的配置字段', async () => {
+    const { tb, devIds } = await setup([roll])
+    const chainName = 'Site Rollups · S'
+    const row = (st: Awaited<ReturnType<typeof readPlatformState>>) => st.chains.find(c => c.name === chainName)!
+    expect(row(await readPlatformState(tb.api, cfgOf([roll]), devIds))).toMatchObject({ mine: true, drift: 'same' })
+
+    const pend = row(await readPlatformState(tb.api, cfgOf([{ ...roll, window: '15m' }]), devIds))
+    expect(pend.drift).toBe('pending')
+    expect(pend.diff!.length).toBeGreaterThan(0)
+
+    const chain = tb.chains.find(c => c.name === chainName)!
+    const gen = tb.metadata[chain.id.id]!.nodes.find(n => n.type.endsWith('TbMsgGeneratorNode'))!
+    gen.configuration.periodInSeconds = 60 // 有人在 TB 里把定时周期改了
+    const hit = row(await readPlatformState(tb.api, cfgOf([roll]), devIds))
+    expect(hit.drift).toBe('conflict')
+    expect(hit.diff).toEqual([{ item: `节点「${gen.name}」· periodInSeconds`, tool: 300, platform: 60 }])
   })
 })
 

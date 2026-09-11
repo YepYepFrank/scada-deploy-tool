@@ -176,6 +176,39 @@ describe('buildCf', () => {
   })
 })
 
+describe('buildCf · 对整个结果取绝对值(2026-09-11)', () => {
+  it('absAll:整条式子包进 abs(...)', () => {
+    const custom = buildCf(
+      {
+        template: 'expr.custom',
+        device: 'A1',
+        output: 'x',
+        absAll: true,
+        terms: [
+          { kind: 'key', device: 'A1', key: 'p' },
+          { kind: 'key', device: 'A2', key: 'p' },
+        ],
+        ops: ['+'],
+      },
+      'id-a1',
+      ids
+    )
+    expect(custom.configuration.expression).toBe('abs((v0) + v1)')
+    const sub = buildCf(
+      {
+        template: 'expr.subtract',
+        device: 'A1',
+        output: 'y',
+        absAll: true,
+        inputs: { a: { device: 'A1', key: 'p' }, b: { device: 'A1', key: 'q' } },
+      },
+      'id-a1',
+      ids
+    )
+    expect(sub.configuration.expression).toBe('abs(a - b)')
+  })
+})
+
 describe('跨设备即时派生 → 结果资产(2026-09-10)', () => {
   const cross = (extra: Partial<Computation> = {}): Computation => ({
     template: 'expr.add',

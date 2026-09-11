@@ -3,6 +3,8 @@
 //
 // 2026-09-11 起:
 //   · 写进 TB 的计算字段 / 资产 / 规则链带归属标记(core/constants ownerInfo),清理只认本站点的标记或上一版声明;
+//   · 计算字段的标记里带「写入时的指纹」(core/print cfPrint),规则链的指纹发布后读回来算、记在站点资产
+//     deployPrints 上——第 3 步同步据此分辨「平台上被人改过」(冲突)与「向导里改了还没发布」;
 //   · 更新计算字段带 version(乐观锁)——别人先改过就报冲突、不覆盖;
 //   · 规则链内容没变就不重写(TB 每写一次元数据就重启链上全部节点,定时器从头计时);
 //   · **Root 链上只动本工具自己的那部分**(YY 定:Root 由高潮维护,工具可以写,但只能改自己配的):
@@ -23,6 +25,7 @@ import {
 } from '../core/constants'
 import { cascadeWhitelist, outputInventory, outputPrefixOf, type OutputKey } from '../core/prefix'
 import { ConfigError, expandConfig, siteChainNames } from '../core/plan'
+import { cfPrint, chainPrint, metaCovers, type ChainMetaLike } from '../core/print'
 import { revenueMetadata } from '../core/revenue'
 import { rollupGroups, rollupMetadata } from '../core/rollup'
 import { stableJson } from '../core/stable'
@@ -190,53 +193,16 @@ export async function unwireRootChain(api: TbApi, site: string): Promise<boolean
 
 // ── 本站点自己的规则链 ─────────────────────────────────────────────────────
 
-type MetaLike = {
-  firstNodeIndex?: number | null
-  nodes?: { type: string; name: string; configuration?: unknown }[]
-  connections?: { fromIndex: number; toIndex: number; type: string }[]
-}
-/**
- * 计划里的值是不是「包含于」TB 读回的值。TB 保存节点时会补默认字段(如 TbMsgTimeseriesNode 的
- * processingSettings)、去掉值为 null 的字段(如 generator 的 queueName)——2026-09-11 镜像实测,
- * 所以不能整串比。计划里写了的每个字段都要一致;TB 多出来的字段不算变化;null 与缺失等价。
- * 代价:以后编译器「删掉」某个配置字段时这里认不出变化——那种改动要连带改节点名,或在 TB 里手动重存一次。
- */
-const covers = (p: unknown, c: unknown): boolean => {
-  if (p === null || p === undefined) return c === null || c === undefined
-  if (Array.isArray(p)) return Array.isArray(c) && c.length === p.length && p.every((x, i) => covers(x, c[i]))
-  if (typeof p === 'object') {
-    if (!c || typeof c !== 'object' || Array.isArray(c)) return false
-    const cur = c as Record<string, unknown>
-    return Object.entries(p as Record<string, unknown>).every(([k, v]) => covers(v, cur[k]))
-  }
-  return p === c
-}
-/** 规则链元数据的「内容」是否一致:节点(类型 / 名字 / 配置)+ 连线 + 起点;不看 id、坐标、版本 */
-const sameMeta = (planned: MetaLike, cur: MetaLike): boolean => {
-  const pn = planned.nodes ?? []
-  const cn = cur.nodes ?? []
-  if ((planned.firstNodeIndex ?? null) !== (cur.firstNodeIndex ?? null) || pn.length !== cn.length) return false
-  const nodesSame = pn.every(
-    (n, i) =>
-      n.type === cn[i]!.type && n.name === cn[i]!.name && covers(n.configuration ?? {}, cn[i]!.configuration ?? {})
-  )
-  const conns = (m: MetaLike) =>
-    (m.connections ?? [])
-      .map(c => `${c.fromIndex}>${c.toIndex}:${c.type}`)
-      .sort()
-      .join('|')
-  return nodesSame && conns(planned) === conns(cur)
-}
-
 /**
  * 写规则链元数据——内容没变就不写(2026-09-11)。TB 每保存一次元数据就重启链上所有节点、定时器从头计时:
  * 小时级归档要连续跑满 1 小时才出点,反复发布会让它一直出不了数(core/scripts.ts 2026-09-09 的教训)。
- * 返回是否真的写了。只用于本站点自己的链;Root 走 wireRootChain / unwireRootChain。
+ * 「没变」按 core/print metaCovers 判(TB 补的默认字段不算)。返回是否真的写了。
+ * 只用于本站点自己的链;Root 走 wireRootChain / unwireRootChain。
  */
 async function writeChainMeta(api: TbApi, id: string, created: boolean, planned: RuleChainMetadata): Promise<boolean> {
   if (!created) {
-    const cur = (await api(`/api/ruleChain/${id}/metadata`).catch(() => null)) as MetaLike | null
-    if (cur && sameMeta(planned, cur)) return false
+    const cur = (await api(`/api/ruleChain/${id}/metadata`).catch(() => null)) as ChainMetaLike | null
+    if (cur && metaCovers(planned, cur)) return false
   }
   await api('/api/ruleChain/metadata', planned)
   return true
@@ -609,8 +575,8 @@ export async function publish(
         const body = buildCf(c, hostId, devIds, host.entityType)
         cfCache[hostId] ||= await listCfs(api, host.entityType, hostId)
         const existing = cfCache[hostId].find(x => x.name === cfName)
-        // 归属标记:保留字段上原有的其它 additionalInfo(接管来的字段可能有同事写的东西)
-        body.additionalInfo = { ...(existing?.additionalInfo ?? {}), ...mark }
+        // 归属标记 + 写入时的指纹:保留字段上原有的其它 additionalInfo(接管来的字段可能有同事写的东西)
+        body.additionalInfo = { ...(existing?.additionalInfo ?? {}), ...mark, print: cfPrint(body) }
         if (existing) {
           body.id = existing.id
           if (typeof existing.version === 'number') body.version = existing.version
@@ -666,7 +632,7 @@ export async function publish(
           // CF 只在创建时初始化计算——分层时汇总 CF 须等分组遥测落库后删除重建
           for (const body of layered ? bodies.slice(0, -1) : bodies) {
             body.entityId = { entityType: 'ASSET', id: aid }
-            body.additionalInfo = mark
+            body.additionalInfo = { ...mark, print: cfPrint(body) }
             const ex = existing.find(x => x.name === body.name)
             if (ex) body.id = ex.id
             await api('/api/calculatedField', body)
@@ -676,7 +642,7 @@ export async function publish(
             if (layeredSettleMs > 0) await sleep(layeredSettleMs)
             const final = bodies[bodies.length - 1]!
             final.entityId = { entityType: 'ASSET', id: aid }
-            final.additionalInfo = mark
+            final.additionalInfo = { ...mark, print: cfPrint(final) }
             const ex = existing.find(x => x.name === final.name)
             if (ex) await api(`/api/calculatedField/${ex.id.id}`, null, 'DELETE')
             await api('/api/calculatedField', final)
@@ -833,6 +799,22 @@ export async function publish(
       }
       const attrBody: Record<string, unknown> = { siteConfig: original, siteConfigHistory: history }
       if (prefix) attrBody.calcCascadeKeys = cascadeWhitelist(cfg, computations, prefix)
+      // 本站点规则链的写入指纹:TB 保存后读回来算(把 TB 补的默认字段也算进去),第 3 步同步拿它判断
+      // 「平台上是不是被人改过」。读不到就不记,不挡发布。
+      try {
+        const deployPrints: Record<string, string> = {}
+        const all: { id: { id: string }; name: string; root?: boolean }[] =
+          (await api('/api/ruleChains?pageSize=100&page=0'))?.data || []
+        for (const name of [names.alarm, names.rollup, names.revenue]) {
+          const ch = all.find(c => c.name === name && !c.root)
+          if (!ch) continue
+          const m = (await api(`/api/ruleChain/${ch.id.id}/metadata`)) as ChainMetaLike | null
+          if (m) deployPrints[name] = chainPrint(m)
+        }
+        attrBody.deployPrints = deployPrints
+      } catch {
+        /* 指纹读不到不挡发布 */
+      }
       await api(`/api/plugins/telemetry/ASSET/${id}/attributes/SERVER_SCOPE`, attrBody)
       // 不再「设为 Public」(T3.7 移除):页面资产由 publishPage 分给站点所属 Customer,站点资产按 T3.8 处理。
       // 汇聚 / 收益资产跟随站点资产:同一 Customer 可见 + 站点 Contains 关系(编辑器资产树、Customer 视角都靠这两条)

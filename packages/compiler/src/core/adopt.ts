@@ -209,8 +209,12 @@ export function adoptCf(cf: PlatformCf, ctx: AdoptContext): AdoptResult {
   }
   const used = ids(tree)
   if (!used.size) return { ok: false, reason: '纯常数,没有引用任何测点(向导的运算至少要有一个测点)' }
-  if (hasBigAbs(tree)) return { ok: false, reason: 'abs 包住了整个式子,向导只能对单个测点取绝对值' }
-  const chain = toChain(tree)
+  // 整个式子被 abs 包住:剥掉最外层,里面按链翻,整体取绝对值(向导的「对整个结果取绝对值」,2026-09-11)
+  const absAll = tree.k === 'abs' && !leafOf(tree)
+  const body = absAll && tree.k === 'abs' ? tree.x : tree
+  if (hasBigAbs(body))
+    return { ok: false, reason: 'abs 只包住了式子的一部分(如 abs(a×b)÷c),向导只能对单个测点或整个式子取绝对值' }
+  const chain = toChain(body)
   if (!chain) return { ok: false, reason: '含运算优先级(如 a + b × c),和向导「从左到右依次计算」不等价' }
 
   // 参数:只接受「设备的遥测」
@@ -247,7 +251,7 @@ export function adoptCf(cf: PlatformCf, ctx: AdoptContext): AdoptResult {
   for (let t = 0; t < 4; t++) {
     const v = Object.fromEntries([...used].map(n => [n, 1 + Math.round(Math.random() * 9999) / 100]))
     const a = evalNode(tree, v)
-    const b = evalChain(chain, v)
+    const b = absAll ? Math.abs(evalChain(chain, v)) : evalChain(chain, v)
     if (!(Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a))))
       return { ok: false, reason: '翻成向导的算法后算出来对不上(保险起见不接管)' }
   }
@@ -280,6 +284,7 @@ export function adoptCf(cf: PlatformCf, ctx: AdoptContext): AdoptResult {
     output: outName,
     outputMode,
     adopted: true,
+    ...(absAll ? { absAll: true } : {}),
     ...(cf.name !== outName ? { cfName: cf.name } : {}),
   }
   return { ok: true, computation, notes }

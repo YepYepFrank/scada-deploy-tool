@@ -63,6 +63,8 @@ export function buildCf(
   } else {
     throw new Error(`未知即时派生模板: ${comp.template}`)
   }
+  // 对整个结果取绝对值:abs(整条式子)(2026-09-11,同事的「实时曲线」类字段多是这种写法)
+  if (comp.absAll) expression = `abs(${expression})`
   const toAttr = comp.outputMode === 'attr'
   return {
     entityId: { entityType: hostType, id: hostId },

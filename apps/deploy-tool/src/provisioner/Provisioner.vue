@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, h, reactive, ref, watch } from 'vue'
 import {
   TEMPLATES,
   CATEGORIES,
@@ -1067,6 +1067,7 @@ function blankForm() {
       { src: '', constVal: '', abs: false },
     ],
     termOps: ['+'],
+    absAll: false, // 自定义四则:对整个结果取绝对值(2026-09-11)
     selProfiles: [],
     selPrefixes: '',
     agg: 'sum',
@@ -1132,7 +1133,7 @@ const exprPreview = computed(() => {
   for (let i = 1; i < f.terms.length; i++) {
     s = `(${s}) ${OP_SHOW[f.termOps[i - 1]]} ${termLabel(f.terms[i])}`
   }
-  return s
+  return f.absAll ? `|${s}|` : s
 })
 const customValid = computed(() => {
   const f = modal.form
@@ -1256,7 +1257,11 @@ const platView = computed(() => {
   const mine = st.cfs.filter(r => r.owner === 'mine')
   return {
     mine,
-    changed: mine.filter(r => r.drift === 'changed'),
+    // 冲突 = 平台上被人改过(或旧对象没有写入记录、和向导对不上);待发布 = 向导里改了、平台没人动
+    conflicts: mine.filter(r => r.drift === 'conflict' || r.drift === 'mismatch'),
+    pending: mine.filter(r => r.drift === 'pending'),
+    chainConflicts: st.chains.filter(c => c.drift === 'conflict' || c.drift === 'mismatch'),
+    chainPending: st.chains.filter(c => c.drift === 'pending'),
     orphans: mine.filter(r => r.drift === 'orphan'),
     adoptable: foreign.filter(r => r.adopt?.ok),
     readonly: foreign.filter(r => !r.adopt?.ok),
@@ -1267,6 +1272,44 @@ const platView = computed(() => {
 })
 const cfExprOf = r => r.cf.configuration?.expression || ''
 const cfOutOf = r => r.cf.configuration?.output?.name || ''
+
+/* ── 冲突 / 待发布的「查看差异」(2026-09-11)──
+   本工具写入时在计算字段标记里、站点资产 deployPrints 里记了指纹;同步时三方比对(writer/sync.ts),
+   不一致的每条带逐项差异:本工具里(向导当前配置)/ 平台上现在 */
+const diffOpen = reactive({})
+const toggleDiff = k => (diffOpen[k] = !diffOpen[k])
+const driftLabel = r =>
+  r.drift === 'conflict'
+    ? r.localToo
+      ? '平台上被改过 · 向导里也改了'
+      : '平台上被改过'
+    : r.drift === 'mismatch'
+      ? '和向导不一致(旧对象没有写入记录,分不清是谁改的)'
+      : ''
+const conflictWarn = () => {
+  const n = (platView.value?.conflicts.length || 0) + (platView.value?.chainConflicts.length || 0)
+  return n ? `⚠ 第 3 步同步发现 ${n} 处冲突(平台上被人改过),发布会以向导里的配置为准覆盖它们。\n\n` : ''
+}
+/** 差异表:一行一项;长文本(脚本、表达式、JSON)用 pre 上下对照,缺的一边显示「—」 */
+const DiffTable = {
+  name: 'DiffTable',
+  props: { rows: { type: Array, default: () => [] } },
+  setup(props) {
+    const cell = v => {
+      if (v === undefined || v === null) return h('span', { class: 'diff-none' }, '—')
+      const s = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
+      return s.length > 60 || s.includes('\n') ? h('pre', { class: 'diff-pre' }, s) : h('code', s)
+    }
+    return () =>
+      h('table', { class: 'diff-table' }, [
+        h('thead', [h('tr', [h('th', '项'), h('th', '本工具里(向导当前)'), h('th', '平台上现在')])]),
+        h(
+          'tbody',
+          (props.rows || []).map(r => h('tr', [h('td', r.item), h('td', [cell(r.tool)]), h('td', [cell(r.platform)])]))
+        ),
+      ])
+  },
+}
 async function adoptRow(r) {
   if (!r.adopt?.ok || r.taken) return
   const c = r.adopt.computation
@@ -1459,6 +1502,7 @@ function openEdit(i) {
         : { src: `${t.device}||${t.key}`, constVal: '', abs: !!t.abs }
     )
     f.termOps = [...c.ops]
+    f.absAll = !!c.absAll
     f.output = c.output || ''
     f.outputMode = c.outputMode || 'ts'
     f.resultAsset = c.asset || ''
@@ -1632,6 +1676,7 @@ function addComputation() {
         : { kind: 'key', abs: !!t.abs, ...keyRef(t.src) }
     )
     c.ops = [...modal.form.termOps]
+    if (modal.form.absAll) c.absAll = true // 对整个结果取绝对值
     placeCf(c) // 单设备 → 存这台设备;跨设备 → 存结果资产
     keepAdopted(c) // 接管来的:保持接管身份和原实体
     c.output = modal.form.output.trim()
@@ -1688,7 +1733,7 @@ function compDesc(c) {
       const tk = t.kind === 'const' ? t.value : t.abs ? `|${kd(t.key)}|` : kd(t.key)
       s = `(${s}) ${OP_SHOW[c.ops[i - 1]]} ${tk}`
     }
-    return `${s} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}`
+    return `${c.absAll ? `|${s}|` : s} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}`
   }
   if (c.template.startsWith('expr.')) {
     const op = c.template === 'expr.add' ? '+' : '−'
@@ -1850,11 +1895,12 @@ async function doPublish(openAfter) {
     !(await askConfirm({
       title: '确认发布',
       text:
-        conn.env === 'mirror'
+        conflictWarn() +
+        (conn.env === 'mirror'
           ? `即将向【生产镜像】写入站点「${site.name}」的配置(计算字段/规则链/站点资产)。\n所有写入均为幂等、且不改动存量规则链。确认发布?`
           : conn.env === 'demo'
             ? `发布站点「${site.name}」的配置到演示环境?`
-            : `即将向项目【${curEnv.value.label}】写入站点「${site.name}」的配置(计算字段/规则链/站点资产)。\n所有写入均为幂等、且不改动存量规则链。确认发布?`,
+            : `即将向项目【${curEnv.value.label}】写入站点「${site.name}」的配置(计算字段/规则链/站点资产)。\n所有写入均为幂等、且不改动存量规则链。确认发布?`),
       okLabel: '发布',
     }))
   )
@@ -2295,12 +2341,47 @@ function openFrontend() {
             进入本步时从 TB 读取(只读,{{ new Date(platform.at).toLocaleTimeString('zh-CN', { hour12: false }) }}
             同步)。本工具只管带本站点标记的计算字段;别人配的一律不改不删,表达式能套进模板的可以「接管」。
           </p>
-          <div v-if="platView.changed.length" class="plat-group warn">
+          <!-- 冲突 / 待发布(2026-09-11):本工具写入时记了指纹,同步时三方比对,点「查看差异」逐项对照 -->
+          <div v-if="platView.conflicts.length || platView.chainConflicts.length" class="plat-group warn">
             <div class="plat-gt">
-              ⚠ 平台上被改过({{ platView.changed.length }})—— 第 5 步发布会以向导里的配置为准覆盖
+              ⚠ 冲突:本工具配置过、平台上被改过({{ platView.conflicts.length + platView.chainConflicts.length }})——
+              第 5 步发布会以向导里的配置为准覆盖;要保留平台上的改法,先把向导里对应的配置改成一样
             </div>
-            <div v-for="r in platView.changed" :key="r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }}</span><code>{{ cfExprOf(r) }}</code>
+            <div v-for="r in platView.conflicts" :key="'cf' + r.cf.id?.id" class="plat-row">
+              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }}</span>
+              <span class="plat-tag warn">{{ driftLabel(r) }}</span>
+              <button class="btn ghost sm" @click="toggleDiff('cf:' + r.entity + '|' + r.cf.name)">
+                {{ diffOpen['cf:' + r.entity + '|' + r.cf.name] ? '收起差异' : '查看差异' }}
+              </button>
+              <DiffTable v-if="diffOpen['cf:' + r.entity + '|' + r.cf.name]" :rows="r.diff" />
+            </div>
+            <div v-for="c in platView.chainConflicts" :key="'ch' + c.id" class="plat-row">
+              <span class="pe">规则链</span><span class="pn">{{ c.name }}</span>
+              <span class="plat-tag warn">{{ driftLabel(c) }}</span>
+              <button class="btn ghost sm" @click="toggleDiff('chain:' + c.name)">
+                {{ diffOpen['chain:' + c.name] ? '收起差异' : '查看差异' }}
+              </button>
+              <DiffTable v-if="diffOpen['chain:' + c.name]" :rows="c.diff" />
+            </div>
+          </div>
+          <div v-if="platView.pending.length || platView.chainPending.length" class="plat-group">
+            <div class="plat-gt">
+              待发布的修改({{ platView.pending.length + platView.chainPending.length }})—— 向导里改过、平台上没人动过,第 5
+              步发布后生效
+            </div>
+            <div v-for="r in platView.pending" :key="'pcf' + r.cf.id?.id" class="plat-row">
+              <span class="pe">{{ r.entity }}</span><span class="pn">{{ r.cf.name }}</span>
+              <button class="btn ghost sm" @click="toggleDiff('cf:' + r.entity + '|' + r.cf.name)">
+                {{ diffOpen['cf:' + r.entity + '|' + r.cf.name] ? '收起差异' : '查看差异' }}
+              </button>
+              <DiffTable v-if="diffOpen['cf:' + r.entity + '|' + r.cf.name]" :rows="r.diff" />
+            </div>
+            <div v-for="c in platView.chainPending" :key="'pch' + c.id" class="plat-row">
+              <span class="pe">规则链</span><span class="pn">{{ c.name }}</span>
+              <button class="btn ghost sm" @click="toggleDiff('chain:' + c.name)">
+                {{ diffOpen['chain:' + c.name] ? '收起差异' : '查看差异' }}
+              </button>
+              <DiffTable v-if="diffOpen['chain:' + c.name]" :rows="c.diff" />
             </div>
           </div>
           <div v-if="platView.orphans.length" class="plat-group warn">
@@ -2806,6 +2887,11 @@ function openFrontend() {
           </div>
           <div class="frow">
             <button class="btn ghost sm" @click="addTerm">+ 添加一项</button>
+          </div>
+          <div class="frow">
+            <label class="abs-check" title="生成 abs(整条式子),如 |P1 + P2 + P3|">
+              <input type="checkbox" v-model="modal.form.absAll" />对整个结果取绝对值 |…|
+            </label>
           </div>
           <div class="frow">
             <div class="field" style="min-width: 100%">

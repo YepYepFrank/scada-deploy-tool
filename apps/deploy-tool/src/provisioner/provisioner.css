@@ -1509,3 +1509,49 @@ details.plat-group > summary.plat-gt {
     left: 100%;
   }
 }
+
+/* 冲突 / 待发布的「查看差异」(2026-09-11) */
+.plat-tag.warn {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 55%, transparent);
+}
+.diff-table {
+  flex-basis: 100%;
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 4px;
+  font-size: 12px;
+}
+.diff-table th,
+.diff-table td {
+  border: 1px solid var(--line-0);
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.diff-table th {
+  color: var(--ink-2);
+  font-weight: 500;
+  background: var(--bg-2);
+}
+.diff-table td:first-child {
+  white-space: nowrap;
+  color: var(--ink-1);
+}
+.diff-table code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.diff-pre {
+  margin: 0;
+  max-height: 220px;
+  max-width: 520px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.diff-none {
+  color: var(--ink-2);
+}

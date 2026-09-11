@@ -19,9 +19,22 @@ export {
 } from './core/adopt'
 export { stableJson } from './core/stable'
 export {
+  covers,
+  metaCovers,
+  cfSignature,
+  cfPrint,
+  chainPrint,
+  diffCf,
+  diffChainMeta,
+  type ConfigDiff,
+  type ChainMetaLike,
+} from './core/print'
+export {
   readPlatformState,
   handBackCf,
   sameCf,
+  type DriftState,
+  type SyncProgress,
   type PlatformState,
   type PlatformCfRow,
   type PlatformChainRow,

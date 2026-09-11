@@ -52,6 +52,8 @@ export interface Computation {
   cfName?: string
   /** 从平台接管的运算:保持原实体 / 原字段名 / 原输出名(不加输出前缀),可以挂在非本工具建的资产上 */
   adopted?: boolean
+  /** 即时计算:对整个结果再取绝对值,生成 `abs(整条式子)`(2026-09-11) */
+  absAll?: boolean
   [k: string]: unknown
 }
 

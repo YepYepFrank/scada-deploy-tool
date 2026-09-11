@@ -42,10 +42,13 @@ const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 function fit(expr, argNames) {
   const e = String(expr ?? '').replace(/\s+/g, '')
   if (!argNames.some(a => new RegExp(`(^|[^\\w])${esc(a)}([^\\w]|$)`).test(e))) return '纯常数'
-  if (/abs\([^()]*[-+*/][^()]*\)/.test(e)) return 'abs 包住整个式子'
-  const flat = e.replace(/abs\(([^()]*)\)/g, '$1').replace(/[()]/g, '')
-  if (/[+-]/.test(flat) && /[*/]/.test(flat) && !e.startsWith('(')) return '有运算优先级'
-  return '能套模板'
+  // 2026-09-11 起向导支持「对整个结果取绝对值」:最外层整个包住的 abs 剥掉再判
+  const whole = /^abs\((.*)\)$/.exec(e)
+  const body = whole && !/abs\([^()]*[-+*/][^()]*\)/.test(whole[1]) ? whole[1] : e
+  if (/abs\([^()]*[-+*/][^()]*\)/.test(body)) return 'abs 只包住一部分'
+  const flat = body.replace(/abs\(([^()]*)\)/g, '$1').replace(/[()]/g, '')
+  if (/[+-]/.test(flat) && /[*/]/.test(flat) && !body.startsWith('(')) return '有运算优先级'
+  return body === e ? '能套模板' : '能套模板(整体取绝对值)'
 }
 
 try {

@@ -90,7 +90,7 @@ describe('adoptCf', () => {
   it('翻不了的说清原因', () => {
     const two = { P1: dev('id-d1'), P2: dev('id-d2') }
     expect(reasonOf(adoptCf(cf('3840', { x: dev('id-d1') }), ctx()))).toContain('纯常数')
-    expect(reasonOf(adoptCf(cf('abs(P1+P2)', two), ctx()))).toContain('abs 包住了整个式子')
+    expect(reasonOf(adoptCf(cf('abs(P1*2)/P2', two), ctx()))).toContain('abs 只包住了式子的一部分')
     expect(reasonOf(adoptCf(cf('P1+P2*2', two), ctx()))).toContain('运算优先级')
     expect(reasonOf(adoptCf(cf('sqrt(P1)', two), ctx()))).toContain('不支持的函数 sqrt')
     expect(
@@ -148,6 +148,23 @@ describe('adoptCf', () => {
     expect(reasonOf(adoptCf(cf('P1 - (P2 - 1)', { P1: dev('id-d1'), P2: dev('id-d2') }), ctx()))).toContain(
       '运算优先级'
     )
+  })
+
+  it('abs 包住整个式子(2026-09-11 起支持):翻成「对整个结果取绝对值」,生成的表达式与原来等价', () => {
+    const r = adoptCf(cf('abs(P1+P2-3)', { P1: dev('id-d1'), P2: dev('id-d2') }), ctx())
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.computation).toMatchObject({ absAll: true, ops: ['+', '-'] })
+    expect(r.computation.terms).toEqual([
+      { kind: 'key', device: 'D1', key: 'P' },
+      { kind: 'key', device: 'D2', key: 'P' },
+      { kind: 'const', value: 3 },
+    ])
+    const body = buildCf(r.computation, 'id-a', { D1: 'id-d1', D2: 'id-d2' }, 'ASSET')
+    expect(body.configuration.expression).toBe('abs(((v0) + v1) - 3)')
+    // 单个测点的 abs 仍按「这一项取绝对值」,不算整体
+    const one = adoptCf(cf('abs(P1)', { P1: dev('id-d1') }), ctx())
+    expect(one.ok && one.computation.absAll).toBeFalsy()
   })
 
   it('parseExpression 报语法错', () => {
