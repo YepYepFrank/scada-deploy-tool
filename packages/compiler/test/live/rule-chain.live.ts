@@ -107,12 +107,14 @@ describe.skipIf(!hasCreds)(`规则链路径(live @ ${TB_BASE})`, () => {
     if (api) await cleanup(cfg, devIds, api).catch(() => {})
   })
 
-  it('publish:CF 数量、规则链名 / 节点数、Root 转发、站点资产与计划一致', async () => {
+  it('publish:CF 数量、规则链名 / 节点数、站点资产与计划一致;Root 链一点不动', async () => {
     const plan = compile(cfg, { devices: devIds })
     expect(plan.validation.errors).toEqual([])
     const failures = await publish(cfg, devIds, api, report, { publishedBy: 'live-test' })
-    expect(failures).toEqual([])
-    expect(log.filter(l => l.includes(':err'))).toEqual([])
+    // Root 链由高潮维护,工具不写(2026-09-11):临时站点的告警链在 Root 上没有转发节点,告警步骤按约定报出来
+    expect(failures.map(f => f.step)).toEqual(plan.alarm ? ['alarm'] : [])
+    if (plan.alarm) expect(failures[0]!.error).toContain('请高潮')
+    expect(log.filter(l => l.includes(':err') && !l.startsWith('alarm:'))).toEqual([])
     // 发布后自检:临时站点的链在 TB 上真的起来了(节点配置字段不对时这里会红)
     expect(log.filter(l => /^health:(ok|err)/.test(l)).at(-1)).toMatch(/^health:ok \d+ 个节点已启动/)
 
@@ -132,8 +134,9 @@ describe.skipIf(!hasCreds)(`规则链路径(live @ ${TB_BASE})`, () => {
       const got = snap.chains.find(c => c.name === e.name)!
       expect([got.nodes, got.connections], e.name).toEqual([e.meta.nodes.length, e.meta.connections.length])
     }
-    expect(snap.rootFlow).toBe(!!plan.alarm)
-    expect(snap.rootNodes).toBe(baseline.rootNodes + (plan.alarm ? 1 : 0))
+    // Root 链由高潮维护:临时站点不接转发节点,Root 节点数与基线一致
+    expect(snap.rootFlow).toBe(false)
+    expect(snap.rootNodes).toBe(baseline.rootNodes)
     // 站点资产 + siteConfig 属性(managedBy 语义:属性里存的就是我们发布的配置与 publishedBy)
     expect(snap.asset).toBeTruthy()
     const attrs: { key: string; value: unknown }[] = await api(
@@ -148,7 +151,7 @@ describe.skipIf(!hasCreds)(`规则链路径(live @ ${TB_BASE})`, () => {
     const before = await snapshotSite(api, cfg.site.name, devIds)
     log.length = 0
     const failures = await publish(cfg, devIds, api, report, { publishedBy: 'live-test-2' })
-    expect(failures).toEqual([])
+    expect(failures.map(f => f.step)).toEqual(compile(cfg, { devices: devIds }).alarm ? ['alarm'] : [])
     const after = await snapshotSite(api, cfg.site.name, devIds)
     expect(after).toEqual(before)
     expect(log.find(l => l.startsWith('cf:ok'))).toMatch(/新建 0 · 更新 \d+/)
@@ -160,7 +163,7 @@ describe.skipIf(!hasCreds)(`规则链路径(live @ ${TB_BASE})`, () => {
     expect(Array.isArray(list) && list.length).toBe(1)
   })
 
-  it('cleanup:临时站点的 CF / 链 / Root 转发 / 资产全部清掉;xrs-mirror-test 前后零差异', async () => {
+  it('cleanup:临时站点的 CF / 链 / 资产全部清掉,Root 不动;xrs-mirror-test 前后零差异', async () => {
     const msg = await cleanup(cfg, devIds, api)
     expect(msg).toContain('站点资产已删除')
     const gone = await snapshotSite(api, cfg.site.name, devIds)

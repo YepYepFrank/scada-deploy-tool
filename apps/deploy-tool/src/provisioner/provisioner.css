@@ -1456,3 +1456,56 @@ details.plat-group > summary.plat-gt {
 .tag.adopted {
   color: var(--accent);
 }
+
+/* 同步进度(2026-09-11):扫全部资产要十几秒,让现场知道在跑 */
+.plat-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink-1);
+}
+.plat-spin {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line-1);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: plat-spin 0.8s linear infinite;
+  flex: none;
+}
+@keyframes plat-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.plat-bar {
+  flex: 1;
+  max-width: 320px;
+  height: 4px;
+  background: var(--bg-2);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.plat-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+/* 总数未知(读清单阶段):来回扫的条 */
+.plat-bar.indeterminate i {
+  width: 30%;
+  position: absolute;
+  animation: plat-sweep 1.2s ease-in-out infinite;
+}
+@keyframes plat-sweep {
+  from {
+    left: -30%;
+  }
+  to {
+    left: 100%;
+  }
+}

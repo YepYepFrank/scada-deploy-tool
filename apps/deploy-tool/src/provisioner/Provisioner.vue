@@ -1208,9 +1208,20 @@ function keepAdopted(c) {
 /* ── 进第 3 步时同步平台现状 + 接管 / 交还(2026-09-11)──
    读 TB 上与本站点有关的计算字段与规则链:本工具管的比对漂移;别人配的只读,能套进模板的可以「接管」。
    同步本身只读;唯一的写操作是「交还」(去掉归属标记,字段原样留在平台上)。 */
-const platform = reactive({ loading: false, error: '', at: 0, state: null, open: true })
+const platform = reactive({
+  loading: false,
+  error: '',
+  at: 0,
+  state: null,
+  open: true,
+  // 同步进度:扫全部资产要十几秒,界面上转圈 + 进度条,让现场知道在跑(total 为 0 = 总数未知)
+  progress: { phase: '', done: 0, total: 0 },
+})
 const tbApi = (url, data, method) => api(url, data, method)
 const claimedIdMap = () => Object.fromEntries(claimedDevices.value.map(d => [d.name, d.tbId]))
+const syncPct = computed(() =>
+  platform.progress.total ? Math.round((platform.progress.done / platform.progress.total) * 100) : 0
+)
 async function syncPlatform() {
   if (conn.status !== 'ok') {
     platform.error = '尚未连接 ThingsBoard,连接后进入本步会自动同步'
@@ -1218,8 +1229,9 @@ async function syncPlatform() {
   }
   platform.loading = true
   platform.error = ''
+  platform.progress = { phase: '连接平台', done: 0, total: 0 }
   try {
-    platform.state = await readPlatformState(tbApi, siteJson.value, claimedIdMap())
+    platform.state = await readPlatformState(tbApi, siteJson.value, claimedIdMap(), p => (platform.progress = p))
     platform.at = Date.now()
   } catch (e) {
     platform.error = `同步失败:${e.message || e}`
@@ -1811,7 +1823,7 @@ const PUB_STEPS = [
   { id: 'agg', label: '全站汇聚(虚拟资产)' },
   { id: 'revenue', label: '分时电价收益' },
   { id: 'rollup', label: '定时聚合链' },
-  { id: 'alarm', label: '告警链 + Root 接线' },
+  { id: 'alarm', label: '告警链(Root 转发由高潮维护)' },
   { id: 'asset', label: '站点配置写入 TB' },
   { id: 'health', label: '规则节点自检' },
 ]
@@ -1971,7 +1983,7 @@ async function doCleanup() {
   if (
     !(await askConfirm({
       title: '清理站点生成物',
-      text: `将删除站点「${site.name}」发布过的全部生成物:\n· 声明的计算字段\n· Site Alarms / Site Rollups 规则链\n· Root 链上的本站点转发节点\n· 站点配置资产\n\n不会碰任何非本站点的存量对象。确认清理?`,
+      text: `将删除站点「${site.name}」发布过的全部生成物:\n· 声明的计算字段\n· Site Alarms / Site Rollups 规则链(Root 链上还转发着的只清空不删——Root 由高潮维护,本工具不改)\n· 站点配置资产\n\n不会碰任何非本站点的存量对象。确认清理?`,
       okLabel: '清理',
       danger: true,
     }))
@@ -2266,6 +2278,17 @@ function openFrontend() {
             {{ platform.loading ? '同步中…' : '重新同步' }}
           </button>
         </div>
+        <!-- 同步进度(扫全部资产要十几秒):转圈 + 阶段 + 进度条,总数未知时来回扫 -->
+        <div v-if="platform.loading" class="plat-progress">
+          <span class="plat-spin"></span>
+          <span
+            >正在同步平台上的配置 · {{ platform.progress.phase || '连接平台'
+            }}{{ platform.progress.total ? ` ${platform.progress.done}/${platform.progress.total}` : '…' }}</span
+          >
+          <span class="plat-bar" :class="{ indeterminate: !platform.progress.total }">
+            <i :style="platform.progress.total ? { width: syncPct + '%' } : null"></i>
+          </span>
+        </div>
         <p v-if="platform.error" class="err-msg" style="margin: 6px 0 0">{{ platform.error }}</p>
         <template v-if="platform.open && platView">
           <p class="hint" style="margin: 8px 0 0">
@@ -2322,7 +2345,7 @@ function openFrontend() {
           </details>
           <details class="plat-group">
             <summary class="plat-gt">
-              规则链({{ platView.chains.length }})—— 只读;本工具只管本站点的链和 Root 链上本站点那一个转发节点
+              规则链({{ platView.chains.length }})—— 只读;Root 链由高潮维护,本工具不写,只管本站点自己的链
             </summary>
             <div v-for="c in platView.chains" :key="c.id" class="plat-row">
               <span class="pn">{{ c.root ? '[Root] ' : '' }}{{ c.name }}</span>

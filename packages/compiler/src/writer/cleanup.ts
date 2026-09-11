@@ -1,11 +1,12 @@
-// 站点清理:删除本站点生成的 CF / 规则链 / Root 转发节点 / 汇聚资产 / 站点资产。
+// 站点清理:删除本站点生成的 CF / 规则链 / 汇聚资产 / 站点资产。
 // 只清理「当前配置声明过的东西」,不碰任何存量对象;接管来的计算字段不删,交还(去掉归属标记)。
+// Root 链由高潮维护,这里一个字节都不写:Root 上还转发着的本站点链只清空不删,等高潮摘掉节点后再删。
 import type { TbsiteConfig } from '../types'
 import { AGG_ASSET_TYPE, isCfTemplate, SITE_ASSET_TYPE } from '../core/constants'
 import { cfHost } from '../core/cf'
 import { expandConfig, siteChainNames } from '../core/plan'
 import { findAsset, listCfs, type Reporter, type TbApi } from './api'
-import { unwireRootChain } from './publish'
+import { emptyChain, rootForwardsTo } from './publish'
 import { handBackCf } from './sync'
 
 const q = (s: string) => encodeURIComponent(s)
@@ -50,15 +51,17 @@ export async function cleanup(
     }
   }
   report?.('cleanup', 'run', `已删计算字段 ${cfDel}` + (handed ? ` · 交还 ${handed}` : ''))
-  // 2. Root 链上的本站点转发节点(与 publish 共用同一份索引重排逻辑)
+  // 2. 站点规则链(Root 还转发着的只清空不删)
   try {
-    if (await unwireRootChain(api, cfg.site.name)) log.push('Root 转发节点已摘除')
     const chains: { id: { id: string }; name: string; root?: boolean }[] =
       (await api('/api/ruleChains?pageSize=100&page=0'))?.data || []
-    // 3. 站点规则链
     for (const name of [names.alarm, names.rollup, names.revenue]) {
       const found = chains.find(c => c.name === name && !c.root)
-      if (found) {
+      if (!found) continue
+      if (await rootForwardsTo(api, found.id.id)) {
+        await emptyChain(api, found.id.id)
+        log.push(`${name} 已清空未删(Root 链上还有转发到它的节点,请高潮摘除后再删)`)
+      } else {
         await api(`/api/ruleChain/${found.id.id}`, null, 'DELETE')
         log.push(`已删规则链 ${name}`)
       }
@@ -66,7 +69,7 @@ export async function cleanup(
   } catch (e) {
     log.push(`规则链清理: ${msg(e)}`)
   }
-  // 4. 汇聚 / 收益 / 跨设备运算结果资产(工具创建的 tbsite-agg 类型,连同其上的 CF 一并删除);
+  // 3. 汇聚 / 收益 / 跨设备运算结果资产(工具创建的 tbsite-agg 类型,连同其上的 CF 一并删除);
   //    接管来的运算所在资产不在此列(那是别人的资产)
   const toolAssets = new Set(
     computations
@@ -91,7 +94,7 @@ export async function cleanup(
       log.push(`汇聚资产 ${asset}: ${msg(e)}`)
     }
   }
-  // 5. 站点资产
+  // 4. 站点资产
   try {
     const assets: { id: { id: string }; name: string; type: string }[] =
       (await api(`/api/tenant/assets?pageSize=100&page=0&textSearch=${q(cfg.site.name)}`))?.data || []

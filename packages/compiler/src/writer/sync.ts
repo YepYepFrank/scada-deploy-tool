@@ -2,7 +2,8 @@
 //   mine      本工具管的:带本站点归属标记;或旧版还没打标记、但与声明同实体同字段名 → 比对漂移
 //   otherSite 本工具管、但属于别的站点(标记里的站点不同)→ 只读
 //   foreign   别人的 → 只读;表达式能套进向导模板的给「接管」(core/adopt.ts)
-// 规则链只列名字、节点数、定时器数、是不是本站点的。这里不写 TB;唯一的写操作是「交还」(handBackCf)。
+// 规则链只列名字、节点数、定时器数、是不是本站点的(Root 链由高潮维护,只读)。
+// 这里不写 TB;唯一的写操作是「交还」(handBackCf)。扫全部资产要十几秒,onProgress 给界面报进度。
 import type { CalculatedField, TbsiteConfig } from '../types'
 import { adoptCf, type AdoptResult, type PlatformArg, type PlatformCf } from '../core/adopt'
 import { chainNames, OWNER_TAG, ownerOf } from '../core/constants'
@@ -36,7 +37,7 @@ export interface PlatformChainRow {
   timers: number
   /** 本站点的链(带本站点标记,或是本站点声明的链名) */
   mine: boolean
-  /** Root 链上有没有本站点的转发节点 */
+  /** Root 链上有没有本站点的转发节点(只读看一眼;Root 由高潮维护) */
   ourFlow?: boolean
 }
 
@@ -48,6 +49,13 @@ export interface PlatformState {
   /** 每个扫到的实体上 TB 已有的计算字段数(含别人的),键 `DEVICE|名` / `ASSET|名`;TB 单实体上限 5 */
   occupied: Record<string, number>
   scanned: { devices: number; assets: number }
+}
+
+/** 同步进度:phase 是给人看的阶段名;total 为 0 表示这一段还不知道总数 */
+export interface SyncProgress {
+  phase: string
+  done: number
+  total: number
 }
 
 type Ent = { id: { id: string }; name: string }
@@ -85,13 +93,15 @@ export function sameCf(expected: CalculatedField, actual: PlatformCf): boolean {
 
 /**
  * 读平台现状。扫描范围:本站点已认领的设备 + 租户全部资产(资产上的别人的字段只列引用了本站点设备的,
- * 别的项目的资产不列)。devIds 是已认领设备的 名 → id。
+ * 别的项目的资产不列)。devIds 是已认领设备的 名 → id。onProgress 按阶段回报进度(可不传)。
  */
 export async function readPlatformState(
   api: TbApi,
   original: TbsiteConfig,
-  devIds: Record<string, string>
+  devIds: Record<string, string>,
+  onProgress?: (p: SyncProgress) => void
 ): Promise<PlatformState> {
+  const tell = (phase: string, done = 0, total = 0) => onProgress?.({ phase, done, total })
   const site = original.site.name
   const plan = compile(original, { devices: devIds }, { throwOnError: false })
   // 期望:这份声明会写出的 CF,按「实体|字段名」索引
@@ -106,6 +116,7 @@ export async function readPlatformState(
 
   const claimed = new Set((original.devices || []).map(d => d.name))
   const claimedIds = new Set(Object.values(devIds))
+  tell('读取设备与资产清单')
   const devices = await pageAll<Ent>(api, '/api/tenant/devices')
   const assets = await pageAll<Ent>(api, '/api/tenant/assets')
   const nameOf = new Map([...devices, ...assets].map(e => [e.id.id, e.name]))
@@ -153,7 +164,11 @@ export async function readPlatformState(
     ...devices.filter(d => claimedIds.has(d.id.id)).map(d => ['DEVICE', d] as ['DEVICE', Ent]),
     ...assets.map(a => ['ASSET', a] as ['ASSET', Ent]),
   ]
-  for (let i = 0; i < targets.length; i += 8) await Promise.all(targets.slice(i, i + 8).map(([t, e]) => scan(t, e)))
+  tell('扫描计算字段', 0, targets.length)
+  for (let i = 0; i < targets.length; i += 8) {
+    await Promise.all(targets.slice(i, i + 8).map(([t, e]) => scan(t, e)))
+    tell('扫描计算字段', Math.min(i + 8, targets.length), targets.length)
+  }
 
   const missing = [...expected.keys()]
     .filter(k => !seen.has(k))
@@ -166,6 +181,7 @@ export async function readPlatformState(
   const flow = chainNames.rootFlow(site)
   const chainList = await pageAll<Ent & { root?: boolean; additionalInfo?: unknown }>(api, '/api/ruleChains')
   const chains: PlatformChainRow[] = []
+  tell('读取规则链', 0, chainList.length)
   for (const c of chainList) {
     const m = await api(`/api/ruleChain/${c.id.id}/metadata`).catch(() => null)
     const nodes = (m?.nodes ?? []) as { type: string; name: string }[]
@@ -179,6 +195,7 @@ export async function readPlatformState(
       mine: mark ? mark.site === site : ours.has(c.name),
       ...(c.root ? { ourFlow: nodes.some(n => n.name === flow) } : {}),
     })
+    tell('读取规则链', chains.length, chainList.length)
   }
 
   return {
