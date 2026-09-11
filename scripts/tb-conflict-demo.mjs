@@ -39,7 +39,7 @@ const B = 'Test Device A2'
 const CALC = `${SITE}_CALC`
 const SUM = `${SITE}_SUM`
 const ROLLUP = `Site Rollups · ${SITE}`
-const AVG_KEY = 'calc_temperatureAvg15m'
+const AVG_OUTPUT = 'calc_temperatureAvg15m' // A1 上 15 分钟均值的输出测点名
 
 /** 与向导第 1~3 步产出的配置同形:向导载入这个站点后「向导当前」与这里发布的一致,冲突只来自 TB 上的改动 */
 const configOf = types => ({
@@ -95,7 +95,7 @@ async function context() {
 async function teardown({ devIds, cfg }) {
   await cleanup(cfg, devIds, api, () => {}).catch(e => console.log('  清理时出错(继续):', e.message))
   await api(
-    `/api/plugins/telemetry/DEVICE/${devIds[A]}/timeseries/delete?keys=${AVG_KEY}&deleteAllDataForKeys=true`,
+    `/api/plugins/telemetry/DEVICE/${devIds[A]}/timeseries/delete?keys=${AVG_OUTPUT}&deleteAllDataForKeys=true`,
     null,
     'DELETE'
   ).catch(() => {})

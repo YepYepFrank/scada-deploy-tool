@@ -27,6 +27,10 @@ regexes = [
   '''<token>''',
   '''changeme''',
   '''\$\{?[A-Z_]+\}?''',
+  # TB 遥测 key 名,不是密钥:scripts/tb-conflict-demo.mjs 里 `const AVG_KEY = 'calc_temperatureAvg15m'`
+  # 被默认规则 generic-api-key 按变量名 + 熵值误报(2026-09-11 提交 f917ca6 的 secret-scan 因此失败,历史不改写)。
+  # 只放行这一个完整的串,不放行整个脚本路径——那个脚本读凭据,别的误写仍要拦。
+  '''^calc_temperatureAvg15m$''',
 ]
 paths = [
   '''\.gitleaks\.toml$''',
