@@ -5,12 +5,14 @@ import { describe, expect, it } from 'vitest'
 import {
   cleanup,
   compile,
+  deleteSiteChain,
   ensureResultAssets,
   handBackCf,
   NULL_UUID,
   publish,
   readPlatformState,
   resolveDeviceIds,
+  unwireRootChain,
   type Computation,
   type StepId,
   type TbApi,
@@ -126,6 +128,11 @@ function fakeTb(
     if ((m = p.match(/^\/api\/ruleChain\/(.+)\/metadata$/))) {
       const md = metadata[m[1]!]
       return md ? JSON.parse(JSON.stringify(md)) : md // 真实 TB 返回的是副本
+    }
+    if ((m = p.match(/^\/api\/ruleChain\/([^/]+)$/)) && !method && !data) {
+      const c = chains.find(x => x.id.id === m![1])
+      if (!c) throw new Error(`${url} → HTTP 404`)
+      return c
     }
     if ((m = p.match(/^\/api\/ruleChain\/(.+)$/)) && method === 'DELETE') {
       chains.splice(
@@ -1093,6 +1100,46 @@ describe('publish · 清理声明里已删除的旧链(R1,2026-09-08)', () => {
       'alarm:ok 无(Site Alarms · S 已清空未删:Root 上还有别人的节点转发到它)'
     )
     expect(tb.stats.rootWrites).toBe(0)
+  })
+
+  it('第 3 步手动删本站点的链:告警链先摘 Root 上本站点指向它的节点,高潮的部分一字不差;统计链不写 Root(2026-09-11)', async () => {
+    const tb = fakeTb(['D1'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1'])
+    await publish(base([alarm, cascade]), devIds, tb.api, collect().report, opts)
+    addColleagueNodes(tb)
+    const before = othersOf(tb)
+    const writes = tb.stats.rootWrites
+    expect(await deleteSiteChain(tb.api, 'S', chainId(tb, 'Site Alarms · S'))).toBe('deleted')
+    expect(chainNamesOf(tb)).not.toContain('Site Alarms · S')
+    expect(ownFlows(tb)).toHaveLength(0)
+    expect(othersOf(tb)).toBe(before)
+    expect(tb.stats.rootWrites).toBe(writes + 1)
+    // 统计链:Root 上没有本站点的节点指向它 → 直接删,不写 Root
+    expect(await deleteSiteChain(tb.api, 'S', chainId(tb, 'Site Rollups · S'))).toBe('deleted')
+    expect(chainNamesOf(tb)).not.toContain('Site Rollups · S')
+    expect(tb.stats.rootWrites).toBe(writes + 1)
+  })
+
+  it('手动删链的边界:Root 不删、别人的链不删;Root 上还有别人的节点转发着就只清空', async () => {
+    const tb = fakeTb(['D1'], {}, { gaochaoWires: true })
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1'])
+    await publish(base([alarm]), devIds, tb.api, collect().report, opts)
+    await expect(deleteSiteChain(tb.api, 'S', tb.chains[0]!.id.id)).rejects.toThrow('Root 链不能删')
+    const other = (await tb.api('/api/ruleChain', { name: '高潮的链' })) as { id: { id: string } }
+    await expect(deleteSiteChain(tb.api, 'S', other.id.id)).rejects.toThrow('不是本站点的链')
+    expect(await deleteSiteChain(tb.api, 'S', chainId(tb, 'Site Alarms · S'))).toBe('emptied')
+    expect(tb.metadata[chainId(tb, 'Site Alarms · S')]!.nodes).toEqual([])
+    expect(tb.stats.rootWrites).toBe(0)
+  })
+
+  it('同步读出 Root 上本站点转发节点指向哪条链(第 3 步改指向 / 重新接线 / 删除用)', async () => {
+    const tb = fakeTb(['D1'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1'])
+    await publish(base([alarm]), devIds, tb.api, collect().report, opts)
+    const rootRow = async () => (await readPlatformState(tb.api, base([alarm]), devIds)).chains.find(c => c.root)
+    expect(await rootRow()).toMatchObject({ ourFlow: true, ourFlowTarget: chainId(tb, 'Site Alarms · S') })
+    await unwireRootChain(tb.api, 'S')
+    expect(await rootRow()).toMatchObject({ ourFlow: false, ourFlowTarget: null })
   })
 
   it('Root 被别人刚改过(409):告警步骤报冲突、不覆盖,Root 上什么也没多', async () => {

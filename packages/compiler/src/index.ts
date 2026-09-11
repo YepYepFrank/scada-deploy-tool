@@ -141,6 +141,8 @@ export {
   isOwnRootFlow,
   rootForwardsTo,
   emptyChain,
+  deleteSiteChain,
+  type ChainRemoval,
   type RootWire,
   type ResultAssetsReport,
   type ChainKind,

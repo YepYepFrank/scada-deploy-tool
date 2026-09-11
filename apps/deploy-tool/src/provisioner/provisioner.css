@@ -726,6 +726,39 @@ select {
 }
 
 /* 权限分级 */
+/* 第 3 步规则链清单:本站点的链可编辑 / 删除,Root 上本站点的转发节点可改指向 / 重新接线 / 删除(2026-09-11) */
+.chain-src {
+  flex-basis: calc(100% - 16px);
+  margin: 6px 0 4px 16px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--line-1);
+}
+.chain-src-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.chain-src-hint {
+  font-size: 12px;
+  color: var(--ink-2);
+  margin-bottom: 4px;
+}
+.chain-root-own {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.chain-root-pick {
+  max-width: 240px;
+  font-size: 12px;
+}
+.btn.ghost.danger {
+  color: var(--bad);
+}
+.chain-op-msg {
+  margin: 6px 0;
+}
 /* 第 3 步冲突的三选一:待定 / 以 TB 为准 / 以本工具为准(2026-09-11) */
 .choice-seg {
   display: inline-flex;

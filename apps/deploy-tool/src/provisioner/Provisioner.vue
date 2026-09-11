@@ -28,6 +28,10 @@ import {
   findAsset,
   listCfs,
   adoptCf,
+  siteChainNames,
+  deleteSiteChain,
+  wireRootChain,
+  unwireRootChain,
 } from './publisher.js'
 import KeyPicker from '../components/KeyPicker.vue'
 import {
@@ -1520,6 +1524,145 @@ async function handBackRow(r) {
   }
   void syncPlatform()
 }
+/* ── 规则链清单里的编辑 / 删除(2026-09-11 YY)──
+   本站点自己的链:「编辑」= 展开生成它的向导条目就地改(第 5 步发布时整条链按向导重新生成);
+   「删除」= 立即删 TB 上的链(deleteSiteChain:只删本站点的;Root 上本站点的转发节点指向它就先摘;
+   还有别人的节点转发着就只清空)+ 删掉向导里生成它的条目,否则下次发布又会建回来。
+   Root 上本站点自己的转发节点:改指向(只能选本站点的链)/ 重新接线(指回告警链)/ 删除;都只动这一个节点。 */
+const CHAIN_SOURCES = {
+  alarm: ['alarm.threshold'],
+  rollup: ['window.aggregate', 'window.cascade'],
+  revenue: ['revenue.periodic'],
+}
+const CHAIN_KIND_CN = { alarm: '告警', rollup: '周期统计 / 多级归档', revenue: '分时收益' }
+const chainNamesNow = computed(() => siteChainNames(siteJson.value))
+const chainKindOf = name => Object.keys(CHAIN_SOURCES).find(k => chainNamesNow.value[k] === name) || null
+/** 向导里生成这类链的条目:手工运算 + 设备模板里的条目 */
+function chainSources(kind) {
+  const tpls = CHAIN_SOURCES[kind] || []
+  const out = []
+  computations.value.forEach((c, i) => {
+    if (tpls.includes(c.template)) out.push({ id: `c${i}`, desc: compDesc(c), edit: () => openEdit(i) })
+  })
+  deviceTemplates.value.forEach((t, ti) =>
+    (t.items || []).forEach((item, ii) => {
+      if (tpls.includes(item.template))
+        out.push({
+          id: `t${ti}-${ii}`,
+          desc: `设备模板「${t.name}」· ${tplItemDesc(item)}`,
+          edit: () => openTplItemEdit(ti, ii),
+        })
+    })
+  )
+  return out
+}
+const chainEditOpen = reactive({})
+const chainOp = reactive({ busy: false, msg: '' })
+const ownChains = computed(() => (platView.value?.chains || []).filter(c => c.mine && !c.root))
+const chainNameById = id => (platView.value?.chains || []).find(c => c.id === id)?.name || id
+const rootPick = ref('')
+const ROOT_RESTART =
+  '写 Root 会让 Root 上全部节点重启、定时器从头计时(含 kz 归档触发);只动本站点这一个转发节点,别人的节点与连线原样。'
+function chainWriteBlocked() {
+  if (conn.status !== 'ok') return '尚未连接 ThingsBoard'
+  if (!canPublishSite.value) return `当前账号(现场)只能操作以下站点:${perm.sites.join('、') || '(未授权任何站点)'}`
+  return siteIdError.value
+}
+async function runChainOp(label, fn) {
+  chainOp.busy = true
+  chainOp.msg = ''
+  try {
+    chainOp.msg = (await fn()) || `${label}完成`
+  } catch (e) {
+    chainOp.msg = `${label}失败:${e.message || e}`
+  } finally {
+    chainOp.busy = false
+  }
+  void syncPlatform()
+}
+async function deleteOwnChain(c) {
+  const why = chainWriteBlocked()
+  if (why) return alert(why)
+  const kind = chainKindOf(c.name)
+  const src = kind ? chainSources(kind) : []
+  const rootPoints = platView.value?.chains.find(x => x.root)?.ourFlowTarget === c.id
+  if (
+    !(await askConfirm({
+      title: '删除规则链',
+      text:
+        `立即删除 TB 上的「${c.name}」?\n` +
+        (src.length ? `· 同时删掉向导里生成它的 ${src.length} 条${CHAIN_KIND_CN[kind]}条目,否则下次发布又会建回来;\n` : '') +
+        (rootPoints ? `· Root 上本站点的转发节点指向它,会先摘掉。${ROOT_RESTART}\n` : '') +
+        '· Root 上如果还有别人的节点转发到它,只清空不删。',
+      okLabel: '删除',
+      danger: true,
+    }))
+  )
+    return
+  await runChainOp('删除', async () => {
+    const r = await deleteSiteChain(tbApi, site.name, c.id, Object.values(chainNamesNow.value))
+    if (kind) {
+      const tpls = CHAIN_SOURCES[kind]
+      computations.value = computations.value.filter(x => !tpls.includes(x.template))
+      for (const t of deviceTemplates.value) t.items = (t.items || []).filter(x => !tpls.includes(x.template))
+    }
+    return r === 'emptied'
+      ? `「${c.name}」已清空未删:Root 上还有别人的节点转发到它`
+      : `已删除「${c.name}」` + (src.length ? `,并删掉向导里的${CHAIN_KIND_CN[kind]}条目(记得保存草稿)` : '')
+  })
+}
+async function retargetRoot() {
+  const why = chainWriteBlocked()
+  if (why) return alert(why)
+  const target = ownChains.value.find(c => c.id === rootPick.value)
+  if (!target) return
+  if (
+    !(await askConfirm({
+      title: '改指向',
+      text: `把 Root 上本站点的转发节点改为转发到「${target.name}」?\n${ROOT_RESTART}\n第 5 步发布时如果还有告警,会自动指回告警链。`,
+      okLabel: '改指向',
+    }))
+  )
+    return
+  await runChainOp('改指向', async () =>
+    (await wireRootChain(tbApi, target.id, site.name)) === '转发已就位'
+      ? `Root 上已有节点转发到「${target.name}」,没有改动`
+      : `本站点的转发节点已指向「${target.name}」`
+  )
+}
+async function rewireRoot() {
+  const why = chainWriteBlocked()
+  if (why) return alert(why)
+  const alarm = ownChains.value.find(c => c.name === chainNamesNow.value.alarm)
+  if (!alarm) return
+  if (
+    !(await askConfirm({
+      title: '重新接线',
+      text: `让 Root 把遥测转给本站点的告警链「${alarm.name}」(节点丢了就补上,指错了就改回)?\n${ROOT_RESTART}`,
+      okLabel: '重新接线',
+    }))
+  )
+    return
+  await runChainOp('重新接线', async () =>
+    (await wireRootChain(tbApi, alarm.id, site.name)) === '转发已就位' ? '转发已就位,没有改动' : 'Root 链已接线'
+  )
+}
+async function unwireRoot() {
+  const why = chainWriteBlocked()
+  if (why) return alert(why)
+  if (
+    !(await askConfirm({
+      title: '删除转发节点',
+      text: `从 Root 上摘掉本站点的转发节点和它的连线?摘掉后本站点的告警链收不到遥测,告警不会再产生。\n${ROOT_RESTART}\n第 5 步发布时如果还有告警,会自动接回。`,
+      okLabel: '删除',
+      danger: true,
+    }))
+  )
+    return
+  await runChainOp('删除转发节点', async () =>
+    (await unwireRootChain(tbApi, site.name)) ? '已摘掉 Root 上本站点的转发节点' : 'Root 上本来就没有本站点的转发节点'
+  )
+}
 /** 单设备运算:这台设备上平台已有的别人的计算字段 + 本站点要建的,超过 TB 单实体上限就提前拦 */
 const modalSlotProblem = computed(() => {
   const st = platform.state
@@ -2669,15 +2812,68 @@ function openFrontend() {
             </div>
           </details>
           <details class="plat-group">
-            <summary class="plat-gt">
-              规则链({{ platView.chains.length }})—— 只读
-            </summary>
+            <summary class="plat-gt">规则链({{ platView.chains.length }})</summary>
+            <p v-if="chainOp.msg" class="ok-msg chain-op-msg">{{ chainOp.msg }}</p>
             <div v-for="c in platView.chains" :key="c.id" class="plat-row">
               <span class="pn">{{ c.root ? '[Root] ' : '' }}{{ c.name }}</span>
               <span class="pe">{{ c.nodes }} 节点{{ c.timers ? ` · ${c.timers} 个定时器` : '' }}</span>
               <span class="plat-tag" :class="{ mine: c.mine }">{{
-                c.mine ? '本站点' : c.root && c.ourFlow ? '别人的 · 含本站点转发节点' : '别人的'
+                c.mine ? '本站点' : c.root ? 'Root' : '别人的'
               }}</span>
+              <!-- 本站点自己的链:编辑(改向导里的来源)/ 删除(立即删 + 删向导来源) -->
+              <template v-if="c.mine && !c.root">
+                <button
+                  v-if="chainKindOf(c.name)"
+                  class="btn ghost sm"
+                  :disabled="chainOp.busy"
+                  @click="chainEditOpen[c.id] = !chainEditOpen[c.id]"
+                >
+                  {{ chainEditOpen[c.id] ? '收起' : '编辑' }}
+                </button>
+                <button class="btn ghost sm danger" :disabled="chainOp.busy" @click="deleteOwnChain(c)">删除</button>
+                <div v-if="chainEditOpen[c.id]" class="chain-src">
+                  <div class="chain-src-hint">
+                    这条链由向导里下面这些{{ CHAIN_KIND_CN[chainKindOf(c.name)] }}条目生成;改完在第 5
+                    步发布时整条链按向导重新生成。
+                  </div>
+                  <div v-for="s in chainSources(chainKindOf(c.name))" :key="s.id" class="chain-src-row">
+                    <span>{{ s.desc }}</span>
+                    <button class="btn ghost sm" @click="s.edit()">编辑</button>
+                  </div>
+                  <div v-if="!chainSources(chainKindOf(c.name)).length" class="chain-src-hint">
+                    向导里已经没有生成它的条目,第 5 步发布时会清理这条链。
+                  </div>
+                </div>
+              </template>
+              <!-- Root:只动本站点自己的转发节点——改指向 / 重新接线 / 删除 -->
+              <template v-else-if="c.root">
+                <span class="chain-root-own"
+                  >本站点转发节点:{{ c.ourFlow ? '→ ' + chainNameById(c.ourFlowTarget) : '无' }}</span
+                >
+                <select v-model="rootPick" class="chain-root-pick" :disabled="chainOp.busy || !ownChains.length">
+                  <option value="" disabled>改为转发到…</option>
+                  <option v-for="o in ownChains" :key="o.id" :value="o.id">{{ o.name }}</option>
+                </select>
+                <button class="btn ghost sm" :disabled="chainOp.busy || !rootPick" @click="retargetRoot">
+                  改指向
+                </button>
+                <button
+                  class="btn ghost sm"
+                  :disabled="chainOp.busy || !ownChains.some(o => o.name === chainNamesNow.alarm)"
+                  :title="
+                    ownChains.some(o => o.name === chainNamesNow.alarm)
+                      ? '让 Root 把遥测转给本站点的告警链(节点丢了就补上,指错了就改回)'
+                      : '本站点还没有告警链'
+                  "
+                  @click="rewireRoot"
+                >
+                  重新接线
+                </button>
+                <button class="btn ghost sm danger" :disabled="chainOp.busy || !c.ourFlow" @click="unwireRoot">
+                  删除
+                </button>
+              </template>
+              <span v-else class="plat-tag">只读</span>
             </div>
           </details>
         </template>

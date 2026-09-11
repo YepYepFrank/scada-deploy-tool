@@ -27,6 +27,11 @@ export {
   adoptCf,
   cfItemKey,
   chainItemKey,
+  // 第 3 步规则链清单:本站点的链可编辑 / 删除,Root 上本站点的转发节点可改指向 / 重新接线 / 删除(2026-09-11)
+  siteChainNames,
+  deleteSiteChain,
+  wireRootChain,
+  unwireRootChain,
 } from '@grid/tbsite-compiler'
 
 /** skip:这次发布不写的对象(第 3 步冲突选「待定」的,cfItemKey / chainItemKey) */

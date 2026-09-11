@@ -313,6 +313,43 @@ async function pruneStaleChains(
   return out
 }
 
+export type ChainRemoval = 'deleted' | 'emptied'
+
+/**
+ * 第 3 步手动删除本站点自己的一条规则链(2026-09-11 YY):立即删,与发布时清理旧链同一套规矩——
+ *   · 只删本站点的链:带本站点归属标记;或没标记、但名字是本站点的链名(默认名 + 调用方给的当前声明链名);
+ *     Root、别的站点的、别人的链一律拒绝;
+ *   · Root 上本站点自己的转发节点正指向它 → 先摘掉(unwireRootChain,别人的节点连线原样);
+ *   · 摘完 Root 上还有别人的节点转发给它 → 只清空不删(删了会让那个节点指向一条不存在的链)。
+ * 向导里生成这条链的条目由调用方一并删掉,否则下次发布又会建回来。
+ */
+export async function deleteSiteChain(
+  api: TbApi,
+  site: string,
+  chainId: string,
+  allowedNames: string[] = []
+): Promise<ChainRemoval> {
+  const ch = (await api(`/api/ruleChain/${chainId}`).catch(() => null)) as {
+    name: string
+    root?: boolean
+    additionalInfo?: unknown
+  } | null
+  if (!ch) throw new Error('这条规则链在 TB 上已经不存在了')
+  if (ch.root) throw new Error('Root 链不能删')
+  const mark = ownerOf(ch)
+  const ours = new Set([chainNames.alarm(site), chainNames.rollup(site), chainNames.revenue(site), ...allowedNames])
+  if (mark ? mark.site !== site : !ours.has(ch.name)) throw new Error(`「${ch.name}」不是本站点的链,不能删`)
+  const root = await readRoot(api)
+  if (root?.nodes.some(n => isOwnRootFlow(n, site) && n.configuration?.ruleChainId === chainId))
+    await unwireRootChain(api, site)
+  if (await rootForwardsTo(api, chainId)) {
+    await emptyChain(api, chainId)
+    return 'emptied'
+  }
+  await api(`/api/ruleChain/${chainId}`, null, 'DELETE')
+  return 'deleted'
+}
+
 /** 输出清单里 CF 的定位键:实体 + 计算字段名(接管来的字段名常和输出测点名不同) */
 const cfKey = (o: OutputKey) => `${o.entityType}|${o.entity}|${o.cfName ?? o.key}`
 

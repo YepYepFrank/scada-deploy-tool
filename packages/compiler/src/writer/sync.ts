@@ -8,7 +8,7 @@
 // 这里不写 TB;唯一的写操作是「交还」(handBackCf)。扫全部资产要十几秒,onProgress 给界面报进度。
 import type { CalculatedField, RuleChainMetadata, TbsiteConfig } from '../types'
 import { adoptCf, type AdoptResult, type PlatformCf } from '../core/adopt'
-import { chainNames, OWNER_TAG, ownerOf, SITE_ASSET_TYPE } from '../core/constants'
+import { OWNER_TAG, ownerOf, SITE_ASSET_TYPE } from '../core/constants'
 import { compile } from '../core/plan'
 import {
   cfItemKey,
@@ -22,6 +22,7 @@ import {
   type ConfigDiff,
 } from '../core/print'
 import type { TbApi, TbCf } from './api'
+import { isOwnRootFlow } from './publish'
 
 export type PlatformOwner = 'mine' | 'otherSite' | 'foreign'
 /** 本工具管的对象与向导配置的比对结果 */
@@ -59,8 +60,10 @@ export interface PlatformChainRow {
   timers: number
   /** 本站点的链(带本站点标记,或是本站点声明的链名) */
   mine: boolean
-  /** Root 链上有没有本站点的转发节点(只读看一眼) */
+  /** Root 链上有没有本站点的转发节点 */
   ourFlow?: boolean
+  /** Root 链上本站点的转发节点指向哪条链(链 id;第 3 步「改指向 / 重新接线 / 删除」用) */
+  ourFlowTarget?: string | null
   /** 本站点的链:比对结果与逐项差异 */
   drift?: DriftState
   diff?: ConfigDiff[]
@@ -228,7 +231,6 @@ export async function readPlatformState(
   }
 
   const ours = new Set(Object.keys(plannedChains))
-  const flow = chainNames.rootFlow(site)
   const chainList = await pageAll<Ent & { root?: boolean; additionalInfo?: unknown }>(api, '/api/ruleChains')
   const chains: PlatformChainRow[] = []
   tell('读取规则链', 0, chainList.length)
@@ -237,6 +239,9 @@ export async function readPlatformState(
     const nodes = (m?.nodes ?? []) as { type: string; name: string }[]
     const mark = ownerOf(c)
     const mine = !c.root && (mark ? mark.site === site : ours.has(c.name))
+    const own = c.root
+      ? ((m?.nodes ?? []) as Parameters<typeof isOwnRootFlow>[0][]).find(n => isOwnRootFlow(n, site))
+      : undefined
     const row: PlatformChainRow = {
       key: chainItemKey(c.name),
       id: c.id.id,
@@ -245,7 +250,9 @@ export async function readPlatformState(
       nodes: nodes.length,
       timers: nodes.filter(n => /GeneratorNode$/.test(n.type)).length,
       mine,
-      ...(c.root ? { ourFlow: nodes.some(n => n.name === flow) } : {}),
+      ...(c.root
+        ? { ourFlow: !!own, ourFlowTarget: (own?.configuration?.ruleChainId as string | undefined) ?? null }
+        : {}),
     }
     if (mine && m) {
       const planned = plannedChains[c.name]
