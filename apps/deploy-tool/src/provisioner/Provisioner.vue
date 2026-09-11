@@ -2670,7 +2670,7 @@ function openFrontend() {
           </details>
           <details class="plat-group">
             <summary class="plat-gt">
-              规则链({{ platView.chains.length }})—— 只读;Root 链由高潮维护,本工具只动 Root 上本站点那一个转发节点
+              规则链({{ platView.chains.length }})—— 只读
             </summary>
             <div v-for="c in platView.chains" :key="c.id" class="plat-row">
               <span class="pn">{{ c.root ? '[Root] ' : '' }}{{ c.name }}</span>
