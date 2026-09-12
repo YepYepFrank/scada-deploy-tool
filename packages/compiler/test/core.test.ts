@@ -434,7 +434,51 @@ describe('alarmMetadata', () => {
     expect(level.nodes[3]!.configuration.alarmDetailsBuildJs).toContain(`details.message = 'p=' + msg['p'] + ' it\\'s'`)
     const edge = alarmMetadata('c', [{ ...a, trigger: 'edge' }])
     expect(edge.connections).toHaveLength(12)
-    expect(edge.nodes.find(n => n.name === '取上次状态')!.configuration.serverAttributeNames).toEqual(['almState_p_gt'])
+    expect(edge.nodes.find(n => n.name === '取上次状态')!.configuration.serverAttributeNames).toEqual([
+      expect.stringMatching(/^almState_p_gt_10_[0-9a-f]{6}$/),
+    ])
+  })
+
+  // 2026-09-11:状态属性原来只按 测点 + 比较符 取名,同一台设备上的两条边沿告警会读写同一个属性、互相干扰
+  const edgeRule = (name: string, op: 'gt' | 'eq' | 'ne' | 'lt', value: number, key = 'P'): Computation => ({
+    template: 'alarm.threshold',
+    device: 'A1',
+    key,
+    name,
+    condition: { op, value },
+    severity: 'MAJOR',
+    trigger: 'edge',
+  })
+  const stateAttrs = (alarms: Computation[]) =>
+    alarmMetadata('c', alarms)
+      .nodes.filter(n => n.name === '取上次状态')
+      .map(n => (n.configuration.serverAttributeNames as string[])[0]!)
+
+  it('同一台设备 P>100、P>200 两条边沿告警:状态属性各一份,判定变化读的、写状态写的都是自己那份', () => {
+    const rules = [edgeRule('功率偏高', 'gt', 100), edgeRule('功率过高', 'gt', 200)]
+    const meta = alarmMetadata('c', rules)
+    const [s1, s2] = stateAttrs(rules)
+    expect(s1).toMatch(/^almState_P_gt_100_[0-9a-f]{6}$/)
+    expect(s2).toMatch(/^almState_P_gt_200_[0-9a-f]{6}$/)
+    const js = (name: string) => meta.nodes.find(n => n.name === name)!.configuration.jsScript as string
+    expect(js('判定变化 功率偏高')).toContain(`!== metadata.ss_${s1});`)
+    expect(js('写状态 功率偏高')).toContain(`m['${s1}'] =`)
+    expect(js('判定变化 功率过高')).toContain(`!== metadata.ss_${s2});`)
+    expect(js('写状态 功率过高')).toContain(`m['${s2}'] =`)
+  })
+
+  it('开关变位展开的两个方向(同测点 == 合闸值 / != 合闸值):状态属性各一份', () => {
+    const [close, open] = stateAttrs([edgeRule('开关变位(由分到合)', 'eq', 1), edgeRule('开关变位(由合到分)', 'ne', 1)])
+    expect(close).toMatch(/^almState_P_eq_1_[0-9a-f]{6}$/)
+    expect(open).toMatch(/^almState_P_ne_1_[0-9a-f]{6}$/)
+  })
+
+  it('状态属性名:阈值相同、告警类型不同也分开;测点 / 比较符 / 阈值 / 类型全同才共用;始终是合法属性名', () => {
+    const [a, b, c] = stateAttrs([edgeRule('甲', 'gt', 100), edgeRule('乙', 'gt', 100), edgeRule('甲', 'gt', 100)])
+    expect(a).not.toBe(b)
+    expect(c).toBe(a)
+    const [odd] = stateAttrs([edgeRule('温度 过低', 'lt', -0.5, 'T.amb-1')])
+    expect(odd).toMatch(/^almState_T_amb_1_lt__0_5_[0-9a-f]{6}$/)
   })
 })
 

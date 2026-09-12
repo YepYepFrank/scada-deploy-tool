@@ -1649,7 +1649,7 @@
             "fetchTo": "METADATA",
             "clientAttributeNames": [],
             "sharedAttributeNames": [],
-            "serverAttributeNames": ["almState_P_gt"],
+            "serverAttributeNames": ["almState_P_gt_45_f59f8c"],
             "latestTsKeyNames": [],
             "getLatestValueWithTs": false
           },
@@ -1663,7 +1663,7 @@
           "name": "判定变化 功率越限告警",
           "configuration": {
             "scriptLang": "JS",
-            "jsScript": "var cond = Number(msg['P']) > 45; metadata.cond = String(cond); metadata.changed = String(String(cond) !== metadata.ss_almState_P_gt); return { msg: msg, metadata: metadata, msgType: msgType };"
+            "jsScript": "var cond = Number(msg['P']) > 45; metadata.cond = String(cond); metadata.changed = String(String(cond) !== metadata.ss_almState_P_gt_45_f59f8c); return { msg: msg, metadata: metadata, msgType: msgType };"
           },
           "additionalInfo": {
             "layoutX": 400,
@@ -1687,7 +1687,7 @@
           "name": "写状态 功率越限告警",
           "configuration": {
             "scriptLang": "JS",
-            "jsScript": "var m = {}; m['almState_P_gt'] = metadata.cond === 'true'; return { msg: m, metadata: metadata, msgType: 'POST_ATTRIBUTES_REQUEST' };"
+            "jsScript": "var m = {}; m['almState_P_gt_45_f59f8c'] = metadata.cond === 'true'; return { msg: m, metadata: metadata, msgType: 'POST_ATTRIBUTES_REQUEST' };"
           },
           "additionalInfo": {
             "layoutX": 900,

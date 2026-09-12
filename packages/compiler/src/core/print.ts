@@ -45,8 +45,8 @@ export const metaCovers = (planned: ChainMetaLike, cur: ChainMetaLike): boolean 
   return nodesSame && conns(planned) === conns(cur)
 }
 
-/** FNV-1a 32 位:只用来判断「变没变」 */
-const hash = (s: string): string => {
+/** FNV-1a 32 位:只用来判断「变没变」(告警状态属性名里的告警类型指纹也用它) */
+export const hash = (s: string): string => {
   let h = 0x811c9dc5
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i)

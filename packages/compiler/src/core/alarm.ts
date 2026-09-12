@@ -1,7 +1,8 @@
 // 阈值告警链:每条规则 相关性过滤 → 阈值判断 → True 建告警 / False 清告警;
-// trigger = 'edge' 时上次状态存设备服务端属性,只在状态翻转时动作。
+// trigger = 'edge' 时上次状态存设备服务端属性(每条规则一份,见 alarmStateAttr),只在状态翻转时动作。
 import type { Computation, RuleChainMetadata, RuleConnection, RuleNode } from '../types'
 import { OP_JS } from './constants'
+import { hash } from './print'
 import { transformNode } from './rollup'
 
 const filterNode = (name: string, jsScript: string, x: number, y: number): RuleNode => ({
@@ -11,8 +12,18 @@ const filterNode = (name: string, jsScript: string, x: number, y: number): RuleN
   additionalInfo: { layoutX: x, layoutY: y },
 })
 
-/** 边沿触发用的状态属性名 */
-export const alarmStateAttr = (key: string, op: string) => `almState_${key}_${op}`.replace(/[^\w]/g, '_')
+/**
+ * 边沿触发用的「上次状态」属性名(设备服务端属性),每条规则一份:
+ *   almState_<测点>_<比较符>_<阈值>_<告警类型指纹 6 位>,非 \w 字符换成 _。
+ * 2026-09-11 起带阈值与告警类型:原来只按 测点 + 比较符 取名,同一台设备上 P>100、P>200 两条边沿告警
+ * 读写同一个属性,互把对方的状态当成自己的上次状态,翻转漏报或重报。测点 / 比较符 / 阈值 / 告警类型全同的
+ * 两条规则仍共用一份(条件与告警都一样,本就是重复规则)。
+ * 代价:改名后首次重新发布会把告警链重写一次,新属性一开始是空的,发布后第一条消息一律算「翻转」——
+ * 越限的建一次告警(TB 对同类型已激活的告警去重,只更新不新建),没越限的清一次;
+ * 旧的 almState_<测点>_<比较符> 属性留在设备上,不再有人读写。
+ */
+export const alarmStateAttr = (key: string, op: string, value: number, alarmType: string) =>
+  `almState_${key}_${op}_${value}_${hash(alarmType).slice(0, 6)}`.replace(/[^\w]/g, '_')
 
 /** 入口防回环过滤(ADR-003 决定 2):资产消息放行;设备消息里带前缀且不在白名单的 key → 丢弃 */
 export function cascadeGuardScript(prefix: string, whitelist: string[]): string {
@@ -81,7 +92,7 @@ export function alarmMetadata(
       additionalInfo: { layoutX: 700, layoutY: y + 60 },
     })
     if (a.trigger === 'edge') {
-      const stateAttr = alarmStateAttr(key, cond.op)
+      const stateAttr = alarmStateAttr(key, cond.op, val, alarmType)
       const getSt = add({
         type: 'org.thingsboard.rule.engine.metadata.TbGetAttributesNode',
         name: '取上次状态',

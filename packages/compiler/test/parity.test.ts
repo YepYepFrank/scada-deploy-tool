@@ -19,7 +19,14 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { compile, placeholderIds, type RuleChainMetadata, type TbsiteConfig, type WritePlan } from '../src/index'
+import {
+  alarmStateAttr,
+  compile,
+  placeholderIds,
+  type RuleChainMetadata,
+  type TbsiteConfig,
+  type WritePlan,
+} from '../src/index'
 
 const fixtures = resolve(__dirname, 'fixtures')
 const load = (f: string) => JSON.parse(readFileSync(resolve(fixtures, f), 'utf8'))
@@ -114,6 +121,19 @@ function pythonPlan(name: string): WritePlan {
       if (t && n.name.startsWith('告警: ')) n.name = `告警: ${t}`
       if (t && n.name.startsWith('清除: ')) n.name = `清除: ${t}`
     }
+  if (p.alarm) {
+    // 边沿告警的状态属性名 2026-09-11 起每条规则一份(带阈值与告警类型指纹,见 core/alarm.ts 的 alarmStateAttr);
+    // 冻结的 Python 版仍是 almState_<测点>_<比较符>,读快照时换成 TS 的名字(整串一次扫描,不会重复替换)
+    const renamed = new Map<string, string>()
+    for (const a of p.alarm.items)
+      if (a.trigger === 'edge') {
+        const old = `almState_${a.key}_${a.condition!.op}`.replace(/[^\w]/g, '_')
+        const now = alarmStateAttr(a.key!, a.condition!.op, a.condition!.value, a.name || `${a.key} 阈值告警`)
+        if ((renamed.get(old) ?? now) !== now) throw new Error(`Python 快照里 ${old} 被两条规则共用,对不上`)
+        renamed.set(old, now)
+      }
+    p.alarm.metadata = JSON.parse(JSON.stringify(p.alarm.metadata).replace(/almState_\w+/g, s => renamed.get(s) ?? s))
+  }
   if (p.revenue) {
     const priceAssets = new Set(p.revenue.items.map(c => c.priceAsset))
     for (const n of p.revenue.metadata.nodes)

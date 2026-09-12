@@ -488,7 +488,7 @@
             "key": "P",
             "condition": { "op": "gt", "value": 45 }, // op: gt / lt / gte / lte / eq / ne
             "severity": "WARNING", // TB 告警级别:CRITICAL / MAJOR / MINOR / WARNING / INDETERMINATE
-            "trigger": "edge", // edge = 状态翻转才动作(值变了才报一次;上次状态存设备服务端属性 almState_P_gt);level = 每条消息都判
+            "trigger": "edge", // edge = 状态翻转才动作(值变了才报一次;上次状态存设备服务端属性 almState_P_gt_45_<告警类型指纹 6 位>,每条规则一份);level = 每条消息都判
             "message": "有功功率越限:{value} kW" // 告警 details.message,{value} 触发时替换成实时值
           },
           {
