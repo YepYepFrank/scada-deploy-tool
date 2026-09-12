@@ -1005,6 +1005,70 @@ function applyPreset(p) {
 }
 const presetMsg = ref('')
 
+/* ── 常用方案用到单台设备(2026-09-11 现场反馈:一个站点只给低压进线设电压越限)──
+   方式一的常用方案按设备类型批量套用;这里选一台设备,把方案里的条目按这台设备实际有的测点展开成方式二的
+   单设备运算(缺测点的条目跳过)。方案里的越限告警阈值相同时(如电压越限 250 V)可在这里统一改;之后每条仍可单独编辑。 */
+const presetKeysOf = item =>
+  item.template === 'window.cascade' || item.template === 'window.aggregate' ? item.keys || [] : [item.key]
+/** 方案里「越限」类告警(大于 / 小于…)的共同阈值;没有或不一致回 null(状态量告警如 COM≠1 不算) */
+const presetCommonValue = p => {
+  const vs = [
+    ...new Set(
+      (p?.items || [])
+        .filter(i => i.template === 'alarm.threshold' && ['gt', 'lt', 'gte', 'lte'].includes(i.condition?.op))
+        .map(i => i.condition.value)
+    ),
+  ]
+  return vs.length === 1 ? vs[0] : null
+}
+const presetOne = reactive({ open: false, preset: null, device: '', value: '', msg: '' })
+const presetOneMsg = ref('')
+/** 已认领设备里能用上这个方案的(至少一项所需测点齐全),附带可用几项 */
+const presetOneDevices = computed(() => {
+  const p = presetOne.preset
+  if (!p) return []
+  return claimedDevices.value
+    .map(d => {
+      const have = new Set(d.keys.filter(k => k.claimed).map(k => k.key))
+      return { d, n: p.items.filter(i => presetKeysOf(i).every(k => have.has(k))).length }
+    })
+    .filter(x => x.n > 0)
+})
+function openPresetOne(p) {
+  const v = presetCommonValue(p)
+  Object.assign(presetOne, { open: true, preset: p, device: '', value: v === null ? '' : String(v), msg: '' })
+}
+function applyPresetOne() {
+  const p = presetOne.preset
+  const d = claimedDevices.value.find(x => x.name === presetOne.device)
+  if (!p || !d) return
+  const common = presetCommonValue(p)
+  const v = Number(presetOne.value)
+  if (common !== null && (presetOne.value === '' || isNaN(v))) {
+    presetOne.msg = '阈值要填数字'
+    return
+  }
+  const have = new Set(d.keys.filter(k => k.claimed).map(k => k.key))
+  let added = 0
+  let skipped = 0
+  for (const item of p.items) {
+    if (!presetKeysOf(item).every(k => have.has(k))) {
+      skipped++
+      continue
+    }
+    const c = { ...JSON.parse(JSON.stringify(item)), device: d.name }
+    if (common !== null && c.template === 'alarm.threshold' && c.condition?.value === common) c.condition.value = v
+    computations.value.push(c)
+    added++
+  }
+  presetOne.open = false
+  wayOpen.w2 = true
+  presetOneMsg.value =
+    `已给 ${dn(d.name)} 加上「${p.name}」${added} 项` +
+    (skipped ? `(${skipped} 项这台设备缺测点,已跳过)` : '') +
+    ';可在下方列表里逐条修改'
+}
+
 /* ── 智能自动填写:选完测点后自动生成名称/文案/输出名(可改)── */
 let autoFill = { alarmName: '', message: '', output: '', asset: '' }
 function keyBase(encoded) {
@@ -2969,6 +3033,19 @@ function openFrontend() {
         <p class="hint">
           针对某一台设备(或全站级指标)单独配置。点击卡片、填参数即可,不需要写任何表达式;所有测点都是下拉选择并带中文说明。
         </p>
+        <div class="preset-row">
+          <span class="preset-label">常用方案用到单台设备(如只给低压进线设电压越限):</span>
+          <button
+            v-for="p in PRESETS"
+            :key="'one-' + p.id"
+            class="preset-btn"
+            :title="p.desc"
+            @click="openPresetOne(p)"
+          >
+            <span class="preset-icon">{{ p.icon }}</span>{{ p.name }}
+          </button>
+        </div>
+        <p v-if="presetOneMsg" class="ok-msg" style="margin: 0 0 10px">{{ presetOneMsg }}</p>
         <div class="tpl-list">
           <template v-for="(cat, cid) in CATEGORIES" :key="cid">
             <div class="tpl-list-cat">{{ cat.name }}</div>
@@ -3588,6 +3665,37 @@ function openFrontend() {
           <button class="btn" :class="{ danger: confirmBox.danger }" @click="confirmAnswer(true)">
             {{ confirmBox.okLabel }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 常用方案用到单台设备(2026-09-11):选设备、统一改阈值,展开成方式二的单设备运算 -->
+    <div v-if="presetOne.open" class="modal-mask confirm-mask" @click.self="presetOne.open = false">
+      <div class="modal confirm-modal">
+        <h3>「{{ presetOne.preset.name }}」用到单台设备</h3>
+        <p class="confirm-text">
+          {{ presetOne.preset.desc }}。<br />选一台设备,按它实际有的测点生成单设备运算(缺测点的跳过),之后可在方式二列表里逐条修改。
+        </p>
+        <div class="field" style="margin-bottom: 10px">
+          <label>设备</label>
+          <select v-model="presetOne.device" style="min-width: 340px">
+            <option value="" disabled>选择设备…</option>
+            <option v-for="x in presetOneDevices" :key="x.d.name" :value="x.d.name">
+              {{ dual(x.d.cn, x.d.name) }} · 可用 {{ x.n }}/{{ presetOne.preset.items.length }} 项
+            </option>
+          </select>
+        </div>
+        <div v-if="presetCommonValue(presetOne.preset) !== null" class="field" style="margin-bottom: 10px">
+          <label>阈值(方案里的越限告警统一用这个值)</label>
+          <input type="text" v-model="presetOne.value" style="width: 120px" />
+        </div>
+        <p v-if="!presetOneDevices.length" class="err-msg">
+          已认领的设备里没有具备这个方案所需测点的,请先在第 2 步认领(如电压越限需要 Ua / Ub / Uc)
+        </p>
+        <p v-if="presetOne.msg" class="err-msg">{{ presetOne.msg }}</p>
+        <div class="modal-foot">
+          <button class="btn ghost" @click="presetOne.open = false">取消</button>
+          <button class="btn" :disabled="!presetOne.device" @click="applyPresetOne">添加</button>
         </div>
       </div>
     </div>
