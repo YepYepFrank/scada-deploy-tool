@@ -36,7 +36,7 @@ export function expandTemplates(cfg: TbsiteConfig): { computations: Computation[
       if (skipped > 0)
         notes.push(`模板「${t.name}」·「${item.name || item.output || item.key}」:${skipped} 台设备缺少所需测点,已跳过`)
       if (!capable.length) continue
-      if (item.template === 'alarm.threshold') {
+      if (item.template === 'alarm.threshold' || item.template === 'alarm.switch') {
         out.push({ ...clone(item), device: capable[0]!.name, devices: capable.map(d => d.name), _tpl: t.name })
       } else if (item.template === 'expr.add' || item.template === 'expr.subtract') {
         for (const d of capable)

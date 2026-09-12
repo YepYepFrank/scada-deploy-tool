@@ -9,6 +9,7 @@ import {
   outputInventory,
   renameTable,
   alarmMetadata,
+  expandSwitchAlarms,
   buildAggCfs,
   buildCf,
   compile,
@@ -479,6 +480,62 @@ describe('alarmMetadata', () => {
     expect(c).toBe(a)
     const [odd] = stateAttrs([edgeRule('温度 过低', 'lt', -0.5, 'T.amb-1')])
     expect(odd).toMatch(/^almState_T_amb_1_lt__0_5_[0-9a-f]{6}$/)
+  })
+})
+
+describe('开关变位告警 alarm.switch(2026-09-11)', () => {
+  const sw: Computation = {
+    template: 'alarm.switch',
+    device: 'A1',
+    key: 'p',
+    name: '开关变位',
+    directions: ['close', 'open'],
+    closedValue: 1,
+    severity: 'MINOR',
+  }
+  it('两个方向都选:展开成两条「变化才报」告警——由分到合 == 合闸值、由合到分 != 合闸值', () => {
+    const out = expandSwitchAlarms([sw])
+    expect(out.map(c => [c.template, c.name, c.condition, c.trigger])).toEqual([
+      ['alarm.threshold', '开关变位(由分到合)', { op: 'eq', value: 1 }, 'edge'],
+      ['alarm.threshold', '开关变位(由合到分)', { op: 'ne', value: 1 }, 'edge'],
+    ])
+    expect(out[0]!.message).toBe('开关变位:由分到合(当前值 {value})')
+    expect(out[0]).not.toHaveProperty('directions')
+    // 只选一种;合闸值缺省为 1;别的运算原样
+    expect(expandSwitchAlarms([{ ...sw, directions: ['open'], closedValue: undefined }]).map(c => c.condition)).toEqual(
+      [{ op: 'ne', value: 1 }]
+    )
+    expect(expandSwitchAlarms([{ template: 'expr.add', device: 'A1', output: 'x' }])).toHaveLength(1)
+  })
+  it('规则链:两个方向的「上次状态」属性各一份,互不覆盖;校验方向与合闸值', () => {
+    const plan = compile(base({ computations: [sw] }))
+    expect(plan.alarm!.items.map(a => a.name)).toEqual(['开关变位(由分到合)', '开关变位(由合到分)'])
+    const states = plan
+      .alarm!.metadata.nodes.filter(n => n.name === '取上次状态')
+      .map(n => (n.configuration.serverAttributeNames as string[])[0])
+    expect(states.map(s => s?.replace(/_[0-9a-f]{6}$/, ''))).toEqual(['almState_p_eq_1', 'almState_p_ne_1'])
+    expect(validateConfig(base({ computations: [{ ...sw, directions: [] }] }))).toContain(
+      '运算 #1 (alarm.switch): 报警方向至少选一个(由分到合 / 由合到分)'
+    )
+    expect(validateConfig(base({ computations: [{ ...sw, closedValue: '1' as unknown as number }] }))).toContain(
+      '运算 #1 (alarm.switch): 合闸值必须是数字'
+    )
+  })
+  it('设备模板里的开关变位告警:跨设备合并成一条规则,再按方向展开', () => {
+    const { computations } = expandConfig(
+      base({
+        deviceTemplates: [
+          {
+            name: 'PCS 开关',
+            selector: { profiles: ['PCS'] },
+            items: [{ template: 'alarm.switch', key: 'p', name: '开关变位', directions: ['close'], severity: 'MINOR' }],
+          },
+        ],
+      })
+    )
+    expect(computations.map(c => [c.name, c.devices, c.condition])).toEqual([
+      ['开关变位(由分到合)', ['A1', 'A2'], { op: 'eq', value: 1 }],
+    ])
   })
 })
 

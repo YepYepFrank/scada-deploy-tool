@@ -90,6 +90,13 @@ export function validateConfig(cfg: TbsiteConfig): string[] {
     } else if (c.template === 'alarm.threshold') {
       if (!c.name) errs.push(`${w}: 缺少告警名称`)
       if (typeof c.condition?.value !== 'number') errs.push(`${w}: 阈值必须是数字`)
+    } else if (c.template === 'alarm.switch') {
+      if (!c.name) errs.push(`${w}: 缺少告警名称`)
+      if (!c.key) errs.push(`${w}: 缺少开关测点`)
+      const dirs = Array.isArray(c.directions) ? c.directions : []
+      if (!dirs.length || dirs.some(d => d !== 'close' && d !== 'open'))
+        errs.push(`${w}: 报警方向至少选一个(由分到合 / 由合到分)`)
+      if (c.closedValue !== undefined && typeof c.closedValue !== 'number') errs.push(`${w}: 合闸值必须是数字`)
     }
   }
   for (const [asset, n] of Object.entries(assetCfLoad(cfg)))

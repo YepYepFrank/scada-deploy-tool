@@ -44,7 +44,14 @@ export {
 } from './writer/sync'
 export { resolveAggMembers, buildAggCfs } from './core/aggregate'
 export { rollupGroups, rollupMetadata } from './core/rollup'
-export { alarmMetadata, alarmStateAttr, cascadeGuardScript } from './core/alarm'
+export {
+  alarmMetadata,
+  alarmStateAttr,
+  cascadeGuardScript,
+  expandSwitchAlarms,
+  SWITCH_DIRS,
+  type SwitchDir,
+} from './core/alarm'
 export {
   DEFAULT_OUTPUT_PREFIX,
   outputPrefixOf,

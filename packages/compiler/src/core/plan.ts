@@ -1,7 +1,7 @@
 // 编译入口:tbsite 配置 → 写入计划(纯函数,无网络)。
 // 写入器与 CLI `plan` 都从这里出发;id 未知时用占位串,写入器拿到真实 id 后再按需重建规则链元数据。
 import type { Computation, IdMap, TbsiteConfig, WritePlan } from '../types'
-import { alarmMetadata } from './alarm'
+import { alarmMetadata, expandSwitchAlarms } from './alarm'
 import { buildAggCfs, resolveAggMembers } from './aggregate'
 import { buildCf, cfHost } from './cf'
 import { chainNames, isCfTemplate } from './constants'
@@ -39,7 +39,11 @@ export function expandConfig(cfg: TbsiteConfig): {
 } {
   const expanded = expandTemplates(cfg)
   const prefix = outputPrefixOf(cfg)
-  const computations = applyOutputPrefix([...expanded.computations, ...(cfg.computations || [])], prefix)
+  // 开关变位告警在这里展开成 1~2 条「变化才报」的阈值告警(core/alarm.ts),之后的链生成、告警清单都只认 alarm.threshold
+  const computations = applyOutputPrefix(
+    expandSwitchAlarms([...expanded.computations, ...(cfg.computations || [])]),
+    prefix
+  )
   return { cfg: { ...cfg, computations }, computations, notes: expanded.notes, prefix }
 }
 

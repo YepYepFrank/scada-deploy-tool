@@ -40,6 +40,10 @@ export interface Computation {
   severity?: string
   message?: string
   trigger?: 'edge' | 'level'
+  /** alarm.switch 开关变位告警:报哪几个方向(close 由分到合 / open 由合到分,可都选)(2026-09-11) */
+  directions?: ('close' | 'open')[]
+  /** alarm.switch:合闸时测点的值(默认 1);其它值都算分闸 */
+  closedValue?: number
   selector?: Selector
   agg?: 'sum' | 'avg'
   asset?: string

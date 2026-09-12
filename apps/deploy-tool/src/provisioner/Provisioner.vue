@@ -9,6 +9,8 @@ import {
   ALARM_SEVERITIES,
   ALARM_TRIGGERS,
   PRESETS,
+  SWITCH_DIRECTIONS,
+  switchDirText,
 } from './templates.js'
 import EditorApp from '../editor/EditorApp.vue'
 import PublishPanel from '../editor/PublishPanel.vue'
@@ -813,6 +815,7 @@ const deviceTemplates = ref([]) // { name, selector: {profiles:[], prefixes:[]},
 const tplMgr = reactive({ open: false, editIndex: null, name: '', profiles: [], prefixes: '' })
 const TPL_ALLOWED = [
   'alarm.threshold',
+  'alarm.switch',
   'window.aggregate',
   'window.cascade',
   'window.delta',
@@ -1012,6 +1015,15 @@ function suggestAlarm() {
   const k = keyBase(modal.form.key)
   if (!k) return
   const cn = keyDict.value[k]?.name || k
+  if (modalTpl.value.switch) {
+    // 开关变位告警:告警名自动带「(由分到合)」「(由合到分)」,这里只给基础名;文案由编译器按方向生成
+    const base = `${cn}变位`
+    if (!modal.form.alarmName || modal.form.alarmName === autoFill.alarmName) {
+      modal.form.alarmName = base
+      autoFill.alarmName = base
+    }
+    return
+  }
   const isSwitch = ['eq', 'ne'].includes(modal.form.op)
   const name = `${cn}${isSwitch ? (modal.form.op === 'ne' ? '异常告警' : '状态告警') : '越限告警'}`
   const unit = keyDict.value[k]?.unit || ''
@@ -1077,6 +1089,8 @@ const tplKeyOptions = computed(() => {
 })
 
 function tplItemDesc(item) {
+  if (item.template === 'alarm.switch')
+    return `「${item.name}」${kd(item.key)} 开关变位:${switchDirText(item)} → ${item.severity}`
   if (item.template === 'alarm.threshold') {
     const ops = { gt: '>', lt: '<', gte: '≥', lte: '≤', eq: '=', ne: '≠' }
     return `「${item.name}」${kd(item.key)} ${ops[item.condition.op]} ${item.condition.value} → ${item.severity}${item.trigger === 'edge' ? ' · 变化才报' : ''}`
@@ -1103,6 +1117,8 @@ function blankForm() {
     message: '',
     alarmName: '',
     trigger: 'level',
+    directions: ['close'], // 开关变位告警:由分到合 / 由合到分(可都选)
+    closedValue: '1', // 开关变位告警:合闸时测点的值
     outputMode: 'ts',
     terms: [
       { src: '', constVal: '', abs: false },
@@ -1510,7 +1526,7 @@ async function handBackRow(r) {
    还有别人的节点转发着就只清空)+ 删掉向导里生成它的条目,否则下次发布又会建回来。
    Root 上本站点自己的转发节点:改指向(只能选本站点的链)/ 重新接线(指回告警链)/ 删除;都只动这一个节点。 */
 const CHAIN_SOURCES = {
-  alarm: ['alarm.threshold'],
+  alarm: ['alarm.threshold', 'alarm.switch'],
   rollup: ['window.aggregate', 'window.cascade'],
   revenue: ['revenue.periodic'],
 }
@@ -1706,11 +1722,16 @@ function openTplItemEdit(target, idx) {
   if (tpl.kind === 'alarm') {
     f.alarmName = item.name || ''
     f.key = item.key
-    f.op = item.condition.op
-    f.value = String(item.condition.value)
     f.severity = item.severity
-    f.trigger = item.trigger || 'level'
-    f.message = item.message
+    if (tpl.switch) {
+      f.directions = [...(item.directions || ['close'])]
+      f.closedValue = String(item.closedValue ?? 1)
+    } else {
+      f.op = item.condition.op
+      f.value = String(item.condition.value)
+      f.trigger = item.trigger || 'level'
+      f.message = item.message
+    }
   } else if (tpl.kind === 'cf') {
     for (const p of tpl.params) f[p.id] = item.inputs[p.id].key
     f.output = item.output || ''
@@ -1758,11 +1779,16 @@ function openEdit(i) {
   } else if (tpl.kind === 'alarm') {
     f.alarmName = c.name || ''
     f.key = `${c.device}||${c.key}`
-    f.op = c.condition.op
-    f.value = String(c.condition.value)
     f.severity = c.severity
-    f.trigger = c.trigger || 'level'
-    f.message = c.message
+    if (tpl.switch) {
+      f.directions = [...(c.directions || ['close'])]
+      f.closedValue = String(c.closedValue ?? 1)
+    } else {
+      f.op = c.condition.op
+      f.value = String(c.condition.value)
+      f.trigger = c.trigger || 'level'
+      f.message = c.message
+    }
   } else if (tpl.custom) {
     f.terms = c.terms.map(t =>
       t.kind === 'const'
@@ -1861,6 +1887,9 @@ const modalValid = computed(() => {
     if (p.type === 'number' && (modal.form.value === '' || isNaN(Number(modal.form.value)))) return false
     if (p.type === 'text' && !modal.form.message.trim()) return false
     if (p.type === 'alarmName' && !modal.form.alarmName.trim()) return false
+    if (p.type === 'directions' && !modal.form.directions.length) return false
+    if (p.type === 'closedValue' && (modal.form.closedValue === '' || isNaN(Number(modal.form.closedValue))))
+      return false
   }
   if (tpl.needsOutput && !modal.form.output.trim()) return false
   return true
@@ -1871,7 +1900,13 @@ function addComputation() {
   // 模板模式:构造不绑定设备的运算项,存入设备模板
   if (modal.target !== null) {
     const item = { template: modal.tplId }
-    if (tpl.kind === 'alarm') {
+    if (tpl.kind === 'alarm' && tpl.switch) {
+      item.name = modal.form.alarmName.trim()
+      item.key = modal.form.key
+      item.directions = SWITCH_DIRECTIONS.map(d => d.id).filter(d => modal.form.directions.includes(d))
+      item.closedValue = Number(modal.form.closedValue)
+      item.severity = modal.form.severity
+    } else if (tpl.kind === 'alarm') {
       item.name = modal.form.alarmName.trim()
       item.key = modal.form.key
       item.condition = { op: modal.form.op, value: Number(modal.form.value) }
@@ -1928,7 +1963,15 @@ function addComputation() {
     modal.open = false
     return
   }
-  if (tpl.kind === 'alarm') {
+  if (tpl.kind === 'alarm' && tpl.switch) {
+    const ref = keyRef(modal.form.key)
+    c.name = modal.form.alarmName.trim()
+    c.device = ref.device
+    c.key = ref.key
+    c.directions = SWITCH_DIRECTIONS.map(d => d.id).filter(d => modal.form.directions.includes(d))
+    c.closedValue = Number(modal.form.closedValue)
+    c.severity = modal.form.severity
+  } else if (tpl.kind === 'alarm') {
     const ref = keyRef(modal.form.key)
     c.name = modal.form.alarmName.trim()
     c.device = ref.device
@@ -1978,6 +2021,8 @@ function addComputation() {
 
 function compDesc(c) {
   const tpl = TEMPLATES[c.template]
+  if (c.template === 'alarm.switch')
+    return `「${c.name}」${dn(c.device)} · ${kd(c.key)} 开关变位:${switchDirText(c)} → ${c.severity}`
   if (c.template === 'aggregate.crossEntity') {
     const sel = [...(c.selector?.profiles || []), ...(c.selector?.prefixes || [])].join('/')
     const n = tplMatched({ selector: c.selector || {} }).length
@@ -3339,6 +3384,20 @@ function openFrontend() {
                   <option v-for="t in ALARM_TRIGGERS" :key="t.id" :value="t.id">{{ t.label }}</option>
                 </select>
                 <div class="fhint">「持续」适合越限监视;「变化才报」适合开关/状态量,只在翻转瞬间动作,不会刷屏</div>
+              </template>
+              <template v-else-if="p.type === 'directions'">
+                <div class="sw-dirs">
+                  <label v-for="d in SWITCH_DIRECTIONS" :key="d.id" class="abs-check">
+                    <input type="checkbox" :value="d.id" v-model="modal.form.directions" />{{ d.label }}
+                  </label>
+                </div>
+                <div class="fhint">
+                  可只选一种,也可都选;都选时生成两条告警,名字后面分别带「(由分到合)」「(由合到分)」。只在变位瞬间报,反向变位时自动清除
+                </div>
+              </template>
+              <template v-else-if="p.type === 'closedValue'">
+                <input type="text" v-model="modal.form.closedValue" placeholder="1" style="width: 90px" />
+                <div class="fhint">开关合闸时这个测点的值,一般是 1;其它值都当作分闸</div>
               </template>
               <template v-else-if="p.type === 'alarmName'">
                 <input

@@ -12,6 +12,36 @@ const filterNode = (name: string, jsScript: string, x: number, y: number): RuleN
   additionalInfo: { layoutX: x, layoutY: y },
 })
 
+/** 开关变位告警的方向(2026-09-11 现场需求:由分到合、由合到分,可只选一种也可都选) */
+export const SWITCH_DIRS = { close: '由分到合', open: '由合到分' } as const
+export type SwitchDir = keyof typeof SWITCH_DIRS
+
+/**
+ * 开关变位告警(template 'alarm.switch')→ 1~2 条「变化才报」的阈值告警,规则链生成不变:
+ *   由分到合:测点变成合闸值时报,离开合闸值(分闸)时自动清除 —— 条件 == 合闸值;
+ *   由合到分:测点离开合闸值时报,回到合闸值时自动清除 —— 条件 != 合闸值(非合闸值都算分闸)。
+ * 「上次状态」属性每条规则一份(alarmStateAttr:测点 / 比较符 / 阈值 / 告警类型指纹),同一测点两个方向都选也不会互相覆盖。
+ * 告警类型名 =「名称(由分到合)」「名称(由合到分)」,第 4 步告警绑定、告警列表认的都是它。
+ */
+export function expandSwitchAlarms(comps: Computation[]): Computation[] {
+  return comps.flatMap(c => {
+    if (c.template !== 'alarm.switch') return [c]
+    const closed = typeof c.closedValue === 'number' ? c.closedValue : 1
+    const dirs = [...new Set(Array.isArray(c.directions) ? c.directions : [])].filter(
+      (d): d is SwitchDir => d in SWITCH_DIRS
+    )
+    const { directions: _dirs, closedValue: _closed, ...rest } = c
+    return dirs.map((d): Computation => ({
+      ...rest,
+      template: 'alarm.threshold',
+      name: `${c.name}(${SWITCH_DIRS[d]})`,
+      condition: { op: d === 'close' ? 'eq' : 'ne', value: closed },
+      trigger: 'edge',
+      message: `${c.name}:${SWITCH_DIRS[d]}(当前值 {value})`,
+    }))
+  })
+}
+
 /**
  * 边沿触发用的「上次状态」属性名(设备服务端属性),每条规则一份:
  *   almState_<测点>_<比较符>_<阈值>_<告警类型指纹 6 位>,非 \w 字符换成 _。

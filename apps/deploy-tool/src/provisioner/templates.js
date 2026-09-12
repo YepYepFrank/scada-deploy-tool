@@ -84,6 +84,22 @@ export const TEMPLATES = {
       { id: 'message', label: '告警文案(可用 {value} 代入实时值)', type: 'text' },
     ],
   },
+  // 开关变位告警(2026-09-11 现场需求):由分到合报警、由合到分报警,可只选一种也可都选。
+  // 发布时编译器展开成 1~2 条「变化才报」告警(告警名带方向),反向变位时自动清除
+  'alarm.switch': {
+    name: '开关变位告警',
+    kind: 'alarm',
+    switch: true,
+    category: 'alarm',
+    desc: '断路器 / 刀闸等开关量变位时报警:可选「由分到合」「由合到分」其中一种,也可都选;只在变位瞬间动作,不刷屏,反向变位时自动清除。',
+    params: [
+      { id: 'name', label: '告警名称', type: 'alarmName' },
+      { id: 'key', label: '开关测点', type: 'key' },
+      { id: 'directions', label: '报警方向', type: 'directions' },
+      { id: 'closedValue', label: '合闸值', type: 'closedValue' },
+      { id: 'severity', label: '级别', type: 'severity' },
+    ],
+  },
   'aggregate.crossEntity': {
     name: '跨设备汇聚',
     kind: 'agg',
@@ -183,22 +199,32 @@ export const PRESETS = [
     id: 'cb',
     name: '开关变位提醒',
     icon: '🔀',
-    desc: '断路器 CB 分合变位时提醒一次(变化才报,不刷屏)',
+    desc: '断路器 CB 由分到合、由合到分各报一次(变位瞬间才报,不刷屏;可在卡片里改成只报一种)',
     tplName: '开关变位提醒',
     selector: { profiles: ['IED'], prefixes: [] },
     items: [
       {
-        template: 'alarm.threshold',
-        name: '开关变位提醒',
+        template: 'alarm.switch',
+        name: '开关变位',
         key: 'CB',
-        condition: { op: 'eq', value: 1 },
+        directions: ['close', 'open'],
+        closedValue: 1,
         severity: 'MINOR',
-        trigger: 'edge',
-        message: '开关合闸(CB={value})',
       },
     ],
   },
 ]
+
+/** 开关变位告警的方向(与编译器 SWITCH_DIRS 对应) */
+export const SWITCH_DIRECTIONS = [
+  { id: 'close', label: '由分到合(合闸时报警)' },
+  { id: 'open', label: '由合到分(分闸时报警)' },
+]
+const SWITCH_CN = { close: '由分到合', open: '由合到分' }
+/** 「由分到合、由合到分」+ 合闸值不是 1 时注明 */
+export const switchDirText = c =>
+  (c.directions || []).map(d => SWITCH_CN[d] || d).join('、') +
+  (typeof c.closedValue === 'number' && c.closedValue !== 1 ? ` · 合闸值 ${c.closedValue}` : '')
 
 export const ALARM_TRIGGERS = [
   { id: 'level', label: '持续(条件满足期间保持告警)' },
