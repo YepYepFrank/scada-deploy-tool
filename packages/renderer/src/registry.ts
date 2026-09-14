@@ -87,26 +87,9 @@ export function validateAgainstRegistry(config: PageConfig): RegistryIssue[] {
   }
   const seenIds = new Set<string>()
   for (const w of config.widgets) {
-    const base = `/widgets/${w.id}`
-    if (seenIds.has(w.id)) issues.push({ level: 'error', path: base, message: `组件 id "${w.id}" 重复` })
+    if (seenIds.has(w.id)) issues.push({ level: 'error', path: `/widgets/${w.id}`, message: `组件 id "${w.id}" 重复` })
     seenIds.add(w.id)
-
-    const def = widgets_.get(w.type)
-    if (!def) {
-      issues.push({ level: 'error', path: `${base}/type`, message: `未知组件类型 "${w.type}"` })
-      continue
-    }
-    if (tpl) {
-      const slot = tpl.slots.find(s => s.name === w.slot)
-      if (!slot) issues.push({ level: 'error', path: `${base}/slot`, message: `模板 "${tpl.id}" 没有槽位 "${w.slot}"` })
-      else if (slot.accepts && !slot.accepts.includes(w.type))
-        issues.push({
-          level: 'error',
-          path: `${base}/slot`,
-          message: `槽位 "${w.slot}" 不接受组件 "${w.type}"(允许:${slot.accepts.join(', ')})`,
-        })
-    }
-    issues.push(...validateBindings(w, def, base))
+    issues.push(...validateWidgetAgainstRegistry(w, tpl))
   }
   if (tpl) {
     for (const s of tpl.slots) {
@@ -119,6 +102,32 @@ export function validateAgainstRegistry(config: PageConfig): RegistryIssue[] {
         })
     }
   }
+  return issues
+}
+
+/**
+ * 校验单个组件(<ScadaWidget> 单卡入口用;validateAgainstRegistry 对每个组件也走这里)。
+ * 传 tpl 时连带查槽位是否存在 / accepts;不传(单卡嵌入,没有模板)只查类型与绑定。
+ */
+export function validateWidgetAgainstRegistry(w: WidgetConfig, tpl?: TemplateDefinition): RegistryIssue[] {
+  const issues: RegistryIssue[] = []
+  const base = `/widgets/${w.id}`
+  const def = widgets_.get(w.type)
+  if (!def) {
+    issues.push({ level: 'error', path: `${base}/type`, message: `未知组件类型 "${w.type}"` })
+    return issues
+  }
+  if (tpl) {
+    const slot = tpl.slots.find(s => s.name === w.slot)
+    if (!slot) issues.push({ level: 'error', path: `${base}/slot`, message: `模板 "${tpl.id}" 没有槽位 "${w.slot}"` })
+    else if (slot.accepts && !slot.accepts.includes(w.type))
+      issues.push({
+        level: 'error',
+        path: `${base}/slot`,
+        message: `槽位 "${w.slot}" 不接受组件 "${w.type}"(允许:${slot.accepts.join(', ')})`,
+      })
+  }
+  issues.push(...validateBindings(w, def, base))
   return issues
 }
 

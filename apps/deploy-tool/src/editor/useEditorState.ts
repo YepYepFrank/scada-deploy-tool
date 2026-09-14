@@ -101,10 +101,15 @@ export function useEditorState(initial: PageConfig, opts: EditorStateOptions = {
     return dropped
   }
 
-  /** 给槽位放一个组件(替换该槽位原有组件);返回新组件 */
+  /**
+   * 给槽位放一个组件(替换该槽位原有组件);返回新组件。
+   * id 规则(2026-09-14,宿主按「页面 id + 组件 id」引用单张卡片,见 docs/方案讨论-单卡片嵌入-2026-09-14.md):
+   * 创建时生成一次(`w_` + 8 位随机,与槽位、类型无关),之后改属性 / 绑定 / 换模板都不变;
+   * 换组件类型 = 新组件 = 新 id。将来加「移动 / 复制」:移动只改 slot 不改 id,复制生成新 id。
+   */
   function placeWidget(slot: string, def: WidgetDefinition, extra: Partial<WidgetConfig> = {}): WidgetConfig {
     const widget: WidgetConfig = {
-      id: uniqueId(state.config, `${def.type}-${slot}`),
+      id: newWidgetId(state.config),
       slot,
       type: def.type,
       props: clone((def.defaults ?? {}) as Record<string, unknown>),
@@ -157,10 +162,18 @@ export function useEditorState(initial: PageConfig, opts: EditorStateOptions = {
 
 export type EditorState = ReturnType<typeof useEditorState>
 
-function uniqueId(cfg: PageConfig, base: string): string {
+/** 页内唯一的稳定组件 id:`w_` + 8 位 [0-9a-z](contract pattern ^[A-Za-z0-9_-]+$);撞上已有 id 就重来 */
+export function newWidgetId(cfg: Pick<PageConfig, 'widgets'>): string {
   const ids = new Set(cfg.widgets.map(w => w.id))
-  if (!ids.has(base)) return base
-  let i = 2
-  while (ids.has(`${base}-${i}`)) i++
-  return `${base}-${i}`
+  for (;;) {
+    const id = `w_${randomBase36(8)}`
+    if (!ids.has(id)) return id
+  }
+}
+function randomBase36(n: number): string {
+  const bytes = new Uint8Array(n)
+  const c = globalThis.crypto
+  if (c?.getRandomValues) c.getRandomValues(bytes)
+  else for (let i = 0; i < n; i++) bytes[i] = Math.floor(Math.random() * 256)
+  return Array.from(bytes, b => (b % 36).toString(36)).join('')
 }

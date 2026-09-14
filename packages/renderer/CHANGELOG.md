@@ -2,8 +2,15 @@
 
 版本按 SemVer;0.x 期间次版本号可含破坏性变更,会在条目里标「破坏」。契约(`schemaVersion`)的变更走 ADR,不随包版本隐式变化。
 
-## 未发布
+## 0.3.0 — 2026-09-14
 
+单张卡片嵌入宿主页面(方案 `docs/方案讨论-单卡片嵌入-2026-09-14.md` P1)。契约 `schemaVersion` 不变,`PageConfig` 不加字段。
+
+- 新增 `<ScadaWidget :config :dataSource? :theme? :design?>`:把一份 `WidgetConfig`(`slot` 可省)单独渲染;校验走 `validateWidgetAgainstRegistry`(不传模板时不查槽位),绑定 / sampleData / 退订与 `<ScadaPage>` 共用新抽出的 `useBindingRuntime`(`widget-runtime.ts`);根节点 `.sr-page.sr-widget-standalone` 带主题令牌、`--sr-scale: 1`,`width/height: 100%` 由宿主容器定尺寸;事件 `invalid` / `bindError`。
+- 新增 `pickWidget(page, widgetId)`(找不到返回 `undefined`)与 `listWidgetRefs(page)`。
+- 新增导出 `validateWidgetAgainstRegistry`、`useBindingRuntime`、`widgetPropsOf`;`resolveBindings` 第一个参数放宽为 `Pick<PageConfig, 'widgets'>`(兼容)。
+- `WidgetConfig.id` 语义明确为「创建后不变」(JSON Schema 仅 description 变):工具创建组件时生成 `w_` + 8 位随机,改属性 / 绑定 / 换模板不变,换组件类型 = 新 id;旧的 `w-<slot>` / `<type>-<slot>` 继续有效。
+- `/dev` 展示页底部加「单卡嵌入」演示:从当前页面挑一张卡放进 240×120 / 320×160 / 480×280 的容器。
 - `ext` 绑定的序列图例名:业务统计用 `params.metric`,通用历史改用 `params.keys[0]`(此前统一显示 `kz-<序号>`),都没有才退到 `kz-<序号>`。
 - 新增 `migrateConfigProps(config)`:按各组件的 `migrateProps` 把整份配置的旧属性名正规化(不改输入);编辑器读入 TB 上的旧配置前调用,校验层不再把旧键名当多余属性。
 

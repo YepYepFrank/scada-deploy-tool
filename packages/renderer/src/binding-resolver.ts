@@ -64,7 +64,12 @@ function shapeScalar(v: TsPoint['value'], vt: SlotValueType | undefined): SlotVa
   }
 }
 
-export function resolveBindings(config: PageConfig, ds: DataSource, opts: ResolverOptions): ResolverHandle {
+/** 只读 config.widgets:整页与单卡(<ScadaWidget> 传 `{ widgets: [one] }`)都能用 */
+export function resolveBindings(
+  config: Pick<PageConfig, 'widgets'>,
+  ds: DataSource,
+  opts: ResolverOptions
+): ResolverHandle {
   const values: Record<string, Record<string, SlotValue>> = {}
   const unsubs: Unsubscribe[] = []
   const stats = { subscriptions: 0, unsubscribed: 0, errors: 0 }

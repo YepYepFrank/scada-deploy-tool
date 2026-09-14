@@ -7,7 +7,7 @@
 import { computed, ref } from 'vue'
 import { LegacyDataSource } from '@grid/tb-client'
 import type { DataSource, TsUpdate, ConnectionStatus, AlarmInfo, TsPoint } from '@grid/tb-client'
-import { ScadaPage, listWidgets, listTemplates } from '../src/index'
+import { ScadaPage, ScadaWidget, listWidgets, listTemplates, listWidgetRefs, pickWidget } from '../src/index'
 import { SAMPLE_SVG } from '../src/widgets/image'
 import type { PageConfig, WidgetConfig } from '../src/schema/page-config'
 
@@ -18,6 +18,9 @@ const design = ref(true)
 const live = ref(false)
 const offline = ref(false)
 const showStatus = ref(true)
+/** 单卡嵌入演示(<ScadaWidget>,0.3.0):从当前页面配置里挑一张卡,放进一个宿主给定尺寸的容器 */
+const soloId = ref('')
+const soloSize = ref<'320x160' | '480x280' | '240x120'>('320x160')
 
 const DEV = { type: 'DEVICE', id: 'dev-0001', name: 'SSP1_GP1_IED1' } as const
 const AST = { type: 'ASSET', id: 'asset-0001', name: '仙人山服务区' } as const
@@ -460,6 +463,12 @@ const mirrorConfig = computed<PageConfig>(() => {
 const pageConfig = computed(() => (mirror.value ? (mPage.value ?? mirrorConfig.value) : config.value))
 const dsForPage = computed(() => (mirror.value ? (mDsRef.value ?? undefined) : live.value ? mock : undefined))
 const issues = ref<{ path: string; message: string }[]>([])
+const soloRefs = computed(() => listWidgetRefs(pageConfig.value))
+const soloWidget = computed(() => (soloId.value ? pickWidget(pageConfig.value, soloId.value) : undefined))
+const soloStyle = computed(() => {
+  const [w, h] = soloSize.value.split('x')
+  return { width: `${w}px`, height: `${h}px` }
+})
 </script>
 
 <template>
@@ -557,6 +566,32 @@ const issues = ref<{ path: string; message: string }[]>([])
         :show-status="showStatus"
         @invalid="issues = $event"
       />
+      <section class="dev-solo" data-solo>
+        <h2>
+          单卡嵌入 <code>&lt;ScadaWidget&gt;</code>
+          <small class="dim">同一份数据源;容器尺寸由宿主定,不整页缩放</small>
+        </h2>
+        <label
+          >卡片
+          <select v-model="soloId">
+            <option value="">(不显示)</option>
+            <option v-for="r in soloRefs" :key="r.id" :value="r.id">
+              {{ r.id }} · {{ r.type }}{{ r.title ? ` · ${r.title}` : '' }}
+            </option>
+          </select></label
+        >
+        <label
+          >容器
+          <select v-model="soloSize">
+            <option value="240x120">240 × 120</option>
+            <option value="320x160">320 × 160</option>
+            <option value="480x280">480 × 280</option>
+          </select></label
+        >
+        <div v-if="soloWidget" class="dev-solo-box" :style="soloStyle">
+          <ScadaWidget :config="soloWidget" :data-source="dsForPage" :design="design" />
+        </div>
+      </section>
     </main>
   </div>
 </template>
@@ -597,6 +632,27 @@ const issues = ref<{ path: string; message: string }[]>([])
 .dev-widgets li.used::before {
   content: '✓ ';
   color: #6fe3a0;
+}
+.dev-main {
+  overflow: auto;
+}
+.dev-solo {
+  padding: 16px;
+  border-top: 1px dashed rgba(83, 196, 255, 0.3);
+  font-size: 13px;
+}
+.dev-solo h2 {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  opacity: 0.8;
+  margin: 0 0 8px;
+}
+.dev-solo label {
+  margin-right: 16px;
+}
+.dev-solo-box {
+  margin-top: 12px;
+  outline: 1px dashed rgba(255, 255, 255, 0.35);
 }
 .dev-widgets li:not(.used) {
   opacity: 0.55;

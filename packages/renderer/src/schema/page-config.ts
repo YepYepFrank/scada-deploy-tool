@@ -33,7 +33,9 @@ export interface PageConfig {
 
 export interface WidgetConfig {
   /**
-   * 页面内唯一。工具生成规则为 `w-<slot>`(同槽位多个组件时追加序号),渲染器只要求唯一。
+   * 页面内唯一、创建后不变:宿主按「页面 id + 组件 id」引用单张卡片(<ScadaWidget> / pickWidget)。
+   * 工具在创建组件时生成一次(`w_` + 8 位随机),改属性 / 绑定 / 换模板都不变;换组件类型 = 新组件 = 新 id;
+   * 将来若有移动 / 复制:移动只改 slot,复制生成新 id。旧页面的 `w-<slot>` / `<type>-<slot>` 形式继续有效。渲染器只要求唯一。
    * @pattern ^[A-Za-z0-9_-]+$
    */
   id: string

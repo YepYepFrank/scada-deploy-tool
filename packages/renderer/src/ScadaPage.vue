@@ -4,14 +4,14 @@
  * 渲染器根组件:校验 → 取模板 → 按 slot 放组件 → 绑定解析 → 连接状态徽标。
  * 组件本身不知道业务;所有业务在 config 里。props 契约见 schema/scada-page.ts。
  */
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type { ConnectionStatus, DataSource } from '@grid/tb-client'
 import type { PageConfig, WidgetConfig } from './schema/page-config'
 import { SCHEMA_VERSION } from './schema/page-config'
 import type { ScadaPageProps } from './schema/scada-page'
 import type { TemplateDefinition, WidgetDefinition } from './schema/registry'
 import { getTemplate, getWidget, validateAgainstRegistry, type RegistryIssue } from './registry'
-import { resolveBindings, type ResolverHandle, type SlotValue } from './binding-resolver'
+import { useBindingRuntime, widgetPropsOf } from './widget-runtime'
 import { computeScale, rootStyle, slotStyle, wrapperStyle } from './layout/template-style'
 import { DATA_SOURCE_KEY } from './provide'
 
@@ -85,51 +85,26 @@ const placed = computed<Placed[]>(() => {
 })
 
 /** 组件 props:defaults + 配置(先过组件的 migrateProps 把旧键名正规化) */
-function widgetProps(w: Placed['widgets'][number]): Record<string, unknown> {
-  const def = w.def!
-  const raw = (w.cfg.props ?? {}) as Record<string, unknown>
-  return { ...(def.defaults ?? {}), ...(def.migrateProps ? def.migrateProps(raw) : raw) }
-}
+const widgetProps = (w: Placed['widgets'][number]) => widgetPropsOf(w.cfg)
 
-// ---------- 绑定 ----------
-const values = reactive<Record<string, Record<string, SlotValue>>>({})
-const bindErrors = reactive<Record<string, Record<string, string>>>({})
-let handle: ResolverHandle | null = null
+// ---------- 绑定(与 <ScadaWidget> 共用 widget-runtime) ----------
+const rt = useBindingRuntime((wid, slot, message) => emit('bindError', wid, slot, message))
+const values = rt.values
+const bindErrors = rt.bindErrors
 
 function teardown() {
-  handle?.dispose()
-  handle = null
+  rt.teardown()
 }
 function setup() {
-  teardown()
-  for (const k of Object.keys(values)) delete values[k]
-  for (const k of Object.keys(bindErrors)) delete bindErrors[k]
-  if (fatal.value || !tpl.value) return
-  const cfg: PageConfig = { ...props.config, widgets: props.config.widgets.filter(w => !widgetErrors.value.has(w.id)) }
-  if (props.design || !ds.value) {
-    // 编辑态 / 无数据源:用 sampleData
-    for (const w of cfg.widgets) {
-      const def = getWidget(w.type)
-      const sample = def?.sampleData?.() ?? {}
-      values[w.id] = { ...sample }
-      for (const [slot, b] of Object.entries(w.bindings)) {
-        const one = Array.isArray(b) ? b[0] : b
-        if (one && one.mode === 'const') values[w.id]![slot] = one.value as SlotValue
-      }
-    }
+  if (fatal.value || !tpl.value) {
+    rt.setup([], null, true)
     return
   }
-  handle = resolveBindings(cfg, ds.value, {
-    onValue: (wid, slot, v) => {
-      ;(values[wid] ??= {})[slot] = v
-    },
-    onError: (wid, slot, err) => {
-      const message = err instanceof Error ? err.message : String(err)
-      ;(bindErrors[wid] ??= {})[slot] = message
-      emit('bindError', wid, slot, message)
-    },
-    slotSpec: (w, slot) => getWidget(w.type)?.bindingSlots.find(s => s.name === slot),
-  })
+  rt.setup(
+    props.config.widgets.filter(w => !widgetErrors.value.has(w.id)),
+    ds.value,
+    props.design
+  )
 }
 
 // ---------- 连接状态 ----------

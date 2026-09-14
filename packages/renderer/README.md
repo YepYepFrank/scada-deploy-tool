@@ -49,6 +49,29 @@ export default defineConfig({
 
 仓库外的最小宿主(tarball 安装 → `vue-tsc` → `vite build`)在 T2.4 验证通过,见 CHANGELOG 0.1.0。
 
+## 单张卡片嵌进宿主自己的页面(0.3.0)
+
+页面里每张卡本来就是一段自包含配置(`{ id, type, props, bindings }`,`slot` 只是它在整页里的位置)。`<ScadaWidget>` 把其中一张单独渲染出来,校验、绑定、组件都和 `<ScadaPage>` 共用同一份代码;宿主按**页面 id(ScadaPage 资产 id)+ 组件 id** 引用。
+
+```vue
+<script setup lang="ts">
+import { ScadaWidget, pickWidget, validatePageConfig } from '@grid/scada-renderer'
+// 读法和整页一样:该资产 SERVER_SCOPE 属性 pageConfig
+const checked = validatePageConfig(JSON.parse(raw.pageConfig))
+const card = checked.ok ? pickWidget(checked.value, 'w_3k9f2a1c') : undefined // 找不到返回 undefined
+</script>
+<template>
+  <!-- 宿主给容器尺寸(px / rem / 百分比都行),卡片 width/height: 100% 填满;不做整页缩放 -->
+  <div style="width: 20rem; height: 10rem"><ScadaWidget v-if="card" :config="card" /></div>
+</template>
+```
+
+- 数据源同 `<ScadaPage>`:`provideDataSource()` 注入,或 `:dataSource` 显式传。同一页放 N 张卡就是 N 份独立订阅,各自退订。
+- props:`config`(必填)、`dataSource?`、`theme?`(默认 `default`)、`design?`(sampleData,不订阅)。事件:`invalid`(类型未知 / 绑定形状错,卡片显示错误态)、`bindError(widgetId, slot, message)`。
+- 主题令牌在卡片根节点(`.sr-page.sr-widget-standalone`)生效,祖先上覆盖 `--sr-*` 即可换色;图表随容器 ResizeObserver 自动 resize。
+- **组件 id 的稳定性**:工具在创建组件时生成一次(`w_` + 8 位随机),改属性 / 绑定 / 换模板都不变;把槽位里的组件换成别的类型 = 另一张卡 = 新 id。旧页面里 `w-<slot>` / `<type>-<slot>` 形式的 id 同样有效。
+- `listWidgetRefs(pageConfig)` 列出一页里全部卡片的 `{ id, type, slot, title }`,给对照 / 排查引用用。
+
 ```bash
 pnpm dev          # /dev 展示页(5180):注册表、design 模式、随机数据、断线开关
 pnpm test         # vitest(happy-dom)
@@ -64,6 +87,9 @@ src/
   registry.ts        运行时登记 + 针对注册表的配置校验
   binding-resolver.ts  六种 mode → DataSource;退订对账
   ScadaPage.vue      根组件:校验 → 模板 → 槽位 → 绑定 → 状态徽标(默认关)
+  ScadaWidget.vue    单卡入口(0.3.0):一份 WidgetConfig → 校验 → 绑定 → 渲染;尺寸由宿主容器定
+  widget-runtime.ts  绑定运行时(values / bindErrors / sampleData),ScadaPage 与 ScadaWidget 共用
+  pick.ts            pickWidget / listWidgetRefs
   layout/            scaled(父容器为基准缩放)/ grid(grid-template-areas)
   provide.ts
   templates/         overview-a  monitor-3col  grid-3x3(builtinTemplates)
