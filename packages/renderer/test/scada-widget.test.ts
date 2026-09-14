@@ -32,10 +32,7 @@ const textCard = (): WidgetConfig => ({
 const page = (): PageConfig => ({
   schemaVersion: 1,
   template: 'overview-a',
-  widgets: [
-    textCard(),
-    { id: 'w_num00001', slot: 's2', type: 'number-card', props: { title: '功率' }, bindings: {} },
-  ],
+  widgets: [textCard(), { id: 'w_num00001', slot: 's2', type: 'number-card', props: { title: '功率' }, bindings: {} }],
 })
 
 beforeEach(() => {
