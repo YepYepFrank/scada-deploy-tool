@@ -44,6 +44,11 @@ export interface Computation {
   directions?: ('close' | 'open')[]
   /** alarm.switch:合闸时测点的值(默认 1);其它值都算分闸 */
   closedValue?: number
+  /**
+   * 设备模板里的告警项:个别设备单独设级别(设备名 → 级别),其余用 severity(2026-09-13 现场需求:
+   * 进线开关 / 一级负荷变位报最高级,其他开关普通警告,每天分合的路灯开关只提示)。展开时按级别分成几条规则。
+   */
+  severityByDevice?: Record<string, string>
   selector?: Selector
   agg?: 'sum' | 'avg'
   asset?: string

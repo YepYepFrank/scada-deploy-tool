@@ -22,6 +22,9 @@ export function assetCfLoad(cfg: TbsiteConfig): Record<string, number> {
   return load
 }
 
+/** TB 告警级别,从高到低 */
+export const SEVERITIES = ['CRITICAL', 'MAJOR', 'MINOR', 'WARNING', 'INDETERMINATE']
+
 /** 配置校验:返回错误清单,空即通过。只看结构与引用,不查 TB。 */
 export function validateConfig(cfg: TbsiteConfig): string[] {
   const errs: string[] = []
@@ -38,6 +41,12 @@ export function validateConfig(cfg: TbsiteConfig): string[] {
     const sel = t.selector || {}
     if (!sel.profiles?.length && !sel.prefixes?.length)
       errs.push(`设备模板「${t.name || i + 1}」: 选择器为空(需指定类型或名称前缀)`)
+    for (const item of t.items || [])
+      for (const [dev, sev] of Object.entries(item.severityByDevice || {}))
+        if (!SEVERITIES.includes(sev))
+          errs.push(
+            `设备模板「${t.name || i + 1}」·「${item.name || item.key}」: ${dev} 的级别 ${sev} 不是 TB 告警级别(${SEVERITIES.join(' / ')})`
+          )
   }
   const names = new Set((cfg.devices || []).map(d => d.name))
   for (const [i, c] of (cfg.computations || []).entries()) {
@@ -98,6 +107,8 @@ export function validateConfig(cfg: TbsiteConfig): string[] {
         errs.push(`${w}: 报警方向至少选一个(由分到合 / 由合到分)`)
       if (c.closedValue !== undefined && typeof c.closedValue !== 'number') errs.push(`${w}: 合闸值必须是数字`)
     }
+    if (c.template?.startsWith('alarm.') && c.severity !== undefined && !SEVERITIES.includes(c.severity))
+      errs.push(`${w}: 级别 ${c.severity} 不是 TB 告警级别(${SEVERITIES.join(' / ')})`)
   }
   for (const [asset, n] of Object.entries(assetCfLoad(cfg)))
     if (n > MAX_CF_PER_ENTITY)

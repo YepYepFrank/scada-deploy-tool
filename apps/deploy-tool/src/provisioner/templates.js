@@ -91,7 +91,7 @@ export const TEMPLATES = {
     kind: 'alarm',
     switch: true,
     category: 'alarm',
-    desc: '断路器 / 刀闸等开关量变位时报警:可选「由分到合」「由合到分」其中一种,也可都选;只在变位瞬间动作,不刷屏,反向变位时自动清除。',
+    desc: '断路器 / 刀闸等开关量变位时报警:只列遥信测点,可一次选多个;可选「由分到合」「由合到分」其中一种,也可都选;只在变位瞬间动作,不刷屏,反向变位时自动清除。级别可按测点 / 按设备分别设。',
     params: [
       { id: 'name', label: '告警名称', type: 'alarmName' },
       { id: 'key', label: '开关测点', type: 'key' },
@@ -199,7 +199,7 @@ export const PRESETS = [
     id: 'cb',
     name: '开关变位提醒',
     icon: '🔀',
-    desc: '断路器 CB 由分到合、由合到分各报一次(变位瞬间才报,不刷屏;可在卡片里改成只报一种)',
+    desc: '断路器 CB 由分到合、由合到分各报一次(变位瞬间才报,不刷屏;可在卡片里改成只报一种、按设备分别设级别)',
     tplName: '开关变位提醒',
     selector: { profiles: ['IED'], prefixes: [] },
     items: [
@@ -209,7 +209,7 @@ export const PRESETS = [
         key: 'CB',
         directions: ['close', 'open'],
         closedValue: 1,
-        severity: 'MINOR',
+        severity: 'WARNING',
       },
     ],
   },
@@ -240,11 +240,16 @@ export const ALARM_OPS = [
   { id: 'ne', label: '不等于(开关量)' },
 ]
 
+// TB 告警级别,按 TB 的高低排列(2026-09-13:原来把 MINOR 叫「提示」,可 TB 里 MINOR 比 WARNING 高,
+// 选「提示」的路灯开关反而排在「警告」前面;「提示」改指最低的 INDETERMINATE)
 export const ALARM_SEVERITIES = [
+  { id: 'CRITICAL', label: '严重(最高)' },
+  { id: 'MAJOR', label: '重要' },
+  { id: 'MINOR', label: '次要' },
   { id: 'WARNING', label: '警告' },
-  { id: 'MINOR', label: '提示' },
-  { id: 'CRITICAL', label: '严重' },
+  { id: 'INDETERMINATE', label: '提示(最低)' },
 ]
+export const sevLabel = id => ALARM_SEVERITIES.find(s => s.id === id)?.label.replace(/\(.*\)$/, '') || id
 
 export const AGG_OPTIONS = [
   { id: 'avg', label: '均值' },

@@ -537,6 +537,40 @@ describe('开关变位告警 alarm.switch(2026-09-11)', () => {
       ['开关变位(由分到合)', ['A1', 'A2'], { op: 'eq', value: 1 }],
     ])
   })
+  it('设备模板按设备分别设级别(2026-09-13):单独设了级别的设备拆成另一条规则,告警名不变;级别写错会报', () => {
+    const tpl = (byDev: Record<string, string>) =>
+      base({
+        deviceTemplates: [
+          {
+            name: 'PCS 开关',
+            selector: { profiles: ['PCS'] },
+            items: [
+              {
+                template: 'alarm.switch',
+                key: 'p',
+                name: '开关变位',
+                directions: ['close'],
+                severity: 'WARNING',
+                severityByDevice: byDev,
+              },
+            ],
+          },
+        ],
+      })
+    const { computations } = expandConfig(tpl({ A2: 'CRITICAL' }))
+    expect(computations.map(c => [c.name, c.devices, c.severity])).toEqual([
+      ['开关变位(由分到合)', ['A1'], 'WARNING'],
+      ['开关变位(由分到合)', ['A2'], 'CRITICAL'],
+    ])
+    expect(computations[0]).not.toHaveProperty('severityByDevice')
+    // 单独设的级别和默认一样 → 仍是一条规则
+    expect(expandConfig(tpl({ A1: 'WARNING' })).computations.map(c => c.devices)).toEqual([['A1', 'A2']])
+    const creates = compile(tpl({ A2: 'CRITICAL' }))
+      .alarm!.metadata.nodes.filter(n => n.type.endsWith('TbCreateAlarmNode'))
+      .map(n => n.configuration.severity)
+    expect(creates).toEqual(['WARNING', 'CRITICAL'])
+    expect(validateConfig(tpl({ A2: 'HIGH' })).some(e => e.includes('A2 的级别 HIGH 不是 TB 告警级别'))).toBe(true)
+  })
 })
 
 describe('compile', () => {

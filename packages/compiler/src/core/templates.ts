@@ -37,7 +37,15 @@ export function expandTemplates(cfg: TbsiteConfig): { computations: Computation[
         notes.push(`模板「${t.name}」·「${item.name || item.output || item.key}」:${skipped} 台设备缺少所需测点,已跳过`)
       if (!capable.length) continue
       if (item.template === 'alarm.threshold' || item.template === 'alarm.switch') {
-        out.push({ ...clone(item), device: capable[0]!.name, devices: capable.map(d => d.name), _tpl: t.name })
+        // 同级别的设备合成一条规则;severityByDevice 单独设了级别的拆出去(告警名不变,TB 按设备 + 告警名区分告警)
+        const { severityByDevice: byDev, ...rest } = clone(item)
+        const bySev = new Map<string, string[]>()
+        for (const d of capable) {
+          const sev = byDev?.[d.name] || rest.severity || ''
+          bySev.set(sev, [...(bySev.get(sev) ?? []), d.name])
+        }
+        for (const [sev, devs] of bySev)
+          out.push({ ...rest, ...(sev ? { severity: sev } : {}), device: devs[0]!, devices: devs, _tpl: t.name })
       } else if (item.template === 'expr.add' || item.template === 'expr.subtract') {
         for (const d of capable)
           out.push({

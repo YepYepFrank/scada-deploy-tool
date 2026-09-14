@@ -11,6 +11,7 @@ import {
   PRESETS,
   SWITCH_DIRECTIONS,
   switchDirText,
+  sevLabel,
 } from './templates.js'
 import EditorApp from '../editor/EditorApp.vue'
 import PublishPanel from '../editor/PublishPanel.vue'
@@ -1078,16 +1079,9 @@ function suggestAlarm() {
   if (modalTpl.value?.kind !== 'alarm') return
   const k = keyBase(modal.form.key)
   if (!k) return
+  // 开关变位告警的名称在勾选测点时逐个生成(swToggle),这里不管
+  if (modalTpl.value.switch) return
   const cn = keyDict.value[k]?.name || k
-  if (modalTpl.value.switch) {
-    // 开关变位告警:告警名自动带「(由分到合)」「(由合到分)」,这里只给基础名;文案由编译器按方向生成
-    const base = `${cn}变位`
-    if (!modal.form.alarmName || modal.form.alarmName === autoFill.alarmName) {
-      modal.form.alarmName = base
-      autoFill.alarmName = base
-    }
-    return
-  }
   const isSwitch = ['eq', 'ne'].includes(modal.form.op)
   const name = `${cn}${isSwitch ? (modal.form.op === 'ne' ? '异常告警' : '状态告警') : '越限告警'}`
   const unit = keyDict.value[k]?.unit || ''
@@ -1152,12 +1146,23 @@ const tplKeyOptions = computed(() => {
     .map(([key, n]) => ({ key, label: `${kd(key)} · ${n}/${matched.length} 台` }))
 })
 
+// 设备模板里个别设备单独设的级别(severityByDevice),卡片上列前 3 台
+function sevOverrideText(item) {
+  const e = Object.entries(item.severityByDevice || {})
+  if (!e.length) return ''
+  const s = e
+    .slice(0, 3)
+    .map(([d, v]) => `${dn(d)} ${sevLabel(v)}`)
+    .join('、')
+  return `(单独设:${s}${e.length > 3 ? ` 等 ${e.length} 台` : ''})`
+}
+
 function tplItemDesc(item) {
   if (item.template === 'alarm.switch')
-    return `「${item.name}」${kd(item.key)} 开关变位:${switchDirText(item)} → ${item.severity}`
+    return `「${item.name}」${kd(item.key)} 开关变位:${switchDirText(item)} → ${sevLabel(item.severity)}${sevOverrideText(item)}`
   if (item.template === 'alarm.threshold') {
     const ops = { gt: '>', lt: '<', gte: '≥', lte: '≤', eq: '=', ne: '≠' }
-    return `「${item.name}」${kd(item.key)} ${ops[item.condition.op]} ${item.condition.value} → ${item.severity}${item.trigger === 'edge' ? ' · 变化才报' : ''}`
+    return `「${item.name}」${kd(item.key)} ${ops[item.condition.op]} ${item.condition.value} → ${sevLabel(item.severity)}${sevOverrideText(item)}${item.trigger === 'edge' ? ' · 变化才报' : ''}`
   }
   if (item.template === 'window.aggregate')
     return `${item.keys.map(kd).join('/')} · ${item.aggs.join('/')} @ ${item.window}`
@@ -1183,6 +1188,9 @@ function blankForm() {
     trigger: 'level',
     directions: ['close'], // 开关变位告警:由分到合 / 由合到分(可都选)
     closedValue: '1', // 开关变位告警:合闸时测点的值
+    swSel: [], // 开关变位告警:已选测点 [{ ref, name, severity }](方式二 ref = 设备||测点,模板里 ref = 测点)
+    sevByDevice: {}, // 开关变位告警(设备模板):设备名 → 单独设的级别
+    swShowAll: false, // 开关变位告警:也列出非遥信测点
     outputMode: 'ts',
     terms: [
       { src: '', constVal: '', abs: false },
@@ -1790,6 +1798,8 @@ function openTplItemEdit(target, idx) {
     if (tpl.switch) {
       f.directions = [...(item.directions || ['close'])]
       f.closedValue = String(item.closedValue ?? 1)
+      f.swSel = [{ ref: item.key, name: item.name || '', severity: item.severity }]
+      f.sevByDevice = { ...(item.severityByDevice || {}) }
     } else {
       f.op = item.condition.op
       f.value = String(item.condition.value)
@@ -1847,6 +1857,7 @@ function openEdit(i) {
     if (tpl.switch) {
       f.directions = [...(c.directions || ['close'])]
       f.closedValue = String(c.closedValue ?? 1)
+      f.swSel = [{ ref: `${c.device}||${c.key}`, name: c.name || '', severity: c.severity }]
     } else {
       f.op = c.condition.op
       f.value = String(c.condition.value)
@@ -1917,9 +1928,111 @@ function kmSelectAll() {
 watch(
   () => modal.open,
   v => {
-    if (v) kmFilter.value = ''
+    if (v) kmFilter.value = swFilter.value = ''
   }
 )
+
+/* ── 开关变位告警(2026-09-13 现场反馈):只列遥信(YX)测点、可多选;
+   方式二每个测点单独设级别,设备模板里默认一个级别、个别设备另设(进线开关报最高级,路灯开关只提示) ── */
+const swFilter = ref('')
+// 测点字典给每个测点登记了类型:YX 遥信(开关 / 状态量)、YC 遥测、YM 遥脉;没读到字典就分不出,全列出来
+const dictTyped = computed(() => Object.values(keyDict.value).some(e => e.type))
+const isYx = key => keyDict.value[key]?.type === 'YX'
+const swAll = computed(() => {
+  if (!modalTpl.value?.switch) return []
+  if (modal.target !== null) {
+    const t = deviceTemplates.value[modal.target]
+    if (!t) return []
+    const items = tplKeyOptions.value.map(k => ({ ref: k.key, key: k.key, label: k.label }))
+    return [{ label: `「${t.name}」匹配的 ${tplMatched(t).length} 台设备`, items }]
+  }
+  return claimedDevices.value.map(d => ({
+    label: dn(d.name),
+    items: d.keys
+      .filter(k => k.claimed)
+      .map(k => ({ ref: `${d.name}||${k.key}`, key: k.key, label: dual(keyCn(k), k.key) })),
+  }))
+})
+const swHiddenCount = computed(() =>
+  dictTyped.value ? swAll.value.reduce((n, g) => n + g.items.filter(it => !isYx(it.key)).length, 0) : 0
+)
+const swGroups = computed(() => {
+  const f = swFilter.value.trim().toLowerCase()
+  const all = !dictTyped.value || modal.form.swShowAll
+  return swAll.value
+    .map(g => ({
+      ...g,
+      items: g.items.filter(it => (all || isYx(it.key)) && (!f || `${g.label} ${it.label}`.toLowerCase().includes(f))),
+    }))
+    .filter(g => g.items.length)
+})
+const swPicked = r => modal.form.swSel.some(x => x.ref === r)
+function swToggle(it, on = !swPicked(it.ref)) {
+  const i = modal.form.swSel.findIndex(x => x.ref === it.ref)
+  if (on && i < 0)
+    modal.form.swSel.push({ ref: it.ref, name: `${smartCn(it.key) || it.key}变位`, severity: modal.form.severity })
+  else if (!on && i >= 0) modal.form.swSel.splice(i, 1)
+}
+const swGroupAll = g => g.items.every(it => swPicked(it.ref))
+function swToggleGroup(g) {
+  const on = !swGroupAll(g)
+  for (const it of g.items) swToggle(it, on)
+}
+function swRefText(r) {
+  if (!r.includes('||')) return kd(r)
+  const { device, key } = keyRef(r)
+  return `${dn(device)} · ${kd(key)}`
+}
+function swSetAll(sev) {
+  modal.form.severity = sev
+  for (const r of modal.form.swSel) r.severity = sev
+}
+// 设备模板:匹配设备里具备所选测点的,可逐台改级别(不改的跟默认级别)
+const swTplDevices = computed(() => {
+  if (modal.target === null || !modalTpl.value?.switch) return []
+  const t = deviceTemplates.value[modal.target]
+  const keys = new Set(modal.form.swSel.map(r => r.ref))
+  return t ? tplMatched(t).filter(d => d.keys.some(k => k.claimed && keys.has(k.key))) : []
+})
+const swSevByDevice = () =>
+  Object.fromEntries(
+    swTplDevices.value
+      .map(d => [d.name, modal.form.sevByDevice[d.name]])
+      .filter(([, s]) => s && s !== modal.form.severity)
+  )
+const swCommon = () => ({
+  directions: SWITCH_DIRECTIONS.map(d => d.id).filter(d => modal.form.directions.includes(d)),
+  closedValue: Number(modal.form.closedValue),
+})
+// TB 按「设备 + 告警名」区分告警:同一台设备上两条开关告警重名,会互相覆盖、互相清除
+const swProblem = computed(() => {
+  if (!modalTpl.value?.switch) return ''
+  if (modal.form.swSel.some(r => !r.name.trim())) return '告警名称不能为空'
+  const others =
+    modal.target !== null
+      ? (deviceTemplates.value[modal.target]?.items || [])
+          .filter((x, i) => i !== modal.editIndex && x.template === 'alarm.switch')
+          .map(x => `|${x.name}`)
+      : computations.value
+          .filter((x, i) => i !== modal.editIndex && x.template === 'alarm.switch')
+          .map(x => `${x.device}|${x.name}`)
+  const seen = new Set(others)
+  for (const r of modal.form.swSel) {
+    const dev = r.ref.includes('||') ? keyRef(r.ref).device : ''
+    const id = `${dev}|${r.name.trim()}`
+    if (seen.has(id))
+      return `「${r.name.trim()}」${dev ? `在 ${dn(dev)} 上` : ''}重名了:同一台设备上的告警名称要各不相同(平台按名称区分告警,重名会互相覆盖)`
+    seen.add(id)
+  }
+  return ''
+})
+// 阈值告警里选了遥信测点 → 一键改用开关变位告警,带上已选的测点
+function swapToSwitch() {
+  const r = modal.form.key
+  openTpl('alarm.switch', modal.target)
+  swFilter.value = ''
+  if (r) swToggle({ ref: r, key: keyBase(r) })
+}
 
 const modalValid = computed(() => {
   const tpl = modalTpl.value
@@ -1944,6 +2057,14 @@ const modalValid = computed(() => {
   }
   if (tpl.kind === 'rollup' && modal.target === null && !modal.form.device) return false
   if (tpl.cascade) return modal.form.keys.length > 0 && modal.form.aggs.length > 0
+  if (tpl.switch)
+    return (
+      modal.form.swSel.length > 0 &&
+      !swProblem.value &&
+      modal.form.directions.length > 0 &&
+      modal.form.closedValue !== '' &&
+      !isNaN(Number(modal.form.closedValue))
+    )
   for (const p of tpl.params) {
     if (p.type === 'key' && !modal.form[p.id]) return false
     if (p.type === 'keys' && modal.form.keys.length === 0) return false
@@ -1951,9 +2072,6 @@ const modalValid = computed(() => {
     if (p.type === 'number' && (modal.form.value === '' || isNaN(Number(modal.form.value)))) return false
     if (p.type === 'text' && !modal.form.message.trim()) return false
     if (p.type === 'alarmName' && !modal.form.alarmName.trim()) return false
-    if (p.type === 'directions' && !modal.form.directions.length) return false
-    if (p.type === 'closedValue' && (modal.form.closedValue === '' || isNaN(Number(modal.form.closedValue))))
-      return false
   }
   if (tpl.needsOutput && !modal.form.output.trim()) return false
   return true
@@ -1963,14 +2081,25 @@ function addComputation() {
   const tpl = modalTpl.value
   // 模板模式:构造不绑定设备的运算项,存入设备模板
   if (modal.target !== null) {
+    // 开关变位告警:每个选中的测点一条;个别设备单独设的级别每条都带上
+    if (tpl.switch) {
+      const byDev = swSevByDevice()
+      const made = modal.form.swSel.map(r => ({
+        template: modal.tplId,
+        name: r.name.trim(),
+        key: r.ref,
+        ...swCommon(),
+        severity: modal.form.severity,
+        ...(Object.keys(byDev).length ? { severityByDevice: { ...byDev } } : {}),
+      }))
+      const items = deviceTemplates.value[modal.target].items
+      if (modal.editIndex !== null) items.splice(modal.editIndex, 1, ...made)
+      else items.push(...made)
+      modal.open = false
+      return
+    }
     const item = { template: modal.tplId }
-    if (tpl.kind === 'alarm' && tpl.switch) {
-      item.name = modal.form.alarmName.trim()
-      item.key = modal.form.key
-      item.directions = SWITCH_DIRECTIONS.map(d => d.id).filter(d => modal.form.directions.includes(d))
-      item.closedValue = Number(modal.form.closedValue)
-      item.severity = modal.form.severity
-    } else if (tpl.kind === 'alarm') {
+    if (tpl.kind === 'alarm') {
       item.name = modal.form.alarmName.trim()
       item.key = modal.form.key
       item.condition = { op: modal.form.op, value: Number(modal.form.value) }
@@ -2027,15 +2156,21 @@ function addComputation() {
     modal.open = false
     return
   }
-  if (tpl.kind === 'alarm' && tpl.switch) {
-    const ref = keyRef(modal.form.key)
-    c.name = modal.form.alarmName.trim()
-    c.device = ref.device
-    c.key = ref.key
-    c.directions = SWITCH_DIRECTIONS.map(d => d.id).filter(d => modal.form.directions.includes(d))
-    c.closedValue = Number(modal.form.closedValue)
-    c.severity = modal.form.severity
-  } else if (tpl.kind === 'alarm') {
+  // 开关变位告警:每个选中的测点一条,级别各自带
+  if (tpl.switch) {
+    const made = modal.form.swSel.map(r => ({
+      template: modal.tplId,
+      name: r.name.trim(),
+      ...keyRef(r.ref),
+      ...swCommon(),
+      severity: r.severity,
+    }))
+    if (modal.editIndex !== null) computations.value.splice(modal.editIndex, 1, ...made)
+    else computations.value.push(...made)
+    modal.open = false
+    return
+  }
+  if (tpl.kind === 'alarm') {
     const ref = keyRef(modal.form.key)
     c.name = modal.form.alarmName.trim()
     c.device = ref.device
@@ -2086,7 +2221,7 @@ function addComputation() {
 function compDesc(c) {
   const tpl = TEMPLATES[c.template]
   if (c.template === 'alarm.switch')
-    return `「${c.name}」${dn(c.device)} · ${kd(c.key)} 开关变位:${switchDirText(c)} → ${c.severity}`
+    return `「${c.name}」${dn(c.device)} · ${kd(c.key)} 开关变位:${switchDirText(c)} → ${sevLabel(c.severity)}`
   if (c.template === 'aggregate.crossEntity') {
     const sel = [...(c.selector?.profiles || []), ...(c.selector?.prefixes || [])].join('/')
     const n = tplMatched({ selector: c.selector || {} }).length
@@ -2097,7 +2232,7 @@ function compDesc(c) {
   }
   if (c.template === 'alarm.threshold') {
     const ops = { gt: '>', lt: '<', gte: '≥', lte: '≤', eq: '=', ne: '≠' }
-    return `「${c.name}」${dn(c.device)} · ${kd(c.key)} ${ops[c.condition.op]} ${c.condition.value} → ${c.severity}${c.trigger === 'edge' ? ' · 变化才报' : ''} · ${c.message}`
+    return `「${c.name}」${dn(c.device)} · ${kd(c.key)} ${ops[c.condition.op]} ${c.condition.value} → ${sevLabel(c.severity)}${c.trigger === 'edge' ? ' · 变化才报' : ''} · ${c.message}`
   }
   if (c.template === 'window.cascade') {
     return `${dn(c.device)} · ${c.keys.map(kd).join('/')} · ${c.aggs.join('/')} · 5分钟→1小时→1天 三级归档`
@@ -3437,6 +3572,119 @@ function openFrontend() {
           </div>
         </template>
 
+        <!-- 开关变位告警(2026-09-13):遥信测点多选 + 每个测点的名称 / 级别;设备模板里另可按设备设级别 -->
+        <template v-else-if="modalTpl.switch">
+          <div class="frow">
+            <div class="field" style="flex: 1; min-width: 0">
+              <label>开关测点(只列遥信 YX,可多选 · 已选 {{ modal.form.swSel.length }})</label>
+              <div class="key-multi">
+                <div class="km-bar">
+                  <input type="text" v-model="swFilter" class="km-q" placeholder="🔍 过滤:设备 / 测点名 / 中文名…" />
+                  <button v-if="modal.form.swSel.length" class="btn ghost sm" @click="modal.form.swSel = []">
+                    清空
+                  </button>
+                </div>
+                <div class="km-list sw-list">
+                  <template v-for="g in swGroups" :key="g.label">
+                    <div class="sw-group">
+                      <span class="sw-gname" :title="g.label">{{ g.label }}</span>
+                      <button class="btn ghost sm" @click="swToggleGroup(g)">
+                        {{ swGroupAll(g) ? '取消' : '全选' }}{{ modal.target === null ? '本设备' : '' }}({{
+                          g.items.length
+                        }})
+                      </button>
+                    </div>
+                    <label v-for="it in g.items" :key="it.ref" class="km-row" :title="it.label">
+                      <input type="checkbox" :checked="swPicked(it.ref)" @change="swToggle(it, $event.target.checked)" />
+                      <span class="km-name">{{ it.label }}</span>
+                      <span v-if="dictTyped && !isYx(it.key)" class="sw-tag">非遥信</span>
+                    </label>
+                  </template>
+                  <div v-if="!swGroups.length" class="km-empty">
+                    {{ swFilter.trim() ? '无匹配测点' : '已认领的测点里没有遥信(YX)' }}
+                  </div>
+                </div>
+              </div>
+              <div class="fhint">
+                <template v-if="dictTyped">按平台的测点字典只列遥信(YX,开关 / 状态量)</template>
+                <template v-else>没读到测点字典,分不出遥信 / 遥测,列出了全部测点</template>
+                <label v-if="swHiddenCount" class="abs-check" style="margin-left: 10px">
+                  <input type="checkbox" v-model="modal.form.swShowAll" />也显示非遥信测点({{ swHiddenCount }})
+                </label>
+              </div>
+            </div>
+          </div>
+          <div v-if="modal.form.swSel.length" class="frow">
+            <div class="field" style="flex: 1; min-width: 0">
+              <label>告警名称{{ modal.target === null ? '与级别(每个测点单独设)' : '' }}</label>
+              <div v-if="modal.target === null" class="sw-bulk">
+                全部设为
+                <button v-for="s in ALARM_SEVERITIES" :key="s.id" class="btn ghost sm" @click="swSetAll(s.id)">
+                  {{ s.label }}
+                </button>
+              </div>
+              <div class="sw-rows">
+                <div v-for="(r, i) in modal.form.swSel" :key="r.ref" class="sw-row">
+                  <span class="sw-where" :title="swRefText(r.ref)">{{ swRefText(r.ref) }}</span>
+                  <input type="text" v-model="r.name" placeholder="告警名称" />
+                  <select v-if="modal.target === null" v-model="r.severity">
+                    <option v-for="s in ALARM_SEVERITIES" :key="s.id" :value="s.id">{{ s.label }}</option>
+                  </select>
+                  <button class="btn ghost sm" title="不选这个测点" @click="modal.form.swSel.splice(i, 1)">✕</button>
+                </div>
+              </div>
+              <div class="fhint">
+                告警名称显示在大屏横幅和告警列表里,同一台设备上不能重名;都选两个方向时名字后面自动带「(由分到合)」「(由合到分)」
+              </div>
+              <div v-if="swProblem" class="err-msg">{{ swProblem }}</div>
+            </div>
+          </div>
+          <div class="frow">
+            <div class="field">
+              <label>报警方向</label>
+              <div class="sw-dirs">
+                <label v-for="d in SWITCH_DIRECTIONS" :key="d.id" class="abs-check">
+                  <input type="checkbox" :value="d.id" v-model="modal.form.directions" />{{ d.label }}
+                </label>
+              </div>
+              <div class="fhint">可只选一种,也可都选。只在变位瞬间报,反向变位时自动清除</div>
+            </div>
+            <div class="field">
+              <label>合闸值</label>
+              <input type="text" v-model="modal.form.closedValue" placeholder="1" style="width: 90px" />
+              <div class="fhint">开关合闸时这个测点的值,一般是 1;其它值都当作分闸</div>
+            </div>
+          </div>
+          <template v-if="modal.target !== null">
+            <div class="frow">
+              <div class="field">
+                <label>级别</label>
+                <select v-model="modal.form.severity">
+                  <option v-for="s in ALARM_SEVERITIES" :key="s.id" :value="s.id">{{ s.label }}</option>
+                </select>
+                <div class="fhint">模板匹配的设备默认都用这个级别;个别设备不一样的,在下面单独改</div>
+              </div>
+            </div>
+            <div v-if="swTplDevices.length" class="frow">
+              <div class="field" style="flex: 1; min-width: 0">
+                <label>按设备分别设级别(如进线开关报最高级、每天分合的路灯开关只提示)</label>
+                <div class="km-list sw-devsev">
+                  <div v-for="d in swTplDevices" :key="d.name" class="sw-row">
+                    <span class="sw-where" :title="dn(d.name)">{{ dn(d.name) }}</span>
+                    <select
+                      :value="modal.form.sevByDevice[d.name] || ''"
+                      @change="modal.form.sevByDevice[d.name] = $event.target.value"
+                    >
+                      <option value="">同上({{ sevLabel(modal.form.severity) }})</option>
+                      <option v-for="s in ALARM_SEVERITIES" :key="s.id" :value="s.id">{{ s.label }}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+
         <template v-else>
           <div v-for="p in modalTpl.params" :key="p.id" class="frow">
             <div class="field">
@@ -3462,20 +3710,6 @@ function openFrontend() {
                 </select>
                 <div class="fhint">「持续」适合越限监视;「变化才报」适合开关/状态量,只在翻转瞬间动作,不会刷屏</div>
               </template>
-              <template v-else-if="p.type === 'directions'">
-                <div class="sw-dirs">
-                  <label v-for="d in SWITCH_DIRECTIONS" :key="d.id" class="abs-check">
-                    <input type="checkbox" :value="d.id" v-model="modal.form.directions" />{{ d.label }}
-                  </label>
-                </div>
-                <div class="fhint">
-                  可只选一种,也可都选;都选时生成两条告警,名字后面分别带「(由分到合)」「(由合到分)」。只在变位瞬间报,反向变位时自动清除
-                </div>
-              </template>
-              <template v-else-if="p.type === 'closedValue'">
-                <input type="text" v-model="modal.form.closedValue" placeholder="1" style="width: 90px" />
-                <div class="fhint">开关合闸时这个测点的值,一般是 1;其它值都当作分闸</div>
-              </template>
               <template v-else-if="p.type === 'alarmName'">
                 <input
                   type="text"
@@ -3498,6 +3732,15 @@ function openFrontend() {
                 />
                 <div class="fhint">触发时显示的提示文字,写 {value} 会自动替换成实际数值</div>
               </template>
+              <div
+                v-if="p.type === 'key' && modalTpl.kind === 'alarm' && isYx(keyBase(modal.form[p.id]))"
+                class="fhint sw-nudge"
+              >
+                这是遥信(开关 / 状态量)测点。开关变位建议用「开关变位告警」:可批量选测点、每台设备设不同级别
+                <button v-if="modal.editIndex === null" class="btn ghost sm" @click="swapToSwitch">
+                  改用开关变位告警
+                </button>
+              </div>
             </div>
           </div>
         </template>
