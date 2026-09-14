@@ -231,6 +231,30 @@ function onPickCard(card: WidgetConfig) {
   toast(`槽位 ${selectedSlot.value.name} ← 卡片库「${cardTitle(card)}」(新 id ${w.id})`)
 }
 const cardTitle = (c: WidgetConfig) => (typeof c.props?.title === 'string' && c.props.title) || c.type
+/**
+ * 复制引用(2026-09-14 单卡片嵌入 P3):前端按「页面资产 id + 组件 id」嵌单卡。
+ * 页面 id 只有发布过才有(项目记录里的 assetId);没发布提示先发布。
+ */
+const refPageId = computed(() => currentPublished.value?.assetId ?? null)
+const refJson = (w: WidgetConfig) => JSON.stringify({ pageId: refPageId.value, widgetId: w.id })
+const refSnippet = (w: WidgetConfig) =>
+  [
+    `// 页面资产 ${refPageId.value} · 组件 ${w.id}(${w.type}${cardTitle(w) !== w.type ? ' · ' + cardTitle(w) : ''})`,
+    `const page = validatePageConfig(JSON.parse(raw.pageConfig)).value   // 该资产 SERVER_SCOPE 属性 pageConfig`,
+    `const card = pickWidget(page, '${w.id}')`,
+    `<div class="my-cell"><ScadaWidget v-if="card" :config="card" /></div>`,
+  ].join('\n')
+async function copyRef(kind: 'json' | 'code') {
+  const w = selectedWidget.value
+  if (!w) return
+  if (!refPageId.value) return toast('页面还没发布,没有页面 id;先发布再复制引用')
+  try {
+    await navigator.clipboard.writeText(kind === 'json' ? refJson(w) : refSnippet(w))
+    toast(kind === 'json' ? '引用已复制:{ pageId, widgetId }' : '接入代码已复制')
+  } catch {
+    toast('复制失败,请手动选择文本')
+  }
+}
 /** 普通页面:把当前组件存为可复用卡片(向导接住,放进卡片库编辑器) */
 function saveAsCard() {
   const w = selectedWidget.value
@@ -678,6 +702,21 @@ defineExpose({
                   存为可复用卡片
                 </button>
               </div>
+              <div v-if="selectedWidget" class="ed-ref" data-role="widget-ref">
+                <span class="dim">引用(给前端):</span>
+                <template v-if="refPageId">
+                  <code class="ed-ref-id" :title="`页面资产 id ${refPageId}`">{{ refPageId.slice(0, 8) }}…</code>
+                  <span class="dim">+</span>
+                  <code class="ed-ref-id">{{ selectedWidget.id }}</code>
+                  <button type="button" class="ed-mini" data-role="copy-ref-json" @click="copyRef('json')">
+                    复制引用
+                  </button>
+                  <button type="button" class="ed-mini" data-role="copy-ref-code" @click="copyRef('code')">
+                    复制接入代码
+                  </button>
+                </template>
+                <span v-else class="dim" data-role="ref-unpublished">页面发布后才有页面 id,组件 id 已固定</span>
+              </div>
               <div v-else class="dim">空槽位</div>
               <button type="button" @click="pickerOpen = true">
                 {{ selectedWidget ? '更换 / 移除组件' : '选择组件' }}
@@ -1050,6 +1089,20 @@ body {
 }
 .ed-issue-list li.warning {
   color: #ffd27a;
+}
+.ed-ref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.ed-ref-id {
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid rgba(83, 196, 255, 0.25);
+  border-radius: 4px;
 }
 .ed-save-card {
   margin-left: 8px;

@@ -25,6 +25,8 @@ import {
   findDevice,
   writeAlarmConfig,
   listSitePages,
+  listPageWidgets,
+  readPageState,
   renameTable,
   publish,
   publishPage,
@@ -44,7 +46,9 @@ const USAGE = `用法:
                   发布后核对规则节点是否真的启动(配置字段不对时 TB 会静默丢消息),有节点起不来即退出非 0;--no-health 跳过
   tbsite cleanup  <站点.tbsite.json> [连接参数]
   tbsite page     <页面.pageconfig.json> --site <站点资产名> [--name 页面资产名] [--by 操作者] [连接参数]
-  tbsite pages    --site <站点资产名> [连接参数]        列出站点下的 ScadaPage 资产与 version
+  tbsite pages    --site <站点资产名> [--widgets] [--json] [连接参数]
+                  列出站点下的 ScadaPage 资产与 version(卡片库标 kind=cards);--widgets 再列每张页面里每张卡的
+                  组件 id / 类型 / 标题 / 绑定,给前端按「页面 id + 组件 id」嵌单卡对照;--json 机器可读
   tbsite drift    <站点.tbsite.json> [--pages 目录] [--strict] [连接参数]
                   本地声明 / 页面文件 vs 线上 siteConfig / pageConfig 的差异(只读;--strict 有差异时退出码 1,给 CI 用)
   tbsite migrate  <站点.tbsite.json> [--table 迁移表] [--apply] [--from 时刻] [--delete-old] [--rewrite-pages] [--pages 目录] [连接参数]
@@ -267,8 +271,35 @@ async function main(argv: string[]) {
     console.log(`✓ 已登录 ${base}(${user})`)
     if (cmd === 'pages') {
       const pages = await listSitePages(api, siteName)
+      const withWidgets = flags.widgets === true
+      const rows = []
+      for (const p of pages) {
+        const widgets = withWidgets
+          ? listPageWidgets((await readPageState(api, p.assetId)).config ?? { widgets: [] })
+          : []
+        rows.push({ ...p, widgets })
+      }
+      if (flags.json === true) {
+        console.log(JSON.stringify(rows, null, 2))
+        return 0
+      }
       if (!pages.length) console.log(`站点「${siteName}」下没有 ScadaPage 资产`)
-      for (const p of pages) console.log(`  ${p.name}  version ${p.version ?? '-'}  ${p.assetId}  ${p.label ?? ''}`)
+      for (const p of rows) {
+        console.log(
+          `  ${p.name}  version ${p.version ?? '-'}  ${p.assetId}  ${p.label ?? ''}${p.kind ? `  [kind=${p.kind}]` : ''}`
+        )
+        if (withWidgets) {
+          if (!p.widgets.length) console.log('      (没有组件)')
+          for (const w of p.widgets)
+            console.log(
+              `      ${w.id.padEnd(14)} ${w.type.padEnd(14)} ${w.slot.padEnd(8)} ${w.title ?? ''}${w.bindings.length ? '  ' + w.bindings.join('; ') : ''}`
+            )
+        }
+      }
+      if (withWidgets)
+        console.log(
+          '\n前端引用一张卡:{ pageId: <资产 id>, widgetId: <组件 id> } → pickWidget(pageConfig, widgetId) + <ScadaWidget>'
+        )
       return 0
     }
     if (!file) throw new Error('缺少页面配置文件路径')

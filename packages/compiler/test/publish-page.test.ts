@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   detectDrift,
   listSitePages,
+  listPageWidgets,
   NULL_UUID,
   publishPage,
   readPageState,
@@ -332,6 +333,13 @@ describe('publishPage', () => {
       kind: 'cards',
     })
     expect('kind' in pages.find(p => p.assetId === r1.assetId)!).toBe(false)
+    // P3:每张卡的引用摘要(tbsite pages --widgets / 工具「复制引用」)
+    const refs = listPageWidgets((await readPageState(tb.api, rc.assetId!)).config!)
+    expect(refs.map(r => [r.id, r.type, r.slot])).toEqual(page().widgets.map(w => [w.id, w.type, w.slot]))
+    expect(refs[0]!.bindings).toEqual(['value=ts SSP1_GP1_IED1.P'])
+    expect(refs[1]!.bindings[0]).toMatch(/^series=ts-history PDR1_LP1_IED1\.P/)
+    expect(refs[2]!.bindings).toEqual(['alarms=alarm xrs-mirror-test'])
+    expect(listPageWidgets({ widgets: [] })).toEqual([])
     // 项目文件记的是 version 1 → 漂移;记 2 → 无
     const published = { [r1.pageName]: { assetId: r1.assetId!, version: 1, at: 0, by: 'yy' } }
     expect(await detectDrift(tb.api, 'xrs-mirror-test', published)).toEqual([
