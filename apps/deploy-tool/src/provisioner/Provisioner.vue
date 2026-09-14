@@ -37,6 +37,7 @@ import {
   unwireRootChain,
 } from './publisher.js'
 import KeyPicker from '../components/KeyPicker.vue'
+import { assignSiteCustomer, custOf, devicesOutside, listCustomers } from './siteCustomer'
 import {
   LS_ENVS,
   LS_BUILTIN_ENVS,
@@ -254,6 +255,7 @@ function switchEnv() {
   conn.token = null
   devices.value = []
   sites.value = []
+  customers.value = []
   restoreMsg.value = ''
   loadSavedLogin()
 }
@@ -289,6 +291,74 @@ const dn = name => (name ? dual(devByName.value.get(name)?.cn, name) : name)
 const sites = ref([]) // 已发布的站点资产 [{name, id}]
 const selectedSite = ref('')
 const restoreMsg = ref('')
+
+/* ── 第 1 步「分配给客户」(2026-09-13):站点资产分给哪个 TB 客户。客户账号(大屏值班用的)只看得到分给它所属客户的
+   站点和页面;本工具建的页面、结果资产跟着站点走,设备不动(见 siteCustomer.ts)。只有管理员能分 ── */
+const customers = ref([]) // [{ id, title }],不含 TB 自带的 Public 客户
+const siteCust = reactive({ pick: '', busy: false, msg: '', err: '', pending: '' }) // pending:新站点首次发布后要分给的客户 id
+const siteAsset = computed(() => sites.value.find(s => s.name === site.name) || null)
+const siteCustNow = computed(() => siteAsset.value?.customerId || '')
+const custTitle = id => (id ? customers.value.find(c => c.id === id)?.title || '(客户已删除)' : '未分配')
+// 认领的设备里不在所选客户下的:客户账号看不到它们的数据
+const custOutside = computed(() => devicesOutside(claimedDevices.value, siteCust.pick || null))
+watch(siteCustNow, v => (siteCust.pick = v), { immediate: true })
+watch(
+  () => site.name,
+  () => Object.assign(siteCust, { pick: siteCustNow.value, msg: '', err: '', pending: '' })
+)
+async function doAssignCustomer() {
+  const target = siteCust.pick || null
+  const s = siteAsset.value
+  Object.assign(siteCust, { msg: '', err: '' })
+  if (!s) {
+    // 新站点:站点资产第一次发布时才建出来,先记下,发布成功后补分配
+    siteCust.pending = siteCust.pick
+    siteCust.msg = target
+      ? `站点「${site.name}」还没发布到平台上;第 5 步发布、站点资产建出来后自动分给「${custTitle(target)}」`
+      : ''
+    return
+  }
+  const ok = await askConfirm({
+    title: '分配给客户',
+    text: target
+      ? `把站点「${site.name}」分给客户「${custTitle(target)}」?\n该客户下的账号(如大屏值班账号)就能看到这个站点;本工具建的页面、结果资产一起分过去,设备不动。`
+      : `取消站点「${site.name}」的客户分配?\n之后只有租户管理账号看得到它;本工具建的页面、结果资产一起取消,设备不动。`,
+    okLabel: target ? '分配' : '取消分配',
+  })
+  if (!ok) return
+  siteCust.busy = true
+  try {
+    const r = await assignSiteCustomer(tbApi, s.id, target)
+    s.customerId = target
+    siteCust.msg =
+      `站点「${site.name}」已${target ? `分给「${custTitle(target)}」` : '取消分配'}` +
+      (r.moved.length ? `,页面 / 结果资产跟着改了 ${r.moved.length} 个` : '')
+  } catch (e) {
+    siteCust.err = `分配失败:${e.message || e}`
+  } finally {
+    siteCust.busy = false
+  }
+}
+// 新站点在第 1 步选了客户:发布建出站点资产后补上分配
+async function applyPendingCustomer() {
+  const target = siteCust.pending
+  if (!target) return
+  try {
+    const a = await findAsset(tbApi, site.name)
+    if (!a) return
+    const r = await assignSiteCustomer(tbApi, a.id.id, target)
+    const row = { name: a.name, id: a.id.id, customerId: target }
+    const i = sites.value.findIndex(s => s.name === a.name)
+    if (i >= 0) sites.value.splice(i, 1, row)
+    else sites.value.push(row)
+    siteCust.pending = ''
+    siteCust.msg =
+      `站点「${site.name}」已分给「${custTitle(target)}」` +
+      (r.moved.length ? `,页面 / 结果资产跟着改了 ${r.moved.length} 个` : '')
+  } catch (e) {
+    siteCust.err = `发布成功,但分给客户失败:${e.message || e};可回第 1 步再点「分配」`
+  }
+}
 
 /* ── 命名草稿:第 2/3/4 步「保存并进入下一步」——配置存 localStorage,
    每个草稿有名字,可存多份(上限 10),同名保存即覆盖 ── */
@@ -523,6 +593,7 @@ async function connect() {
         cn: deviceCn(d),
         gwId: d.additionalInfo?.lastConnectedGateway || null,
         isGateway: !!gwById[d.id.id],
+        customerId: custOf(d), // 第 1 步「分配给客户」提示哪些设备客户看不到
         open: false,
         claimed: false,
         keys: Object.keys(latest).map(k => ({
@@ -599,7 +670,11 @@ async function connect() {
         /* 字典资产不可读时静默降级 */
       }
     }
-    sites.value = assets.filter(a => a.type === 'tbsite').map(a => ({ name: a.name, id: a.id.id }))
+    sites.value = assets
+      .filter(a => a.type === 'tbsite')
+      .map(a => ({ name: a.name, id: a.id.id, customerId: custOf(a) }))
+    // 第 1 步「分配给客户」的下拉:只有管理员能分
+    customers.value = perm.role === 'admin' ? await listCustomers(tbApi).catch(() => []) : []
     if (perm.role === 'field') {
       // 现场账号:只看得到/载得动允许的站点,站点标识锁定到授权范围
       sites.value = sites.value.filter(s => perm.sites.includes(s.name))
@@ -2449,6 +2524,7 @@ async function doPublish(openAfter) {
       )) || []
     pub.done = pub.failures.length === 0
     if (pub.done) for (const k of Object.keys(decisions)) delete decisions[k] // 已落到 TB,下次进第 3 步重新同步
+    if (pub.done) await applyPendingCustomer()
     if (pub.done && pendingWin) pendingWin.location = frontendUrl()
     else if (pub.done && openAfter) openFrontend()
     else if (pendingWin) pendingWin.close() // 有失败项:不跳大屏,留在向导处理失败清单
@@ -2490,6 +2566,7 @@ async function retryFailed() {
         holdKeys()
       )) || []
     pub.done = pub.failures.length === 0
+    if (pub.done) await applyPendingCustomer()
   } catch {
     /* 校验失败——细节在步骤行 */
   } finally {
@@ -2698,6 +2775,42 @@ function openFrontend() {
         </div>
       </div>
       <p v-if="restoreMsg" class="ok-msg" style="margin-top: 6px">{{ restoreMsg }}</p>
+      <!-- 分配给客户(2026-09-13):客户账号只看得到分给它所属客户的站点和页面;只有管理员能分 -->
+      <div v-if="conn.status === 'ok' && perm.role === 'admin'" class="site-cust">
+        <div class="frow">
+          <div class="field">
+            <label>分配给客户</label>
+            <select v-model="siteCust.pick" :disabled="siteCust.busy">
+              <option value="">不分配(只有租户管理账号看得到)</option>
+              <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.title }}</option>
+              <option v-if="!customers.length" value="__none__" disabled>(TB 里还没有客户,先在 TB 里建)</option>
+            </select>
+          </div>
+          <button
+            class="btn"
+            :disabled="
+              siteCust.busy || !site.name || !!siteIdError || (siteAsset ? siteCust.pick === siteCustNow : !siteCust.pick)
+            "
+            @click="doAssignCustomer"
+          >
+            {{ siteCust.busy ? '分配中…' : '分配' }}
+          </button>
+        </div>
+        <p class="site-cust-hint">
+          站点「{{ site.name }}」现在:<b>{{ siteAsset ? custTitle(siteCustNow) : '还没发布到平台上' }}</b>。
+          客户账号(如大屏值班账号)只看得到分给它所属客户的站点和页面;本工具建的页面、结果资产跟着站点一起分,设备不动。
+        </p>
+        <p v-if="custOutside.length" class="site-cust-warn">
+          本站点认领的设备里有 {{ custOutside.length }} 台不在该客户下,客户账号看不到它们的数据:{{
+            custOutside
+              .slice(0, 5)
+              .map(d => dn(d.name))
+              .join('、')
+          }}{{ custOutside.length > 5 ? ' 等' : '' }}。请在 TB 里把这些设备也分给该客户——设备可能是同事在用的,工具不自动改。
+        </p>
+        <p v-if="siteCust.msg" class="ok-msg">{{ siteCust.msg }}</p>
+        <p v-if="siteCust.err" class="err-msg">{{ siteCust.err }}</p>
+      </div>
       <div v-if="draftList.length" class="draft-banner draft-list">
         <div class="draft-head">
           💾 本机草稿({{ draftList.length }} 份)——当前载入的是「线上已发布」版本,草稿可能更新

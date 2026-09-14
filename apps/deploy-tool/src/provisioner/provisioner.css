@@ -893,6 +893,30 @@ select {
 .connect-go {
   margin-top: 14px;
 }
+/* 第 1 步「分配给客户」(2026-09-13) */
+.site-cust {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line-1);
+}
+.site-cust .frow {
+  align-items: flex-end;
+}
+.site-cust-hint {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.site-cust-hint b {
+  color: var(--ink-0);
+}
+.site-cust-warn {
+  margin: 6px 0 0;
+  color: var(--warn, #f0b429);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .perm-badge {
   margin-top: 10px;
   padding: 8px 12px;
