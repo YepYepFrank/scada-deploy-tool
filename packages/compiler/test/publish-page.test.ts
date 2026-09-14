@@ -315,6 +315,23 @@ describe('publishPage', () => {
     expect(await listSitePages(tb.api, 'xrs-mirror-test')).toEqual([
       { assetId: r1.assetId, name: 'xrs-mirror-test-总览', label: '总览', version: 2 },
     ])
+    // 卡片库(2026-09-14):kind 写进 additionalInfo,列表带 kind;重发布保留;普通页面没有 kind 键
+    const lib = { ...page(), title: '卡片库' }
+    const rc = await publishPage(lib, tb.api, { ...opts, kind: 'cards' })
+    expect(rc.ok).toBe(true)
+    const libAsset = tb.assets.find(a => a.id.id === rc.assetId)!
+    expect(libAsset.additionalInfo).toEqual({ managedBy: 'deploy-tool', version: 1, kind: 'cards' })
+    await publishPage(lib, tb.api, { ...opts, kind: 'cards' })
+    expect(libAsset.additionalInfo).toEqual({ managedBy: 'deploy-tool', version: 2, kind: 'cards' })
+    const pages = await listSitePages(tb.api, 'xrs-mirror-test')
+    expect(pages.find(p => p.assetId === rc.assetId)).toEqual({
+      assetId: rc.assetId,
+      name: 'xrs-mirror-test-卡片库',
+      label: '卡片库',
+      version: 2,
+      kind: 'cards',
+    })
+    expect('kind' in pages.find(p => p.assetId === r1.assetId)!).toBe(false)
     // 项目文件记的是 version 1 → 漂移;记 2 → 无
     const published = { [r1.pageName]: { assetId: r1.assetId!, version: 1, at: 0, by: 'yy' } }
     expect(await detectDrift(tb.api, 'xrs-mirror-test', published)).toEqual([

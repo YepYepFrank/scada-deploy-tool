@@ -1754,3 +1754,29 @@ details.plat-group > summary.plat-gt {
 .diff-none {
   color: var(--ink-2);
 }
+
+/* 第 4 步「页面 | 卡片库」两个文档标签(2026-09-14 单卡片嵌入 P2) */
+.ed-doc-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.ed-doc-tabs .page-tab {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid var(--line-0);
+  font: inherit;
+  font-size: 13px;
+}
+.ed-doc-tabs .page-tab .dim {
+  font-size: 12px;
+}
+.ed-doc-hint {
+  margin: 0 0 0 6px;
+  font-size: 12px;
+}
+.page-pub-sub {
+  margin-top: 18px;
+}

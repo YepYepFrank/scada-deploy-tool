@@ -2358,22 +2358,49 @@ const editorSession = computed(() =>
 )
 const pageState = computed(() => editorRef.value?.state ?? null)
 const pagePubOpen = ref(false)
-/** 载入站点时把 TB 上已发布的第一个页面读回编辑器(编辑器可能还没挂载,先记下等它出现) */
+/**
+ * 卡片库(2026-09-14 单卡片嵌入 P2):站点下的第二张 ScadaPage 资产(模板 cards、additionalInfo.kind = 'cards'),
+ * 第 4 步「页面 | 卡片库」两个标签各一个编辑器实例(各自撤销栈 / 发布 / 版本);大屏列表跳过它。
+ */
+const cardsRef = ref(null)
+const cardsState = computed(() => cardsRef.value?.state ?? null)
+const cardsPubOpen = ref(false)
+const edTab = ref('page')
+/** 卡片库里的卡:给页面编辑器的组件选择器「从卡片库放入」 */
+const cardLibrary = computed(() => cardsState.value?.config.widgets ?? [])
+const cardsMsg = ref('')
+/** 页面编辑器里「存为可复用卡片」→ 放进卡片库第一个空格 */
+function onSaveCard(card) {
+  const slot = cardsRef.value?.addWidget(card)
+  const title = (card.props && typeof card.props.title === 'string' && card.props.title) || card.type
+  cardsMsg.value = slot
+    ? `已把「${title}」存进卡片库(格 ${slot});切到「卡片库」标签可查看,第 5 步与页面一起发布`
+    : `卡片库已满(24 格),先删掉不用的卡再存「${title}」`
+  setTimeout(() => (cardsMsg.value = ''), 6000)
+}
+/** 载入站点时把 TB 上已发布的页面 / 卡片库读回各自的编辑器(编辑器可能还没挂载,先记下等它出现) */
 const pendingPage = ref(null)
+const pendingCards = ref(null)
 async function loadSitePage(name) {
   pendingPage.value = null
+  pendingCards.value = null
   try {
     const pages = await listSitePages(api, name)
-    if (!pages.length) return
-    const p0 = pages[0]
-    const st = await readPageState(api, p0.assetId)
-    if (st.config) pendingPage.value = { page: p0, config: st.config }
+    const lib = pages.find(p => p.kind === 'cards')
+    const p0 = pages.find(p => p.kind !== 'cards')
+    if (p0) {
+      const st = await readPageState(api, p0.assetId)
+      if (st.config) pendingPage.value = { page: p0, config: st.config }
+    }
+    if (lib) {
+      const st = await readPageState(api, lib.assetId)
+      if (st.config) pendingCards.value = { page: lib, config: st.config }
+    }
   } catch {
     /* 没页面或读不到都不影响向导 */
   }
 }
-watch([editorRef, pendingPage], ([ed, pending]) => {
-  if (!ed || !pending) return
+function adoptPending(ed, pending) {
   ed.setConfig(pending.config)
   ed.setPageName(pending.page.name)
   ed.recordPublished(pending.page.name, {
@@ -2382,7 +2409,16 @@ watch([editorRef, pendingPage], ([ed, pending]) => {
     at: Date.now(),
     by: '(TB)',
   })
+}
+watch([editorRef, pendingPage], ([ed, pending]) => {
+  if (!ed || !pending) return
+  adoptPending(ed, pending)
   pendingPage.value = null
+})
+watch([cardsRef, pendingCards], ([ed, pending]) => {
+  if (!ed || !pending) return
+  adoptPending(ed, pending)
+  pendingCards.value = null
 })
 /** 第 5 步页面发布面板的回调:走 script 函数而不是模板内联表达式(内联的 editorRef.x() 在此 JS SFC 里不生效) */
 function onPagePublished(name, rec) {
@@ -2391,6 +2427,13 @@ function onPagePublished(name, rec) {
 }
 function onPageRestored(cfg) {
   editorRef.value?.setConfig(cfg)
+}
+function onCardsPublished(name, rec) {
+  cardsRef.value?.setPageName(name)
+  cardsRef.value?.recordPublished(name, rec)
+}
+function onCardsRestored(cfg) {
+  cardsRef.value?.setConfig(cfg)
 }
 function downloadProject() {
   if (!editorRef.value) return
@@ -3348,7 +3391,35 @@ function openFrontend() {
         点击下方缩略图进入全屏编辑;编辑器里「预览」看真数据,「发布」写进 TB。
       </p>
       <p v-if="conn.status !== 'ok'" class="err-msg">尚未连接 ThingsBoard——请先在第 1 步连接。</p>
-      <EditorApp v-else ref="editorRef" embedded :session="editorSession" :declared="declaredOutputs" />
+      <template v-else>
+        <div class="ed-doc-tabs" data-role="ed-doc-tabs">
+          <button type="button" class="page-tab" :class="{ on: edTab === 'page' }" data-tab="page" @click="edTab = 'page'">
+            页面<span v-if="pageState" class="dim"> · {{ pageState.config.widgets.length }} 个组件</span>
+          </button>
+          <button type="button" class="page-tab" :class="{ on: edTab === 'cards' }" data-tab="cards" @click="edTab = 'cards'">
+            卡片库<span v-if="cardsState" class="dim"> · {{ cardsState.config.widgets.length }} 张卡</span>
+          </button>
+          <span
+            class="hint ed-doc-hint"
+            title="卡片库是站点的第二张页面(模板固定 24 格,不在大屏里显示):这里的每张卡都能被前端应用按「页面 id + 组件 id」单独引用;配页面时也能从卡片库放入。"
+            >卡片库里的卡供前端应用单独引用;页面里的卡可「存为可复用卡片」</span
+          >
+          <span v-if="cardsMsg" class="draft-msg" data-role="cards-msg">{{ cardsMsg }}</span>
+        </div>
+        <div v-show="edTab === 'page'">
+          <EditorApp
+            ref="editorRef"
+            embedded
+            :session="editorSession"
+            :declared="declaredOutputs"
+            :library="cardLibrary"
+            @save-card="onSaveCard"
+          />
+        </div>
+        <div v-show="edTab === 'cards'">
+          <EditorApp ref="cardsRef" embedded doc-kind="cards" :session="editorSession" :declared="declaredOutputs" />
+        </div>
+      </template>
     </div>
 
     <!-- 5 发布上线 -->
@@ -3392,6 +3463,43 @@ function openFrontend() {
           </div>
         </template>
         <p v-else class="hint">先到第 4 步打开组态编辑器。</p>
+
+        <h3 class="page-pub-sub">卡片库(可复用卡片,供前端应用单独引用)</h3>
+        <template v-if="cardsState">
+          <p class="hint" style="margin-bottom: 8px" data-role="cards-summary">
+            「{{ cardsState.currentPageName }}」· {{ cardsState.config.widgets.length }} 张卡 ·
+            {{ cardsState.errorCount ? `校验有 ${cardsState.errorCount} 个错误,先回第 4 步修` : '校验通过' }}
+            <span v-if="cardsState.published[cardsState.currentPageName]">
+              · 已发布 version {{ cardsState.published[cardsState.currentPageName].version }}
+            </span>
+          </p>
+          <div class="frow">
+            <button
+              class="btn"
+              :disabled="!!cardsState.errorCount || !cardsState.connected || !cardsState.config.widgets.length"
+              data-role="cards-pub"
+              @click="cardsPubOpen = !cardsPubOpen"
+            >
+              {{ cardsPubOpen ? '收起卡片库发布' : '发布卡片库' }}
+            </button>
+            <span v-if="!cardsState.config.widgets.length" class="hint">卡片库还是空的,不用发</span>
+          </div>
+          <div v-if="cardsPubOpen" class="page-pub-panel">
+            <PublishPanel
+              :config="cardsState.config"
+              :site-name="site.name"
+              :user="conn.username"
+              :api="api"
+              :error-count="cardsState.errorCount"
+              :page-name="cardsState.currentPageName"
+              :published="cardsState.published[cardsState.currentPageName]"
+              kind="cards"
+              @published="onCardsPublished"
+              @restored="onCardsRestored"
+              @close="cardsPubOpen = false"
+            />
+          </div>
+        </template>
       </div>
 
       <h3>规则与运算(计算字段 / 规则链 / 站点配置)</h3>

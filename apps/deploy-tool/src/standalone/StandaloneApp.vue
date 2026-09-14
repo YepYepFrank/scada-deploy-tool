@@ -36,6 +36,8 @@ interface PageItem {
   label: string
   version: number | null
   site: string | null
+  /** additionalInfo.kind:'cards' = 卡片库(可复用卡片,宿主按卡引用),大屏列表不显示 */
+  kind: string | null
 }
 
 // ---------- 会话 ----------
@@ -169,17 +171,27 @@ async function loadPages() {
     const out: PageItem[] = []
     for (let p = 0, hasNext = true; hasNext && p < 20; p++) {
       const page = (await api(`${base}?pageSize=100&page=${p}&type=${SCADA_PAGE_TYPE}`)) as {
-        data: { id: { id: string }; name: string; label?: string; additionalInfo?: { version?: number } }[]
+        data: {
+          id: { id: string }
+          name: string
+          label?: string
+          additionalInfo?: { version?: number; kind?: string }
+        }[]
         hasNext: boolean
       }
-      for (const a of page.data)
+      for (const a of page.data) {
+        const kind = a.additionalInfo?.kind ?? null
+        // 卡片库(kind: 'cards')是给宿主按卡引用的,不是大屏页,列表里不显示(2026-09-14)
+        if (kind === 'cards') continue
         out.push({
           id: a.id.id,
           name: a.name,
           label: a.label || a.name,
           version: a.additionalInfo?.version ?? null,
           site: a.name.includes('-') ? a.name.slice(0, a.name.indexOf('-')) : null,
+          kind,
         })
+      }
       hasNext = page.hasNext
     }
     pages.value = (siteFilter ? await onlySite(out, siteFilter, base) : out).sort((a, b) =>

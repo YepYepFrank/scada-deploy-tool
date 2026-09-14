@@ -1,15 +1,30 @@
 <script setup lang="ts">
-/** 组件选择弹层:列出注册表组件,按槽位 accepts 过滤;固定槽位只列固定类型。 */
+/**
+ * 组件选择弹层:列出注册表组件,按槽位 accepts 过滤;固定槽位只列固定类型。
+ * 传 library(站点卡片库里已配好的卡)时,上方多一组「从卡片库放入」:整张卡(属性 + 绑定)复制进槽位(2026-09-14)。
+ */
 import { computed, onBeforeUnmount, onMounted } from 'vue'
-import type { TemplateSlotDefinition, WidgetDefinition } from '@grid/scada-renderer'
+import type { TemplateSlotDefinition, WidgetConfig, WidgetDefinition } from '@grid/scada-renderer'
 
 const props = defineProps<{
   slotDef: TemplateSlotDefinition
   widgets: WidgetDefinition[]
   /** 该槽位当前组件类型(有则可移除) */
   current?: string
+  /** 卡片库里的卡(可复用);不传或为空则不显示该组 */
+  library?: WidgetConfig[]
 }>()
-const emit = defineEmits<{ pick: [def: WidgetDefinition]; remove: []; close: [] }>()
+const emit = defineEmits<{ pick: [def: WidgetDefinition]; pickCard: [card: WidgetConfig]; remove: []; close: [] }>()
+
+/** 卡片库里能放进这个槽位的卡(按槽位 accepts / fixed 过滤) */
+const cards = computed(() =>
+  (props.library ?? []).filter(c => {
+    if (props.slotDef.fixed) return c.type === props.slotDef.fixed.type
+    return !props.slotDef.accepts || props.slotDef.accepts.includes(c.type)
+  })
+)
+const cardTitle = (c: WidgetConfig) => (typeof c.props?.title === 'string' && c.props.title) || '(无标题)'
+const defName = (type: string) => props.widgets.find(w => w.type === type)?.name ?? type
 
 const CATEGORY: Record<string, string> = {
   value: '数值',
@@ -47,6 +62,22 @@ const options = computed(() =>
         <span v-else-if="slotDef.accepts" class="wp-tag">可放 {{ options.length }} 种</span>
         <span v-else class="wp-tag">任意组件</span>
         <button type="button" class="wp-close" @click="emit('close')">×</button>
+      </div>
+      <div v-if="cards.length" class="wp-lib" data-role="wp-library">
+        <div class="wp-lib-head">从卡片库放入 <span class="dim">整张卡(属性 + 绑定)复制进来,复制后各改各的</span></div>
+        <button
+          v-for="c in cards"
+          :key="c.id"
+          type="button"
+          class="wp-item wp-card"
+          :data-card-id="c.id"
+          @click="emit('pickCard', c)"
+        >
+          <span class="wp-cat">{{ defName(c.type) }}</span>
+          <span class="wp-name">{{ cardTitle(c) }}</span>
+          <code>{{ c.id }}</code>
+          <span class="wp-desc">{{ Object.keys(c.bindings ?? {}).length }} 个绑定</span>
+        </button>
       </div>
       <div class="wp-list">
         <button
@@ -165,6 +196,26 @@ const options = computed(() =>
 .wp-empty {
   padding: 16px;
   opacity: 0.7;
+}
+.wp-lib {
+  padding: 8px 8px 0;
+  display: grid;
+  gap: 6px;
+  border-bottom: 1px dashed var(--ed-line, rgba(83, 196, 255, 0.2));
+  padding-bottom: 8px;
+}
+.wp-lib-head {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 4px;
+}
+.wp-lib-head .dim {
+  font-weight: 400;
+  opacity: 0.65;
+  margin-left: 6px;
+}
+.wp-card {
+  border-color: rgba(111, 227, 160, 0.35);
 }
 .wp-foot {
   padding: 10px 14px;

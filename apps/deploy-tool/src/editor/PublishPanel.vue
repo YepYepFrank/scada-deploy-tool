@@ -28,6 +28,8 @@ const props = defineProps<{
   published?: PublishedRecord
   /** 初始页面资产名;缺省 <站点>-<标题> */
   pageName?: string
+  /** 页面种类,写到资产 additionalInfo.kind('cards' = 卡片库);普通页面不传 */
+  kind?: string
 }>()
 const emit = defineEmits<{
   published: [pageName: string, rec: PublishedRecord]
@@ -94,6 +96,7 @@ async function run(config: PageConfig, label: string) {
       siteName: props.siteName,
       pageName: assetName.value,
       publishedBy: props.user,
+      ...(props.kind ? { kind: props.kind } : {}),
       report: s => steps.value.push(s),
     })
     result.value = r

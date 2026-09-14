@@ -5,6 +5,7 @@
  */
 import { computed, onBeforeUnmount, provide, reactive, ref, watch } from 'vue'
 import {
+  CARDS_TEMPLATE_ID,
   getTemplate,
   listTemplates,
   listWidgets,
@@ -44,13 +45,31 @@ const props = defineProps<{
   session?: EditorSession | null
   /** 向导第 3 步声明、可能还没发布的输出;独立编辑器不传(见 editor/declared-keys.ts) */
   declared?: Declared | null
+  /**
+   * 文档种类(2026-09-14 单卡片嵌入 P2):'cards' = 站点的「卡片库」页——模板固定为 cards、标题「卡片库」、
+   * 发布时资产 additionalInfo.kind = 'cards'(大屏列表跳过);缺省 'page' = 普通页面。
+   */
+  docKind?: 'page' | 'cards'
+  /** 普通页面的编辑器:站点卡片库里的卡,组件选择器多一组「从卡片库放入」;不传则没有 */
+  library?: WidgetConfig[]
+}>()
+const emit = defineEmits<{
+  /** 普通页面里点「存为可复用卡片」:向导把这张卡(深拷贝)放进卡片库编辑器 */
+  saveCard: [card: WidgetConfig]
 }>()
 
 registerBuiltins()
-const templates = listTemplates()
+const isCards = computed(() => props.docKind === 'cards')
+/** 卡片库文档只有 cards 模板可选(模板固定);普通页面列表里不出现 cards */
+const templates = listTemplates().filter(t =>
+  props.docKind === 'cards' ? t.id === CARDS_TEMPLATE_ID : t.id !== CARDS_TEMPLATE_ID
+)
 const widgets = listWidgets()
 
-const initial: PageConfig = { schemaVersion: 1, template: templates[0]!.id, title: '新页面', widgets: [] }
+const initial: PageConfig =
+  props.docKind === 'cards'
+    ? { schemaVersion: 1, template: CARDS_TEMPLATE_ID, title: '卡片库', widgets: [] }
+    : { schemaVersion: 1, template: templates[0]!.id, title: '新页面', widgets: [] }
 const ed = useEditorState(initial)
 // TB 连接 + 元数据树(绑定选择器用);凭据只在内存
 const meta = useMeta()
@@ -196,6 +215,46 @@ function onPick(def: WidgetDefinition) {
   const w = ed.placeWidget(selectedSlot.value.name, def)
   pickerOpen.value = false
   toast(`槽位 ${selectedSlot.value.name} ← ${def.name}(${w.id})`)
+}
+const cloneCard = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T
+/** 从卡片库放入当前槽位:整张卡(属性 + 绑定)复制,新 id;复制后两边各改各的 */
+function onPickCard(card: WidgetConfig) {
+  if (!selectedSlot.value) return
+  const def = widgets.find(w => w.type === card.type)
+  if (!def) return toast(`卡片类型 ${card.type} 未注册`)
+  const w = ed.placeWidget(selectedSlot.value.name, def, {
+    props: cloneCard(card.props ?? {}),
+    bindings: cloneCard(card.bindings ?? {}),
+    ...(card.actions ? { actions: cloneCard(card.actions) } : {}),
+  })
+  pickerOpen.value = false
+  toast(`槽位 ${selectedSlot.value.name} ← 卡片库「${cardTitle(card)}」(新 id ${w.id})`)
+}
+const cardTitle = (c: WidgetConfig) => (typeof c.props?.title === 'string' && c.props.title) || c.type
+/** 普通页面:把当前组件存为可复用卡片(向导接住,放进卡片库编辑器) */
+function saveAsCard() {
+  const w = selectedWidget.value
+  if (!w) return
+  emit('saveCard', cloneCard(w))
+}
+/**
+ * 把一张卡放进本文档的第一个空槽位(卡片库编辑器接「存为可复用卡片」用):复制、新 id;满了返回 null。
+ * 只放类型允许的槽位(cards 模板任意组件,这里仍按 accepts / fixed 过滤以防以后换模板)。
+ */
+function addWidget(card: WidgetConfig): string | null {
+  const def = widgets.find(w => w.type === card.type)
+  if (!def) return null
+  const used = new Set(ed.config.value.widgets.map(w => w.slot))
+  const slot = template.value.slots.find(
+    s => !used.has(s.name) && (s.fixed ? s.fixed.type === card.type : !s.accepts || s.accepts.includes(card.type))
+  )
+  if (!slot) return null
+  ed.placeWidget(slot.name, def, {
+    props: cloneCard(card.props ?? {}),
+    bindings: cloneCard(card.bindings ?? {}),
+    ...(card.actions ? { actions: cloneCard(card.actions) } : {}),
+  })
+  return slot.name
 }
 function onRemove() {
   if (!selectedSlot.value) return
@@ -393,6 +452,8 @@ defineExpose({
     return serializeProject({ ...project.current.value, rules })
   },
   importText: project.importText,
+  /** 把一张卡放进第一个空槽位(卡片库接「存为可复用卡片」);返回槽位名,满了 / 类型未注册返回 null */
+  addWidget,
   openPublish() {
     publishOpen.value = true
   },
@@ -428,6 +489,7 @@ defineExpose({
               :error-count="errorCount"
               :page-name="currentPageName"
               :published="currentPublished"
+              :kind="isCards ? 'cards' : undefined"
               @published="onPublished"
               @restored="loadConfig"
               @close="publishOpen = false"
@@ -489,8 +551,17 @@ defineExpose({
           <aside class="ed-left">
             <h1 v-if="!embedded">组态编辑器 <small>T3.2 · 模板与槽位</small></h1>
             <label class="ed-field">页面标题 <input v-model.lazy="title" /></label>
-            <h2>模板</h2>
-            <TemplatePicker v-model="templateId" :templates="templates" />
+            <template v-if="isCards">
+              <h2>卡片库</h2>
+              <p class="dim ed-cards-hint" data-role="cards-hint">
+                这里配的每张卡都可以被宿主应用单独引用(页面 id + 组件 id),也可以在配页面时「从卡片库放入」。模板固定 24
+                格,不作为大屏页面显示。
+              </p>
+            </template>
+            <template v-else>
+              <h2>模板</h2>
+              <TemplatePicker v-model="templateId" :templates="templates" />
+            </template>
 
             <h2>项目文件 <span class="dim">.scadaproj · 页面的「源码」</span></h2>
             <div class="ed-proj">
@@ -596,6 +667,16 @@ defineExpose({
               </div>
               <div v-if="selectedWidget" class="ed-widget">
                 组件 <code>{{ selectedWidget.type }}</code> <span class="dim">id {{ selectedWidget.id }}</span>
+                <button
+                  v-if="!isCards && library"
+                  type="button"
+                  class="ed-mini ed-save-card"
+                  data-role="save-card"
+                  title="把这张卡(属性 + 绑定)复制进站点卡片库,供宿主应用单独引用或在别的页面放入"
+                  @click="saveAsCard"
+                >
+                  存为可复用卡片
+                </button>
               </div>
               <div v-else class="dim">空槽位</div>
               <button type="button" @click="pickerOpen = true">
@@ -675,7 +756,9 @@ defineExpose({
           :slot-def="selectedSlot"
           :widgets="widgets"
           :current="selectedWidget?.type"
+          :library="isCards ? undefined : library"
           @pick="onPick"
+          @pick-card="onPickCard"
           @remove="onRemove"
           @close="pickerOpen = false"
         />
@@ -967,6 +1050,15 @@ body {
 }
 .ed-issue-list li.warning {
   color: #ffd27a;
+}
+.ed-save-card {
+  margin-left: 8px;
+  border-color: rgba(111, 227, 160, 0.5);
+}
+.ed-cards-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 8px;
 }
 .ed-mini {
   padding: 1px 8px !important;
