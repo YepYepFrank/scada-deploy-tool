@@ -2,6 +2,14 @@
 
 版本按 SemVer;0.x 期间次版本号可含破坏性变更,会在条目里标「破坏」。契约(`schemaVersion`)的变更走 ADR,不随包版本隐式变化。
 
+## 0.3.2 — 2026-09-16
+
+组件放大(YY 提:大屏上每个组件有按钮,点开全屏放大整个组件)。
+
+- `<ScadaPage>` / `<ScadaWidget>` 每个组件右上角有「⤢ 放大」按钮(悬停 / 键盘聚焦时显示,触屏常显):点开把该组件 Teleport 到 body 铺满视口再渲染一份,**共用同一份 values / bindErrors、不新建订阅**;标题栏显示组件标题与类型,✕ / Esc 关闭,另有「浏览器全屏」(Fullscreen API,不允许时只用覆盖层);组件被移除 / 配置换掉时自动收起。
+- 新 prop `expandable`(默认 `true`;design 态不显示),新事件 `expand(widgetId | null)`。页面配置(契约)不变。
+- 放大层根节点 `.sr-page.sr-expand.sr-theme-<theme>`,`--sr-scale: 1`,主题令牌照常生效,宿主可覆盖。
+
 ## 0.3.1 — 2026-09-14
 
 单卡片嵌入方案 P2:卡片库。

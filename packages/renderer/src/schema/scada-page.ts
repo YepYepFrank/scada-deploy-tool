@@ -22,6 +22,11 @@ export interface ScadaPageProps {
    * 编辑态:所有绑定改用组件 sampleData 渲染,不建立任何订阅;工具的槽位缩略图与 /dev 展示页使用。
    */
   design?: boolean
+  /**
+   * 组件右上角是否显示「放大」按钮(2026-09-16):点开把该组件铺满整个视口再渲染一份(共用同一份值,不新建订阅),
+   * Esc / ✕ 关闭。**默认 true**;design 态下不显示。宿主不想要就传 false。
+   */
+  expandable?: boolean
 }
 
 /** 渲染器根节点向外抛出的事件。 */

@@ -5,12 +5,13 @@
  * 与 <ScadaPage> 共用注册表校验(validateWidgetAgainstRegistry)与绑定运行时(useBindingRuntime),不复制逻辑。
  * 尺寸由宿主容器决定(width/height: 100%),不做整页缩放(--sr-scale 固定 1);主题令牌在根节点生效,祖先上覆盖 --sr-* 即可换色。
  */
-import { computed, inject, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DataSource } from '@grid/tb-client'
 import type { WidgetConfig } from './schema/page-config'
 import { getWidget, validateWidgetAgainstRegistry } from './registry'
 import { useBindingRuntime, widgetPropsOf } from './widget-runtime'
 import { DATA_SOURCE_KEY } from './provide'
+import WidgetExpand from './WidgetExpand.vue'
 
 export interface ScadaWidgetProps {
   /** 一张卡的配置(通常是 pickWidget(pageConfig, widgetId) 取出来的);slot 字段可以没有,有也忽略 */
@@ -21,12 +22,21 @@ export interface ScadaWidgetProps {
   theme?: string
   /** 编辑态:用组件 sampleData 渲染,不建立订阅 */
   design?: boolean
+  /** 右上角「放大」按钮(铺满视口再渲染一份,共用同一份值);默认 true,design 态不显示 */
+  expandable?: boolean
 }
-const props = withDefaults(defineProps<ScadaWidgetProps>(), { design: false })
+const props = withDefaults(defineProps<ScadaWidgetProps>(), { design: false, expandable: true })
 const emit = defineEmits<{
   (e: 'invalid', issues: { path: string; message: string }[]): void
   (e: 'bindError', widgetId: string, slot: string, message: string): void
+  /** 放大 / 关闭:放大时给组件 id,关闭时 null */
+  (e: 'expand', widgetId: string | null): void
 }>()
+const expanded = ref(false)
+function expand(on: boolean) {
+  expanded.value = on
+  emit('expand', on ? props.config.id : null)
+}
 
 const injected = inject<DataSource | null>(DATA_SOURCE_KEY, null)
 const ds = computed<DataSource | null>(() => props.dataSource ?? injected)
@@ -79,7 +89,29 @@ defineExpose({ issues, values: rt.values, bindErrors: rt.bindErrors })
         :errors="rt.bindErrors[config.id] ?? {}"
         :disabled="!!config.actions"
       />
+      <button
+        v-if="expandable && !design"
+        type="button"
+        class="sr-expand-btn"
+        title="放大这个组件"
+        aria-label="放大"
+        data-role="expand"
+        @click.stop="expand(true)"
+      >
+        ⤢
+      </button>
     </div>
+    <WidgetExpand
+      v-if="expanded && def && !blocking.length"
+      :config="config"
+      :def="def"
+      :widget-props="widgetProps"
+      :values="rt.values[config.id] ?? {}"
+      :errors="rt.bindErrors[config.id] ?? {}"
+      :disabled="!!config.actions"
+      :theme="theme ?? 'default'"
+      @close="expand(false)"
+    />
   </div>
 </template>
 

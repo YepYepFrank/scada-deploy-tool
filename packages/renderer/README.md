@@ -72,6 +72,10 @@ const card = checked.ok ? pickWidget(checked.value, 'w_3k9f2a1c') : undefined //
 - **组件 id 的稳定性**:工具在创建组件时生成一次(`w_` + 8 位随机),改属性 / 绑定 / 换模板都不变;把槽位里的组件换成别的类型 = 另一张卡 = 新 id。旧页面里 `w-<slot>` / `<type>-<slot>` 形式的 id 同样有效。
 - `listWidgetRefs(pageConfig)` 列出一页里全部卡片的 `{ id, type, slot, title }`,给对照 / 排查引用用。
 
+## 组件放大(0.3.2)
+
+`<ScadaPage>` 与 `<ScadaWidget>` 里每个组件右上角有「⤢」按钮(悬停时显示):点开把该组件铺满整个视口再渲染一份,共用同一份实时值、不新建订阅;✕ / Esc 关闭,另有「浏览器全屏」。默认开着,`:expandable="false"` 关掉;`design` 态不显示。事件 `expand(widgetId | null)`。放大层 Teleport 到 body,根节点 `.sr-page.sr-expand.sr-theme-<theme>`,令牌照常可覆盖。
+
 ```bash
 pnpm dev          # /dev 展示页(5180):注册表、design 模式、随机数据、断线开关
 pnpm test         # vitest(happy-dom)

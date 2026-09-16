@@ -14,14 +14,18 @@ import { getTemplate, getWidget, validateAgainstRegistry, type RegistryIssue } f
 import { useBindingRuntime, widgetPropsOf } from './widget-runtime'
 import { computeScale, rootStyle, slotStyle, wrapperStyle } from './layout/template-style'
 import { DATA_SOURCE_KEY } from './provide'
+import WidgetExpand from './WidgetExpand.vue'
 
-const props = withDefaults(defineProps<ScadaPageProps>(), { showStatus: false, design: false })
+const props = withDefaults(defineProps<ScadaPageProps>(), { showStatus: false, design: false, expandable: true })
 const emit = defineEmits<{
   (e: 'invalid', issues: { path: string; message: string }[]): void
   (e: 'status', status: ConnectionStatus): void
   /** 某个绑定解析 / 订阅失败(含 DataSource 的 onError:无权访问实体等);组件已置错误态,宿主可汇总提示 */
   (e: 'bindError', widgetId: string, slot: string, message: string): void
+  /** 组件放大 / 关闭(2026-09-16):放大时给组件 id,关闭时 null */
+  (e: 'expand', widgetId: string | null): void
 }>()
+const themeName = computed(() => props.theme ?? props.config.theme ?? 'default')
 
 const injected = inject<DataSource | null>(DATA_SOURCE_KEY, null)
 const ds = computed<DataSource | null>(() => props.dataSource ?? injected)
@@ -86,6 +90,22 @@ const placed = computed<Placed[]>(() => {
 
 /** 组件 props:defaults + 配置(先过组件的 migrateProps 把旧键名正规化) */
 const widgetProps = (w: Placed['widgets'][number]) => widgetPropsOf(w.cfg)
+
+// ---------- 组件放大(2026-09-16):右上角按钮 → 铺满视口再渲染一份,共用 values / bindErrors,不新建订阅 ----------
+const expandedId = ref<string | null>(null)
+const expandedW = computed(() => {
+  if (!expandedId.value) return null
+  for (const p of placed.value) for (const w of p.widgets) if (w.cfg.id === expandedId.value && w.def) return w
+  return null
+})
+function expand(id: string | null) {
+  expandedId.value = id
+  emit('expand', id)
+}
+// 配置换掉 / 组件被移除时收起
+watch(expandedW, w => {
+  if (!w && expandedId.value) expand(null)
+})
 
 // ---------- 绑定(与 <ScadaWidget> 共用 widget-runtime) ----------
 const rt = useBindingRuntime((wid, slot, message) => emit('bindError', wid, slot, message))
@@ -217,6 +237,17 @@ defineExpose({ issues, status, values, bindErrors })
                   :errors="bindErrors[w.cfg.id] ?? {}"
                   :disabled="!!w.cfg.actions"
                 />
+                <button
+                  v-if="expandable && !design"
+                  type="button"
+                  class="sr-expand-btn"
+                  title="放大这个组件"
+                  aria-label="放大"
+                  data-role="expand"
+                  @click.stop="expand(w.cfg.id)"
+                >
+                  ⤢
+                </button>
               </div>
             </template>
             <div v-else-if="design" class="sr-slot-placeholder">
@@ -235,6 +266,17 @@ defineExpose({ issues, status, values, bindErrors })
           <b>{{ wid }}</b> {{ msgs.join(';') }}
         </div>
       </div>
+      <WidgetExpand
+        v-if="expandedW"
+        :config="expandedW.cfg"
+        :def="expandedW.def!"
+        :widget-props="widgetProps(expandedW)"
+        :values="values[expandedW.cfg.id] ?? {}"
+        :errors="bindErrors[expandedW.cfg.id] ?? {}"
+        :disabled="!!expandedW.cfg.actions"
+        :theme="themeName"
+        @close="expand(null)"
+      />
     </template>
   </div>
 </template>
@@ -254,6 +296,7 @@ defineExpose({ issues, status, values, bindErrors })
   box-sizing: border-box;
 }
 .sr-widget {
+  position: relative;
   width: 100%;
   height: 100%;
 }
