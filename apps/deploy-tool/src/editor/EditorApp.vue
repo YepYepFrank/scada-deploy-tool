@@ -29,6 +29,8 @@ import { ProjectParseError } from '../project/scadaproj'
 import { detectDrift, pageNameOf, readPageState, type DriftItem, type PublishedRecord } from '../publish/publishPage'
 import { useEditorState } from './useEditorState'
 import { useMeta, type EditorSession } from '../meta/useMeta'
+import { countEntities } from '../meta/MetaNode'
+import { pruneTree, type EntityScope } from '../meta/scope'
 import type { Declared } from './declared-keys'
 import { serializeProject } from '../project/scadaproj'
 import { LAYER_TITLE, sortIssues, validateBindingsLayer, validateStatic, type PageIssue } from './validate'
@@ -52,6 +54,11 @@ const props = defineProps<{
   docKind?: 'page' | 'cards'
   /** 普通页面的编辑器:站点卡片库里的卡,组件选择器多一组「从卡片库放入」;不传则没有 */
   library?: WidgetConfig[]
+  /**
+   * 本站点的实体范围(2026-09-17):第 2 步认领的设备 + 第 3 步运算涉及的资产 + 站点资产。
+   * 传了就默认只列这些(绑定面板有「全部实体」开关可切回全库);不传(独立 editor.html)列全库。
+   */
+  scope?: EntityScope | null
 }>()
 const emit = defineEmits<{
   /** 普通页面里点「存为可复用卡片」:向导把这张卡(深拷贝)放进卡片库编辑器 */
@@ -189,6 +196,16 @@ const templateId = computed({
  * 收起后右栏从 340px 加宽到 520px;选好模板自动收起,进全屏时页面里已有组件也默认收起;点左侧竖条随时展开。
  */
 const leftCollapsed = ref(false)
+
+/**
+ * 绑定选择器用的实体树(2026-09-17):向导传了 scope 就默认只列本站点范围(认领的设备 + 运算涉及的资产 + 站点资产),
+ * 「全部实体」开关可切回全库;校验层仍用全库树(绑到范围外的实体也是存在的,不算错)。
+ */
+const scopeOnly = ref(true)
+const tree = computed(() =>
+  props.scope && scopeOnly.value ? pruneTree(meta.tree.value, props.scope) : meta.tree.value
+)
+const entityCount = computed(() => (tree.value ? countEntities(tree.value) : 0))
 
 const selected = ref<string | null>(null)
 const selectedSlot = computed<TemplateSlotDefinition | null>(
@@ -769,15 +786,27 @@ defineExpose({
               <!-- 2026-09-17:绑定(数据从哪来)放在属性(长什么样)上面——配卡先选数据源,下拉不再压在表单底下 -->
               <h2>
                 绑定
-                <span class="dim">{{
-                  meta.connected.value ? `${meta.entityCount.value} 个实体可选` : '未连接 TB,可手输'
-                }}</span>
+                <span class="dim">{{ meta.connected.value ? `${entityCount} 个实体可选` : '未连接 TB,可手输' }}</span>
+                <label
+                  v-if="scope"
+                  class="ed-scope-toggle"
+                  title="默认只列第 2 步认领的设备与第 3 步运算涉及的资产;勾上看 TB 全库"
+                >
+                  <input
+                    v-model="scopeOnly"
+                    type="checkbox"
+                    :true-value="false"
+                    :false-value="true"
+                    data-role="scope-all"
+                  />
+                  全部实体
+                </label>
               </h2>
               <BindingsPanel
                 :key="'b' + selectedWidget.id"
                 :def="selectedDef"
                 :widget="selectedWidget"
-                :tree="meta.tree.value"
+                :tree="tree"
                 :client="meta.client.value"
                 :declared="declared"
                 @update="onBindings"
@@ -1177,6 +1206,17 @@ body {
   padding: 1px 5px;
   border: 1px solid rgba(83, 196, 255, 0.25);
   border-radius: 4px;
+}
+.ed-scope-toggle {
+  float: right;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  opacity: 0.8;
+  cursor: pointer;
 }
 .ed-save-card {
   margin-left: 8px;

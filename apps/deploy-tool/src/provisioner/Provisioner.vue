@@ -2544,6 +2544,17 @@ const siteJson = computed(() => ({
  * 不给的话第 4 步一个都选不到(见 editor/declared-keys.ts)。
  */
 const declaredOutputs = computed(() => declaredFromSiteConfig(siteJson.value))
+/**
+ * 第 4 步实体树的范围(2026-09-17 YY:原来列的是 TB 全库):第 2 步认领的设备 + 第 3 步运算涉及的设备 / 资产 + 站点资产。
+ * 网关由裁剪函数按「有留下的子设备」自动保留;编辑器里有「全部实体」开关可切回全库。
+ */
+const editorScope = computed(() => {
+  const devs = new Set(claimedDevices.value.map(d => d.name))
+  const assets = new Set(site.name ? [site.name] : [])
+  for (const k of declaredOutputs.value.keys) (k.entityType === 'ASSET' ? assets : devs).add(k.entity)
+  for (const a of declaredOutputs.value.alarms) (a.entityType === 'ASSET' ? assets : devs).add(a.entity)
+  return { devices: [...devs], assets: [...assets] }
+})
 
 const jsonText = computed(() => JSON.stringify(siteJson.value, null, 2))
 const copied = ref(false)
@@ -3485,11 +3496,19 @@ function openFrontend() {
             :session="editorSession"
             :declared="declaredOutputs"
             :library="cardLibrary"
+            :scope="editorScope"
             @save-card="onSaveCard"
           />
         </div>
         <div v-show="edTab === 'cards'">
-          <EditorApp ref="cardsRef" embedded doc-kind="cards" :session="editorSession" :declared="declaredOutputs" />
+          <EditorApp
+            ref="cardsRef"
+            embedded
+            doc-kind="cards"
+            :session="editorSession"
+            :declared="declaredOutputs"
+            :scope="editorScope"
+          />
         </div>
         <div class="step-foot" data-role="page-save-foot">
           <span v-if="draftMsg" class="draft-msg">{{ draftMsg }}</span>
@@ -3581,7 +3600,15 @@ function openFrontend() {
         </button>
         <button class="btn ghost" :disabled="pub.running" @click="doPublish(false)">仅发布,不打开</button>
         <button class="btn ghost" @click="openFrontend">打开大屏</button>
-        <button v-if="perm.role !== 'field'" class="btn ghost danger" :disabled="pub.running" @click="doCleanup">
+        <!-- 2026-09-17:原来是 ghost 样式,看起来像禁用;改成实线红框,并说明它是可点的管理员操作 -->
+        <button
+          v-if="perm.role !== 'field'"
+          class="btn danger"
+          :disabled="pub.running"
+          data-role="cleanup"
+          title="删掉这个站点在平台上发布过的全部生成物(计算字段 / 规则链 / 站点资产),不碰别人的;点击后会再确认"
+          @click="doCleanup"
+        >
           清理本站点生成物
         </button>
       </div>
