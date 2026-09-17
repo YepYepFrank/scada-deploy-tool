@@ -17,6 +17,7 @@ import EditorApp from '../editor/EditorApp.vue'
 import PublishPanel from '../editor/PublishPanel.vue'
 import { listSitePages, publishPage, readPageState } from '../publish/publishPage'
 import { savePagesAndPublish } from './savePages'
+import CardLibrary from './CardLibrary.vue'
 import { declaredFromSiteConfig } from '../editor/declared-keys'
 import {
   publish,
@@ -2390,6 +2391,22 @@ function onSaveCard(card) {
     : `卡片库已满(24 格),先删掉不用的卡再存「${title}」`
   setTimeout(() => (cardsMsg.value = ''), 6000)
 }
+/** 卡片库列表的三个动作(2026-09-17):编辑某张 → 全屏编辑器选中该格;新建 → 第一个空格;删除 → 确认后移除 */
+function cardEdit(slot) {
+  void cardsRef.value?.editSlot(slot)
+}
+function cardAdd() {
+  const slot = cardsRef.value?.firstEmptySlot()
+  if (!slot) return (cardsMsg.value = '卡片库已满(24 格),先删掉不用的卡')
+  void cardsRef.value?.editSlot(slot)
+}
+async function cardRemove(id, slot) {
+  const w = cardsState.value?.config.widgets.find(x => x.id === id)
+  const title = (w?.props && typeof w.props.title === 'string' && w.props.title) || w?.type || id
+  if (!(await askConfirm({ title: '删除卡片', text: `删除卡片「${title}」(${id})?前端如果已经引用了它,引用会失效。`, okLabel: '删除' })))
+    return
+  cardsRef.value?.removeSlot(slot)
+}
 /** 载入站点时把 TB 上已发布的页面 / 卡片库读回各自的编辑器(编辑器可能还没挂载,先记下等它出现) */
 const pendingPage = ref(null)
 const pendingCards = ref(null)
@@ -3518,6 +3535,21 @@ function openFrontend() {
           />
         </div>
         <div v-show="edTab === 'cards'">
+          <!-- 卡片库按列表看(2026-09-17):左栏组件、右栏前端引用;24 格画布只在「编辑」时全屏打开 -->
+          <CardLibrary
+            v-if="cardsState"
+            :config="cardsState.config"
+            :page-id="cardsState.published[cardsState.currentPageName]?.assetId ?? null"
+            :version="cardsState.published[cardsState.currentPageName]?.version ?? null"
+            :full="!cardsRef?.firstEmptySlot()"
+            :error-count="cardsState.errorCount"
+            @edit="cardEdit"
+            @add="cardAdd"
+            @remove="cardRemove"
+          />
+        </div>
+        <!-- 卡片库编辑器常驻但不显示缩略图:全屏编辑 Teleport 到 body,与是否隐藏无关 -->
+        <div hidden>
           <EditorApp
             ref="cardsRef"
             embedded

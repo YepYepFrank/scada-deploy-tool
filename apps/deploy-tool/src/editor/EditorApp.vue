@@ -31,6 +31,7 @@ import { useEditorState } from './useEditorState'
 import { useMeta, type EditorSession } from '../meta/useMeta'
 import { countEntities } from '../meta/MetaNode'
 import { applyEntityNames, pruneTree, type EntityScope } from '../meta/scope'
+import { refJson as refJsonText, refSnippet as refSnippetText } from './widget-ref'
 import type { Declared } from './declared-keys'
 import { serializeProject } from '../project/scadaproj'
 import { LAYER_TITLE, sortIssues, validateBindingsLayer, validateStatic, type PageIssue } from './validate'
@@ -269,14 +270,8 @@ const cardTitle = (c: WidgetConfig) => (typeof c.props?.title === 'string' && c.
  * 页面 id 只有发布过才有(项目记录里的 assetId);没发布提示先发布。
  */
 const refPageId = computed(() => currentPublished.value?.assetId ?? null)
-const refJson = (w: WidgetConfig) => JSON.stringify({ pageId: refPageId.value, widgetId: w.id })
-const refSnippet = (w: WidgetConfig) =>
-  [
-    `// 页面资产 ${refPageId.value} · 组件 ${w.id}(${w.type}${cardTitle(w) !== w.type ? ' · ' + cardTitle(w) : ''})`,
-    `const page = validatePageConfig(JSON.parse(raw.pageConfig)).value   // 该资产 SERVER_SCOPE 属性 pageConfig`,
-    `const card = pickWidget(page, '${w.id}')`,
-    `<div class="my-cell"><ScadaWidget v-if="card" :config="card" /></div>`,
-  ].join('\n')
+const refJson = (w: WidgetConfig) => refJsonText(refPageId.value, w.id)
+const refSnippet = (w: WidgetConfig) => refSnippetText(refPageId.value, w, cardTitle(w))
 async function copyRef(kind: 'json' | 'code') {
   const w = selectedWidget.value
   if (!w) return
@@ -521,6 +516,21 @@ defineExpose({
   },
   enterFullscreen,
   exitFullscreen,
+  /** 卡片库列表(向导)用:进全屏并选中某格;格是空的就弹组件选择 */
+  async editSlot(slot: string) {
+    await enterFullscreen()
+    selected.value = slot
+    pickerOpen.value = !ed.widgetAt(slot)
+  },
+  removeSlot(slot: string) {
+    ed.removeWidget(slot)
+    if (selected.value === slot) selected.value = null
+  },
+  /** 第一个空格的槽位名;满了 null */
+  firstEmptySlot(): string | null {
+    const used = new Set(ed.config.value.widgets.map(w => w.slot))
+    return template.value.slots.find(s => !used.has(s.name))?.name ?? null
+  },
 })
 </script>
 
