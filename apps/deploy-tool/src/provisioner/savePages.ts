@@ -49,9 +49,9 @@ const isSiteMissing = (e: unknown) => /站点资产.*不存在/.test(e instanceo
 
 export async function savePagesAndPublish(docs: SaveDoc[], deps: SaveDeps): Promise<SaveOutcome> {
   const published: SaveOutcome['published'] = []
-  // 卡片库空的不发(也不算错)
-  const todo = docs.filter(d => d.kind !== 'cards' || d.config.widgets.length > 0)
-  if (!todo.length) return { ok: false, block: 'nothing', msg: '还没有可发布的页面', published }
+  // 没放过组件的文档(没配页面 / 卡片库空)不发,也不算错——一键发布(规则 + 页面)时站点可以只有规则
+  const todo = docs.filter(d => d.config.widgets.length > 0)
+  if (!todo.length) return { ok: true, block: 'nothing', msg: '没有配置页面,跳过页面发布', published }
   const bad = todo.find(d => d.errorCount > 0)
   if (bad) return { ok: false, block: 'errors', msg: `${bad.label}校验有 ${bad.errorCount} 个错误,先修好再发布`, published }
 

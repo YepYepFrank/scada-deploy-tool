@@ -401,7 +401,18 @@ async function saveDraft(advance = false) {
   const nm = name.trim() || def
   lastDraftName.value = nm
   const list = readDrafts()
-  const entry = { id: Date.now().toString(36), name: nm, ts: Date.now(), cfg: siteJson.value }
+  // 第 4 步的页面 / 卡片库配置也进草稿(2026-09-17:第 4 步「保存并进入发布上线」只存草稿、不写平台)
+  const pages = {
+    ...(pageState.value ? { page: pageState.value.config } : {}),
+    ...(cardsState.value ? { cards: cardsState.value.config } : {}),
+  }
+  const entry = {
+    id: Date.now().toString(36),
+    name: nm,
+    ts: Date.now(),
+    cfg: siteJson.value,
+    ...(Object.keys(pages).length ? { pages } : {}),
+  }
   const i = list.findIndex(d => d.name === nm)
   if (i >= 0) list.splice(i, 1, entry)
   else list.unshift(entry)
@@ -452,6 +463,8 @@ async function loadDraftAt(i) {
   )
     return
   hydrate(JSON.parse(JSON.stringify(d.cfg)))
+  // 草稿里带页面 / 卡片库配置的一并装回编辑器(编辑器没挂载时先记下)
+  pendingDraftPages.value = d.pages ? JSON.parse(JSON.stringify(d.pages)) : null
   lastDraftName.value = d.name
   restoreMsg.value = `已载入草稿「${d.name}」(保存于 ${new Date(d.ts).toLocaleString('zh-CN')})`
   step.value = 1 // 载入后直接进入「设备与测点」
@@ -2358,14 +2371,12 @@ const editorSession = computed(() =>
     : null
 )
 const pageState = computed(() => editorRef.value?.state ?? null)
-const pagePubOpen = ref(false)
 /**
  * 卡片库(2026-09-14 单卡片嵌入 P2):站点下的第二张 ScadaPage 资产(模板 cards、additionalInfo.kind = 'cards'),
  * 第 4 步「页面 | 卡片库」两个标签各一个编辑器实例(各自撤销栈 / 发布 / 版本);大屏列表跳过它。
  */
 const cardsRef = ref(null)
 const cardsState = computed(() => cardsRef.value?.state ?? null)
-const cardsPubOpen = ref(false)
 const edTab = ref('page')
 /** 卡片库里的卡:给页面编辑器的组件选择器「从卡片库放入」 */
 const cardLibrary = computed(() => cardsState.value?.config.widgets ?? [])
@@ -2437,14 +2448,13 @@ function onCardsRestored(cfg) {
   cardsRef.value?.setConfig(cfg)
 }
 /**
- * 第 4 步「保存并进入发布上线」(2026-09-17):页面(卡片库非空时一并)直接发布到 TB,成功后跳第 5 步。
- * 校验有错 / 线上版本与本地不一致 → 停在第 4 步并说明;站点资产还不存在(新站点)→ 提示先去第 5 步发规则。
- * 逻辑在 savePages.ts(单测),这里只接界面。
+ * 页面随「一键发布」一起发(2026-09-17 收口:写平台只在第 5 步一个按钮):规则发完(站点资产已建)再发页面 + 卡片库。
+ * 校验有错 / 线上版本与本地不一致 → 页面这半不发、报出原因,让人去「页面版本与回滚」里处理;逻辑在 savePages.ts(单测)。
+ * 返回 true 表示页面这半没有拦下(发了或没东西可发),可以开大屏。
  */
-const pageSaveBusy = ref(false)
-const pageSaveMsg = ref('')
-const pageSaveBlock = ref('')
-async function savePagesAndNext() {
+const pagePubMsg = ref('')
+const pagePubBlock = ref('')
+async function publishPagesAfterRules() {
   const mk = (ed, st, label, kind) =>
     ed && st
       ? {
@@ -2459,35 +2469,42 @@ async function savePagesAndNext() {
   const docs = [mk(editorRef.value, pageState.value, '页面'), mk(cardsRef.value, cardsState.value, '卡片库', 'cards')].filter(
     Boolean
   )
-  pageSaveBlock.value = ''
-  if (!docs.length) return (pageSaveMsg.value = '编辑器还没就绪')
-  if (!pageState.value?.connected) return (pageSaveMsg.value = '编辑器还没连上 ThingsBoard,稍等或回第 1 步重新连接')
-  pageSaveBusy.value = true
-  pageSaveMsg.value = '正在发布…'
+  pagePubBlock.value = ''
+  pagePubMsg.value = ''
+  if (!docs.length) return true // 没进过第 4 步:只有规则
   try {
-    const r = await savePagesAndPublish(docs, {
-      api,
-      siteName: site.name,
-      user: conn.username,
-      publishPage,
-      listSitePages,
-    })
-    // 已成功的先记下(失败于第二份时第一份也算数)
+    const r = await savePagesAndPublish(docs, { api, siteName: site.name, user: conn.username, publishPage, listSitePages })
     for (const p of r.published) {
       const ed = p.label === '卡片库' ? cardsRef.value : editorRef.value
       ed?.setPageName(p.pageName)
       ed?.recordPublished(p.pageName, { assetId: p.assetId, version: p.version, at: Date.now(), by: conn.username })
     }
-    pageSaveMsg.value = r.msg
-    pageSaveBlock.value = r.ok ? '' : r.block || ''
-    if (r.ok || r.block === 'site-missing') step.value = 4
+    pagePubMsg.value = r.msg
+    pagePubBlock.value = r.ok ? '' : r.block || ''
+    if (!r.ok) pageVerOpen.value = true // 拦下了:把「页面版本与回滚」打开给人处理
+    return r.ok
   } catch (e) {
-    pageSaveMsg.value = '发布失败:' + (e instanceof Error ? e.message : String(e))
-    pageSaveBlock.value = 'failed'
-  } finally {
-    pageSaveBusy.value = false
+    pagePubMsg.value = '页面发布失败:' + (e instanceof Error ? e.message : String(e))
+    pagePubBlock.value = 'failed'
+    return false
   }
 }
+/** 第 5 步「页面版本与回滚」折叠面板(线上版本冲突时选覆盖 / 保留;回滚到历史版本) */
+const pageVerOpen = ref(false)
+/** 草稿里的页面 / 卡片库配置(编辑器可能还没挂载,先记下等它出现) */
+const pendingDraftPages = ref(null)
+watch([editorRef, cardsRef, pendingDraftPages], ([ed, cd, pending]) => {
+  if (!pending) return
+  if (pending.page && ed) {
+    ed.setConfig(pending.page)
+    pending.page = null
+  }
+  if (pending.cards && cd) {
+    cd.setConfig(pending.cards)
+    pending.cards = null
+  }
+  if (!pending.page && !pending.cards) pendingDraftPages.value = null
+})
 function downloadProject() {
   if (!editorRef.value) return
   const blob = new Blob([editorRef.value.exportText(siteJson.value)], { type: 'application/json' })
@@ -2586,10 +2603,10 @@ async function doPublish(openAfter) {
       text:
         conflictWarn() +
         (conn.env === 'mirror'
-          ? `即将向【生产镜像】写入站点「${site.name}」的配置(计算字段/规则链/站点资产)。\n所有写入均为幂等、且不改动存量规则链。确认发布?`
+          ? `即将向【生产镜像】写入站点「${site.name}」的配置(计算字段/规则链/站点资产),然后发布页面与卡片库。\n所有写入均为幂等、且不改动存量规则链。确认发布?`
           : conn.env === 'demo'
-            ? `发布站点「${site.name}」的配置到演示环境?`
-            : `即将向项目【${curEnv.value.label}】写入站点「${site.name}」的配置(计算字段/规则链/站点资产)。\n所有写入均为幂等、且不改动存量规则链。确认发布?`),
+            ? `发布站点「${site.name}」的配置与页面到演示环境?`
+            : `即将向项目【${curEnv.value.label}】写入站点「${site.name}」的配置(计算字段/规则链/站点资产),然后发布页面与卡片库。\n所有写入均为幂等、且不改动存量规则链。确认发布?`),
       okLabel: '发布',
     }))
   )
@@ -2621,8 +2638,10 @@ async function doPublish(openAfter) {
     pub.done = pub.failures.length === 0
     if (pub.done) for (const k of Object.keys(decisions)) delete decisions[k] // 已落到 TB,下次进第 3 步重新同步
     if (pub.done) await applyPendingCustomer()
-    if (pub.done && pendingWin) pendingWin.location = frontendUrl()
-    else if (pub.done && openAfter) openFrontend()
+    // 规则发完(站点资产已建)再发页面 + 卡片库;页面这半被拦下(校验 / 线上版本冲突)时不开大屏,留在向导处理
+    const pagesOk = pub.done ? await publishPagesAfterRules() : false
+    if (pub.done && pagesOk && pendingWin) pendingWin.location = frontendUrl()
+    else if (pub.done && pagesOk && openAfter) openFrontend()
     else if (pendingWin) pendingWin.close() // 有失败项:不跳大屏,留在向导处理失败清单
   } catch {
     if (pendingWin) pendingWin.close()
@@ -3473,23 +3492,10 @@ function openFrontend() {
           <EditorApp ref="cardsRef" embedded doc-kind="cards" :session="editorSession" :declared="declaredOutputs" />
         </div>
         <div class="step-foot" data-role="page-save-foot">
-          <span
-            v-if="pageSaveMsg"
-            class="draft-msg"
-            :class="{ 'draft-msg-warn': !!pageSaveBlock }"
-            data-role="page-save-msg"
-            >{{ pageSaveMsg }}</span
-          >
-          <button class="btn ghost sm" data-role="page-skip" @click="step = 4">跳过发布,进入发布上线 →</button>
-          <button
-            class="btn"
-            :disabled="pageSaveBusy || !pageState"
-            data-role="page-save-next"
-            title="把页面(卡片库非空时一并)发布到 ThingsBoard,成功后进入第 5 步;线上版本与本地不一致时会拦下"
-            @click="savePagesAndNext"
-          >
-            {{ pageSaveBusy ? '正在发布…' : '保存并进入发布上线 →' }}
-          </button>
+          <span v-if="draftMsg" class="draft-msg">{{ draftMsg }}</span>
+          <span class="hint">草稿只存在本浏览器;写进平台在第 5 步「一键发布」</span>
+          <button class="btn ghost sm" @click="saveDraft(false)">保存草稿</button>
+          <button class="btn" data-role="page-save-next" @click="saveDraft(true)">保存并进入发布上线 →</button>
         </div>
       </template>
     </div>
@@ -3498,28 +3504,44 @@ function openFrontend() {
     <div v-show="step === 4" class="panel">
       <h2>发布上线</h2>
       <p class="hint">
-        一键把配置写入 ThingsBoard(设备核对 → 计算字段 → 聚合链 → 告警链 →
-        站点配置),完成后自动打开前端站点视图。出错的步骤会标红并显示原因,修正后重新发布即可(所有写入都是幂等的)。
+        一个按钮把这个站点的全部配置写入 ThingsBoard:先是规则(设备核对 → 计算字段 → 聚合链 → 告警链 →
+        站点配置),再是第 4 步的页面与卡片库;完成后自动打开站点大屏。出错的步骤会标红并显示原因,修正后重新发布即可(所有写入都是幂等的)。
       </p>
 
-      <div class="page-pub">
-        <h3>页面(ScadaPage 资产)</h3>
+      <div class="page-pub" data-role="pages-summary">
+        <h3>页面与卡片库(随一键发布一起写入)</h3>
         <template v-if="pageState">
-          <p class="hint" style="margin-bottom: 8px">
-            「{{ pageState.currentPageName }}」· {{ pageState.config.widgets.length }} 个组件 ·
+          <p class="hint" style="margin-bottom: 4px">
+            页面「{{ pageState.currentPageName }}」· {{ pageState.config.widgets.length }} 个组件 ·
             {{ pageState.errorCount ? `校验有 ${pageState.errorCount} 个错误,先回第 4 步修` : '校验通过' }}
             <span v-if="pageState.published[pageState.currentPageName]">
               · 已发布 version {{ pageState.published[pageState.currentPageName].version }}
             </span>
           </p>
+          <p v-if="cardsState" class="hint" style="margin-bottom: 4px" data-role="cards-summary">
+            卡片库「{{ cardsState.currentPageName }}」· {{ cardsState.config.widgets.length }} 张卡 ·
+            {{
+              !cardsState.config.widgets.length
+                ? '空的,不发'
+                : cardsState.errorCount
+                  ? `校验有 ${cardsState.errorCount} 个错误,先回第 4 步修`
+                  : '校验通过'
+            }}
+            <span v-if="cardsState.published[cardsState.currentPageName]">
+              · 已发布 version {{ cardsState.published[cardsState.currentPageName].version }}
+            </span>
+          </p>
+          <p v-if="pagePubMsg" class="hint" :class="pagePubBlock ? 'err-msg' : 'ok-msg'" data-role="page-pub-msg">
+            {{ pagePubMsg }}
+          </p>
           <div class="frow">
-            <button class="btn" :disabled="!!pageState.errorCount || !pageState.connected" @click="pagePubOpen = !pagePubOpen">
-              {{ pagePubOpen ? '收起页面发布' : '发布页面' }}
+            <button class="btn ghost sm" data-role="page-versions" @click="pageVerOpen = !pageVerOpen">
+              {{ pageVerOpen ? '收起页面版本与回滚 ▲' : '页面版本与回滚 ▼' }}
             </button>
-            <button class="btn ghost" @click="editorRef?.openPreview()">预览页面</button>
             <button class="btn ghost sm" @click="downloadProject">下载 {{ site.name }}.scadaproj</button>
+            <span class="hint">线上版本与本地不一致时在这里选「覆盖」或「保留」;也可以回滚到历史版本</span>
           </div>
-          <div v-if="pagePubOpen" class="page-pub-panel">
+          <div v-if="pageVerOpen" class="page-pub-panel">
             <PublishPanel
               :config="pageState.config"
               :site-name="site.name"
@@ -3530,34 +3552,10 @@ function openFrontend() {
               :published="pageState.published[pageState.currentPageName]"
               @published="onPagePublished"
               @restored="onPageRestored"
-              @close="pagePubOpen = false"
+              @close="pageVerOpen = false"
             />
-          </div>
-        </template>
-        <p v-else class="hint">先到第 4 步打开组态编辑器。</p>
-
-        <h3 class="page-pub-sub">卡片库(可复用卡片,供前端应用单独引用)</h3>
-        <template v-if="cardsState">
-          <p class="hint" style="margin-bottom: 8px" data-role="cards-summary">
-            「{{ cardsState.currentPageName }}」· {{ cardsState.config.widgets.length }} 张卡 ·
-            {{ cardsState.errorCount ? `校验有 ${cardsState.errorCount} 个错误,先回第 4 步修` : '校验通过' }}
-            <span v-if="cardsState.published[cardsState.currentPageName]">
-              · 已发布 version {{ cardsState.published[cardsState.currentPageName].version }}
-            </span>
-          </p>
-          <div class="frow">
-            <button
-              class="btn"
-              :disabled="!!cardsState.errorCount || !cardsState.connected || !cardsState.config.widgets.length"
-              data-role="cards-pub"
-              @click="cardsPubOpen = !cardsPubOpen"
-            >
-              {{ cardsPubOpen ? '收起卡片库发布' : '发布卡片库' }}
-            </button>
-            <span v-if="!cardsState.config.widgets.length" class="hint">卡片库还是空的,不用发</span>
-          </div>
-          <div v-if="cardsPubOpen" class="page-pub-panel">
             <PublishPanel
+              v-if="cardsState && cardsState.config.widgets.length"
               :config="cardsState.config"
               :site-name="site.name"
               :user="conn.username"
@@ -3568,20 +3566,21 @@ function openFrontend() {
               kind="cards"
               @published="onCardsPublished"
               @restored="onCardsRestored"
-              @close="cardsPubOpen = false"
+              @close="pageVerOpen = false"
             />
           </div>
         </template>
+        <p v-else class="hint">还没进过第 4 步:只发布规则,不发页面。</p>
       </div>
 
-      <h3>规则与运算(计算字段 / 规则链 / 站点配置)</h3>
+      <h3>一键发布(规则 + 页面)</h3>
       <div class="frow">
         <div class="field"><label>聚合规则链名称</label><input type="text" v-model="rollupChainName" /></div>
-        <button class="btn" :disabled="pub.running" @click="doPublish(true)">
-          {{ pub.running ? '发布中…' : '一键发布并打开前端' }}
+        <button class="btn" :disabled="pub.running" data-role="publish-all" @click="doPublish(true)">
+          {{ pub.running ? '发布中…' : '一键发布并打开大屏' }}
         </button>
-        <button class="btn ghost" :disabled="pub.running" @click="doPublish(false)">仅发布</button>
-        <button class="btn ghost" @click="openFrontend">打开前端</button>
+        <button class="btn ghost" :disabled="pub.running" @click="doPublish(false)">仅发布,不打开</button>
+        <button class="btn ghost" @click="openFrontend">打开大屏</button>
         <button v-if="perm.role !== 'field'" class="btn ghost danger" :disabled="pub.running" @click="doCleanup">
           清理本站点生成物
         </button>

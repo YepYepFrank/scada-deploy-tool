@@ -648,7 +648,9 @@ defineExpose({
               >
                 预览
               </button>
+              <!-- 嵌在向导里时不显示「发布」:写平台只在第 5 步「一键发布」(2026-09-17 收口);独立 editor.html 保留 -->
               <button
+                v-if="!embedded"
                 type="button"
                 class="ed-publish"
                 :disabled="!meta.connected.value || errorCount > 0"

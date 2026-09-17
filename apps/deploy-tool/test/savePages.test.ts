@@ -63,11 +63,15 @@ describe('savePagesAndPublish', () => {
     expect(r.msg).toContain('页面 v1')
   })
 
-  it('卡片库空的跳过;校验有错不发不跳', async () => {
+  it('卡片库空的跳过;两份都空 → ok 但什么都不发;校验有错不发不跳', async () => {
     const d = deps([])
     const r = await savePagesAndPublish(docs([{}, { config: page(0) }]), d)
     expect(d.calls).toEqual(['xrs-总览'])
     expect(r.ok).toBe(true)
+    const d0 = deps([])
+    const r0 = await savePagesAndPublish(docs([{ config: page(0) }, { config: page(0) }]), d0)
+    expect(r0).toMatchObject({ ok: true, block: 'nothing', published: [] })
+    expect(d0.calls).toEqual([])
     const d2 = deps([])
     const r2 = await savePagesAndPublish(docs([{ errorCount: 2 }]), d2)
     expect(r2).toMatchObject({ ok: false, block: 'errors' })
