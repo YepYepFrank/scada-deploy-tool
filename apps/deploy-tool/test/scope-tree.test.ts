@@ -1,7 +1,7 @@
 /** 实体树按站点范围裁剪(2026-09-17):只留认领的设备(网关跟着)与运算涉及的资产(祖先资产保结构),空组不留;不改输入。 */
 import { describe, expect, it } from 'vitest'
 import { buildMetaTree, countEntities, type TbAsset, type TbDevice } from '../src/meta/MetaNode'
-import { pruneTree } from '../src/meta/scope'
+import { applyEntityNames, pruneTree } from '../src/meta/scope'
 
 const dev = (id: string, name: string, extra: Partial<TbDevice> = {}): TbDevice =>
   ({ id: { id }, name, type: 'IED', ...extra }) as TbDevice
@@ -54,5 +54,29 @@ describe('pruneTree', () => {
     const empty = pruneTree(full, { devices: [], assets: [] })!
     expect(empty.children).toEqual([])
     expect(empty.name).toBe('xrs')
+  })
+})
+
+describe('applyEntityNames', () => {
+  it('TB 标签没中文的节点按名字 / id 补中文;已有中文标签不动;非中文不补;不改输入', () => {
+    const devs = [
+      dev('gw1', 'GW1', { type: 'gateway' }),
+      dev('a', 'SSP1_GP1_IED1', { label: '一级开闭所进线柜', additionalInfo: { lastConnectedGateway: 'gw1' } }),
+      dev('b', 'SSP1_GP2_IED1', { label: 'IED-2', additionalInfo: { lastConnectedGateway: 'gw1' } }),
+    ]
+    const full = buildMetaTree('xrs', devs, [asset('site', 'xrs')])
+    const t = applyEntityNames(full, {
+      gw1: '仙人山网关', // 按 id
+      SSP1_GP1_IED1: '别的名字', // 已有中文标签,不覆盖
+      SSP1_GP2_IED1: '二号间隔', // 标签不含汉字 → 补
+      xrs: 'not-chinese', // 非中文不补
+    })!
+    const gw = t.children[0]!
+    expect(gw.label).toBe('仙人山网关')
+    expect(gw.children.map(c => c.label)).toEqual(['一级开闭所进线柜', '二号间隔'])
+    expect(t.children[1]!.children[0]!.label).toBeUndefined()
+    expect(full.children[0]!.label).toBeUndefined() // 输入没被改
+    expect(applyEntityNames(full, {})).toBe(full)
+    expect(applyEntityNames(null, { a: '甲' })).toBeNull()
   })
 })

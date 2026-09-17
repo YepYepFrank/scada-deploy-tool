@@ -15,6 +15,26 @@ export interface EntityScope {
   assets: Iterable<string>
 }
 
+/**
+ * 给树上的实体补中文名(2026-09-17 YY:第 4 步选实体 / 测点要有中文):TB 标签没有中文的节点,用向导里的中文
+ * (设备 / 网关在第 2 步发现时取到的标签、站点等)按名字补到 label;已有中文标签的不动。纯函数,不改输入。
+ */
+export function applyEntityNames(
+  root: MetaNode | null,
+  names: Record<string, string> | null | undefined
+): MetaNode | null {
+  if (!root || !names || !Object.keys(names).length) return root
+  const cn = /[一-龥]/
+  const walk = (n: MetaNode): MetaNode => {
+    const kids = n.children.map(walk)
+    const has = !!n.label && cn.test(n.label)
+    // 按名字找,找不到按 TB id 找(网关在向导里只记了 id)
+    const alt = n.entity && !has ? (names[n.name] ?? names[n.id]) : undefined
+    return alt && cn.test(alt) ? { ...n, label: alt, children: kids } : { ...n, children: kids }
+  }
+  return walk(root)
+}
+
 export function pruneTree(root: MetaNode | null, scope: EntityScope | null | undefined): MetaNode | null {
   if (!root || !scope) return root
   const dev = new Set(scope.devices)

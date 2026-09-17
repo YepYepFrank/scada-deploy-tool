@@ -30,7 +30,7 @@ import { detectDrift, pageNameOf, readPageState, type DriftItem, type PublishedR
 import { useEditorState } from './useEditorState'
 import { useMeta, type EditorSession } from '../meta/useMeta'
 import { countEntities } from '../meta/MetaNode'
-import { pruneTree, type EntityScope } from '../meta/scope'
+import { applyEntityNames, pruneTree, type EntityScope } from '../meta/scope'
 import type { Declared } from './declared-keys'
 import { serializeProject } from '../project/scadaproj'
 import { LAYER_TITLE, sortIssues, validateBindingsLayer, validateStatic, type PageIssue } from './validate'
@@ -59,6 +59,11 @@ const props = defineProps<{
    * 传了就默认只列这些(绑定面板有「全部实体」开关可切回全库);不传(独立 editor.html)列全库。
    */
   scope?: EntityScope | null
+  /**
+   * 向导里的中文名(2026-09-17):keys = 测点键 → 中文(第 2 步人工改的中文名优先于字典),
+   * entities = 设备名 / 网关 TB id → 中文(补给 TB 标签没有中文的节点)。不传只用 TB 标签 + 字典。
+   */
+  names?: { keys?: Record<string, string>; entities?: Record<string, string> } | null
 }>()
 const emit = defineEmits<{
   /** 普通页面里点「存为可复用卡片」:向导把这张卡(深拷贝)放进卡片库编辑器 */
@@ -81,7 +86,8 @@ const ed = useEditorState(initial)
 // TB 连接 + 元数据树(绑定选择器用);凭据只在内存
 const meta = useMeta()
 // 测点中文名给各绑定行(BindingRow 注入):网关 / 设备 / 测点一律「中文(英文)」(2026-09-11)
-provide('keyCn', meta.keyCn)
+// 向导传来的中文(第 2 步人工改的测点中文名)优先,其次字典 / 派生规则(2026-09-17)
+provide('keyCn', (key: string) => props.names?.keys?.[key] || meta.keyCn(key))
 watch(
   () => props.session,
   s => {
@@ -203,7 +209,10 @@ const leftCollapsed = ref(false)
  */
 const scopeOnly = ref(true)
 const tree = computed(() =>
-  props.scope && scopeOnly.value ? pruneTree(meta.tree.value, props.scope) : meta.tree.value
+  applyEntityNames(
+    props.scope && scopeOnly.value ? pruneTree(meta.tree.value, props.scope) : meta.tree.value,
+    props.names?.entities
+  )
 )
 const entityCount = computed(() => (tree.value ? countEntities(tree.value) : 0))
 

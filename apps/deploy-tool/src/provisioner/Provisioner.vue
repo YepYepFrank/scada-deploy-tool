@@ -2555,6 +2555,22 @@ const editorScope = computed(() => {
   for (const a of declaredOutputs.value.alarms) (a.entityType === 'ASSET' ? assets : devs).add(a.entity)
   return { devices: [...devs], assets: [...assets] }
 })
+/**
+ * 第 4 步实体 / 测点的中文名(2026-09-17 YY):
+ *   keys:第 2 步人工改的测点中文名(全站按键名合并,先认领的优先)——编辑器里优先于字典;
+ *   entities:设备名 → 中文(TB 标签 / 第 1 步取到的)、网关 TB id → 中文,补给树上没有中文标签的节点。
+ */
+const editorNames = computed(() => {
+  const keys = {}
+  const entities = {}
+  for (const d of devices.value) {
+    if (hasCn(d.cn)) entities[d.name] = d.cn
+    if (d.gwId && hasCn(d.gwCn)) entities[d.gwId] = d.gwCn
+    for (const k of d.keys)
+      if (k.claimed && hasCn(k.label) && k.label !== k.key && !(k.key in keys)) keys[k.key] = k.label
+  }
+  return { keys, entities }
+})
 
 const jsonText = computed(() => JSON.stringify(siteJson.value, null, 2))
 const copied = ref(false)
@@ -3497,6 +3513,7 @@ function openFrontend() {
             :declared="declaredOutputs"
             :library="cardLibrary"
             :scope="editorScope"
+            :names="editorNames"
             @save-card="onSaveCard"
           />
         </div>
@@ -3508,6 +3525,7 @@ function openFrontend() {
             :session="editorSession"
             :declared="declaredOutputs"
             :scope="editorScope"
+            :names="editorNames"
           />
         </div>
         <div class="step-foot" data-role="page-save-foot">
