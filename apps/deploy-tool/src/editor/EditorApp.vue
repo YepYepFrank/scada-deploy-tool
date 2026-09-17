@@ -180,8 +180,15 @@ const templateId = computed({
         : `已切换到「${t.name}」`
     )
     selected.value = null
+    // 全屏里选好模板就把左栏收起,空间让给右边的属性 / 绑定栏(2026-09-17)
+    if (fullscreen.value) leftCollapsed.value = true
   },
 })
+/**
+ * 全屏时左栏(模板 / 项目文件)可收起(2026-09-17 YY:绑定面板的下拉太窄太靠下):
+ * 收起后右栏从 340px 加宽到 520px;选好模板自动收起,进全屏时页面里已有组件也默认收起;点左侧竖条随时展开。
+ */
+const leftCollapsed = ref(false)
 
 const selected = ref<string | null>(null)
 const selectedSlot = computed<TemplateSlotDefinition | null>(
@@ -425,6 +432,8 @@ const showJson = ref(false)
 async function enterFullscreen() {
   if (!props.embedded) return
   fullscreen.value = true
+  // 页面里已经有组件 = 模板已定,进来就把左栏收起;空页面先让人选模板
+  leftCollapsed.value = ed.config.value.widgets.length > 0
   try {
     await document.documentElement.requestFullscreen?.()
   } catch {
@@ -502,7 +511,16 @@ defineExpose({
         :customer-pass="customerIdentity?.pass"
         @close="previewOpen = false"
       />
-      <div v-else class="ed" :class="{ 'ed-embedded': compact, 'ed-compact': compact, 'ed-fullscreen': fullscreen }">
+      <div
+        v-else
+        class="ed"
+        :class="{
+          'ed-embedded': compact,
+          'ed-compact': compact,
+          'ed-fullscreen': fullscreen,
+          'ed-left-collapsed': fullscreen && leftCollapsed,
+        }"
+      >
         <div v-if="publishOpen" class="ed-modal" data-role="publish-modal">
           <div class="ed-modal-box">
             <PublishPanel
@@ -572,7 +590,28 @@ defineExpose({
               >已发布 version {{ currentPublished.version }} · {{ currentPublished.by }}</span
             >
           </header>
-          <aside class="ed-left">
+          <aside v-if="fullscreen && leftCollapsed" class="ed-left ed-left-strip" data-role="left-strip">
+            <button
+              type="button"
+              class="ed-strip-btn"
+              title="展开左栏(模板 / 项目文件)"
+              data-role="left-expand"
+              @click="leftCollapsed = false"
+            >
+              ▶<span class="ed-strip-text">{{ isCards ? '卡片库' : template.name }}</span>
+            </button>
+          </aside>
+          <aside v-else class="ed-left">
+            <button
+              v-if="fullscreen"
+              type="button"
+              class="ed-mini ed-left-collapse"
+              title="收起左栏,把空间让给右边的属性 / 绑定栏"
+              data-role="left-collapse"
+              @click="leftCollapsed = true"
+            >
+              ◀ 收起
+            </button>
             <h1 v-if="!embedded">组态编辑器 <small>T3.2 · 模板与槽位</small></h1>
             <label class="ed-field">页面标题 <input v-model.lazy="title" /></label>
             <template v-if="isCards">
@@ -727,10 +766,7 @@ defineExpose({
             <div v-else class="dim">在示意图上点一个槽位</div>
 
             <template v-if="selectedWidget && selectedDef">
-              <h2>
-                属性 <span class="dim">{{ selectedDef.name }} · 改了即时反映到示意图</span>
-              </h2>
-              <PropsForm :key="selectedWidget.id" v-model="widgetProps" :schema="selectedDef.propsSchema" />
+              <!-- 2026-09-17:绑定(数据从哪来)放在属性(长什么样)上面——配卡先选数据源,下拉不再压在表单底下 -->
               <h2>
                 绑定
                 <span class="dim">{{
@@ -747,6 +783,10 @@ defineExpose({
                 @update="onBindings"
                 @flags="bindingFlags = $event"
               />
+              <h2>
+                属性 <span class="dim">{{ selectedDef.name }} · 改了即时反映到示意图</span>
+              </h2>
+              <PropsForm :key="selectedWidget.id" v-model="widgetProps" :schema="selectedDef.propsSchema" />
             </template>
 
             <h2>
@@ -897,6 +937,38 @@ body {
 .ed.ed-fullscreen {
   height: 100vh;
   grid-template-rows: auto minmax(0, 1fr);
+}
+/* 全屏左栏收起:左边只留一条竖条,省下的宽度给右边属性 / 绑定栏(340 → 520px) */
+.ed.ed-fullscreen.ed-left-collapsed {
+  grid-template-columns: 40px 1fr 520px;
+}
+.ed-left-strip {
+  padding: 8px 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.ed-strip-btn {
+  writing-mode: vertical-rl;
+  background: none;
+  border: 1px solid var(--ed-line, rgba(83, 196, 255, 0.3));
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  padding: 10px 4px;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+}
+.ed-strip-btn:hover {
+  border-color: var(--ed-accent, #19b7ff);
+}
+.ed-strip-text {
+  margin-top: 6px;
+}
+.ed-left-collapse {
+  float: right;
+  margin: 0 0 8px 8px;
 }
 .ed-fsbar {
   grid-column: 1 / -1;
