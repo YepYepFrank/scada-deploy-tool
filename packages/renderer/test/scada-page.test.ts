@@ -8,7 +8,14 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import { ScadaPage, registerBuiltins, registerWidget, resetRegistry, validateAgainstRegistry } from '../src/index'
+import {
+  ScadaPage,
+  registerBuiltins,
+  registerTemplate,
+  registerWidget,
+  resetRegistry,
+  validateAgainstRegistry,
+} from '../src/index'
 import type { PageConfig } from '../src/schema/page-config'
 import { createMockDataSource } from './mock-data-source'
 
@@ -81,7 +88,21 @@ describe('validateAgainstRegistry', () => {
       .map(i => i.message)
     expect(errs2.some(m => m.includes('没有槽位 "zz"'))).toBe(true)
     expect(errs2.some(m => m.includes('不接受组件 "line"'))).toBe(true)
-    expect(errs2.some(m => m.includes('必填槽位 "g1"'))).toBe(true)
+    // 内置模板已没有必填槽位(2026-09-17 g1 不再必填);必填检查用自定义模板验
+    expect(errs2.some(m => m.includes('必填槽位'))).toBe(false)
+    registerTemplate({
+      id: 'req-t',
+      name: '必填测试',
+      kind: 'grid',
+      areas: ['a b'],
+      slots: [
+        { name: 'a', area: 'a', required: true },
+        { name: 'b', area: 'b' },
+      ],
+    })
+    const errs3 = validateAgainstRegistry({ schemaVersion: 1, template: 'req-t', widgets: [] })
+    expect(errs3.map(i => i.code)).toEqual(['template-slot-required'])
+    expect(errs3[0]!.message).toContain('必填槽位 "a"')
   })
 })
 

@@ -42,7 +42,8 @@ export const overviewA: TemplateDefinition = {
       area: { x: 1440, y: 104, w: 440, h: 176 },
       accepts: STAT,
     },
-    { name: 'g1', title: '图表 1', accepts: CHART, area: { x: 40, y: 304, w: 908, h: 364 }, required: true },
+    // 2026-09-17:g1 不再必填——新页面一打开就报「必填槽位未放组件」是噪音,只放指标位不放图表的页面也合理
+    { name: 'g1', title: '图表 1', accepts: CHART, area: { x: 40, y: 304, w: 908, h: 364 } },
     { name: 'g2', title: '图表 2', accepts: CHART, area: { x: 972, y: 304, w: 908, h: 364 } },
     { name: 'g3', title: '图表 3', accepts: CHART, area: { x: 40, y: 692, w: 908, h: 364 } },
     { name: 'g4', title: '图表 4', accepts: CHART, area: { x: 972, y: 692, w: 908, h: 364 } },

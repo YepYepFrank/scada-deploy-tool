@@ -1,6 +1,6 @@
 // T3.5 校验层:四层各至少 1 个坏配置 + warning,全部定位到 widget id / slot name;error 阻止发布。
 import { describe, expect, it } from 'vitest'
-import { registerBuiltins, type Binding, type PageConfig } from '@grid/scada-renderer'
+import { registerBuiltins, registerTemplate, type Binding, type PageConfig } from '@grid/scada-renderer'
 import { buildMetaTree, type TbDevice } from '../src/meta/MetaNode'
 import {
   canPublish,
@@ -157,17 +157,27 @@ describe('校验层', () => {
     expect('level' in r4 && r4.level === 'error').toBe(true)
   })
 
-  it('③ 模板:必填槽位 g1 未放组件 → error 带槽位名;组件必填绑定槽位缺失 → error 定位到 widget/slot', () => {
+  it('③ 模板:必填槽位未放组件 → error 带槽位名(内置模板已无必填,用自定义模板验);组件必填绑定槽位缺失 → error 定位到 widget/slot', () => {
     const cfg = good()
-    cfg.widgets.shift() // 去掉 g1
+    cfg.widgets.shift() // 去掉 g1:2026-09-17 起 g1 不再必填,不报
     cfg.widgets[0]!.bindings = {}
     const t = only(validateStatic(cfg), 'template')
-    expect(t.map(i => [i.level, i.widgetId, i.slot])).toEqual([
-      ['error', undefined, 'g1'],
-      ['error', 'w-s1', 'value'],
-    ])
+    expect(t.map(i => [i.level, i.widgetId, i.slot])).toEqual([['error', 'w-s1', 'value']])
     // 注册表层不重复报这两条
     expect(only(validateStatic(cfg), 'registry')).toEqual([])
+    registerTemplate({
+      id: 'req-t',
+      name: '必填测试',
+      kind: 'grid',
+      areas: ['a b'],
+      slots: [
+        { name: 'a', area: 'a', required: true },
+        { name: 'b', area: 'b' },
+      ],
+    })
+    const r = validateStatic({ schemaVersion: 1, template: 'req-t', widgets: [] })
+    expect(only(r, 'template').map(i => [i.level, i.widgetId, i.slot])).toEqual([['error', undefined, 'a']])
+    expect(only(r, 'registry')).toEqual([])
   })
 
   it('④ actions:存在即 warning「二期启用」;绑非 DEVICE → error;都定位到 action 名', async () => {

@@ -116,6 +116,7 @@ describe('TemplatePicker / 几何', () => {
     expect(rects.find(r => r.name === 'r2c3')).toMatchObject({ x: 2 / 3, y: 1 / 3, w: 1 / 3, h: 1 / 3 })
     const ov = slotRects(getTemplate('overview-a')!)
     expect(ov.find(r => r.name === 'banner')).toMatchObject({ fixed: true })
-    expect(ov.find(r => r.name === 'g1')!.required).toBe(true)
+    // 2026-09-17:内置模板不再有必填槽位(g1 原为必填,新页面一打开就报错是噪音)
+    expect(ov.every(r => !r.required)).toBe(true)
   })
 })
