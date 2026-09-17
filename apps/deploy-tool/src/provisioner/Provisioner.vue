@@ -15,7 +15,8 @@ import {
 } from './templates.js'
 import EditorApp from '../editor/EditorApp.vue'
 import PublishPanel from '../editor/PublishPanel.vue'
-import { listSitePages, readPageState } from '../publish/publishPage'
+import { listSitePages, publishPage, readPageState } from '../publish/publishPage'
+import { savePagesAndPublish } from './savePages'
 import { declaredFromSiteConfig } from '../editor/declared-keys'
 import {
   publish,
@@ -2435,6 +2436,58 @@ function onCardsPublished(name, rec) {
 function onCardsRestored(cfg) {
   cardsRef.value?.setConfig(cfg)
 }
+/**
+ * 第 4 步「保存并进入发布上线」(2026-09-17):页面(卡片库非空时一并)直接发布到 TB,成功后跳第 5 步。
+ * 校验有错 / 线上版本与本地不一致 → 停在第 4 步并说明;站点资产还不存在(新站点)→ 提示先去第 5 步发规则。
+ * 逻辑在 savePages.ts(单测),这里只接界面。
+ */
+const pageSaveBusy = ref(false)
+const pageSaveMsg = ref('')
+const pageSaveBlock = ref('')
+async function savePagesAndNext() {
+  const mk = (ed, st, label, kind) =>
+    ed && st
+      ? {
+          label,
+          ...(kind ? { kind } : {}),
+          config: st.config,
+          pageName: st.currentPageName,
+          errorCount: st.errorCount,
+          published: st.published[st.currentPageName],
+        }
+      : null
+  const docs = [mk(editorRef.value, pageState.value, '页面'), mk(cardsRef.value, cardsState.value, '卡片库', 'cards')].filter(
+    Boolean
+  )
+  pageSaveBlock.value = ''
+  if (!docs.length) return (pageSaveMsg.value = '编辑器还没就绪')
+  if (!pageState.value?.connected) return (pageSaveMsg.value = '编辑器还没连上 ThingsBoard,稍等或回第 1 步重新连接')
+  pageSaveBusy.value = true
+  pageSaveMsg.value = '正在发布…'
+  try {
+    const r = await savePagesAndPublish(docs, {
+      api,
+      siteName: site.name,
+      user: conn.username,
+      publishPage,
+      listSitePages,
+    })
+    // 已成功的先记下(失败于第二份时第一份也算数)
+    for (const p of r.published) {
+      const ed = p.label === '卡片库' ? cardsRef.value : editorRef.value
+      ed?.setPageName(p.pageName)
+      ed?.recordPublished(p.pageName, { assetId: p.assetId, version: p.version, at: Date.now(), by: conn.username })
+    }
+    pageSaveMsg.value = r.msg
+    pageSaveBlock.value = r.ok ? '' : r.block || ''
+    if (r.ok || r.block === 'site-missing') step.value = 4
+  } catch (e) {
+    pageSaveMsg.value = '发布失败:' + (e instanceof Error ? e.message : String(e))
+    pageSaveBlock.value = 'failed'
+  } finally {
+    pageSaveBusy.value = false
+  }
+}
 function downloadProject() {
   if (!editorRef.value) return
   const blob = new Blob([editorRef.value.exportText(siteJson.value)], { type: 'application/json' })
@@ -3418,6 +3471,25 @@ function openFrontend() {
         </div>
         <div v-show="edTab === 'cards'">
           <EditorApp ref="cardsRef" embedded doc-kind="cards" :session="editorSession" :declared="declaredOutputs" />
+        </div>
+        <div class="step-foot" data-role="page-save-foot">
+          <span
+            v-if="pageSaveMsg"
+            class="draft-msg"
+            :class="{ 'draft-msg-warn': !!pageSaveBlock }"
+            data-role="page-save-msg"
+            >{{ pageSaveMsg }}</span
+          >
+          <button class="btn ghost sm" data-role="page-skip" @click="step = 4">跳过发布,进入发布上线 →</button>
+          <button
+            class="btn"
+            :disabled="pageSaveBusy || !pageState"
+            data-role="page-save-next"
+            title="把页面(卡片库非空时一并)发布到 ThingsBoard,成功后进入第 5 步;线上版本与本地不一致时会拦下"
+            @click="savePagesAndNext"
+          >
+            {{ pageSaveBusy ? '正在发布…' : '保存并进入发布上线 →' }}
+          </button>
         </div>
       </template>
     </div>

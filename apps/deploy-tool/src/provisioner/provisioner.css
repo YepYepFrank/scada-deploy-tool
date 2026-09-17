@@ -1780,3 +1780,8 @@ details.plat-group > summary.plat-gt {
 .page-pub-sub {
   margin-top: 18px;
 }
+
+/* 第 4 步底栏「保存并进入发布上线」:拦下(校验 / 冲突 / 站点不存在)时提示用警示色 */
+.step-foot .draft-msg-warn {
+  color: var(--warn, #f5b942);
+}
