@@ -23,6 +23,8 @@ const emit = defineEmits<{
   edit: [slot: string]
   add: []
   remove: [id: string, slot: string]
+  /** 用真数据按「检视」列表预览全部卡片(左栏实时渲染、右栏前端引用) */
+  preview: []
 }>()
 
 const rows = computed(() =>
@@ -64,6 +66,16 @@ async function copy(kind: 'json' | 'code', w: WidgetConfig) {
         <span v-if="errorCount" class="cl-bad"> · 校验有 {{ errorCount }} 个错误</span>
       </span>
       <span v-if="msg" class="cl-msg" data-role="cl-msg">{{ msg }}</span>
+      <button
+        type="button"
+        class="btn ghost sm"
+        :disabled="!rows.length"
+        title="用真数据一张一张看:左栏实时渲染、右栏前端引用与数据源"
+        data-role="cl-preview"
+        @click="emit('preview')"
+      >
+        预览卡片库(实时值)
+      </button>
       <button type="button" class="btn sm" :disabled="full" data-role="cl-add" @click="emit('add')">＋ 新建卡片</button>
     </div>
 
@@ -136,11 +148,8 @@ async function copy(kind: 'json' | 'code', w: WidgetConfig) {
   color: var(--ok);
   margin-left: auto;
 }
-.cl-head .btn:last-child {
+.cl-head [data-role='cl-preview'] {
   margin-left: auto;
-}
-.cl-msg + .btn {
-  margin-left: 0;
 }
 .cl-empty {
   padding: 18px;

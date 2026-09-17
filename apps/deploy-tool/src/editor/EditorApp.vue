@@ -11,6 +11,7 @@ import {
   listWidgets,
   migrateConfigProps,
   registerBuiltins,
+  ScadaWidget,
   type PageConfig,
   type TemplateDefinition,
   type TemplateSlotDefinition,
@@ -283,6 +284,38 @@ async function copyRef(kind: 'json' | 'code') {
     toast('复制失败,请手动选择文本')
   }
 }
+/**
+ * 卡片库的单卡编辑(2026-09-17):不画格子画布;上面一排卡片标签、中间只画当前一张。
+ * 「格子」只是存储位置(cards 模板 48 个槽位),这里按卡片顺序展示,不出现在文案里。
+ */
+const cardsList = computed(() =>
+  [...ed.config.value.widgets]
+    .sort((a, b) => a.slot.localeCompare(b.slot, 'en', { numeric: true }))
+    .map(w => ({ w, title: cardTitle(w), typeName: widgets.find(d => d.type === w.type)?.name ?? w.type }))
+)
+function selectCard(slot: string) {
+  selected.value = slot
+  pickerOpen.value = false
+}
+function addCard() {
+  const used = new Set(ed.config.value.widgets.map(w => w.slot))
+  const slot = template.value.slots.find(s => !used.has(s.name))?.name
+  if (!slot) return toast('卡片库已满,先删掉不用的卡')
+  selected.value = slot
+  pickerOpen.value = true
+}
+const CARD_SIZE: Record<string, [number, number]> = {
+  line: [640, 320],
+  'dual-axis': [640, 320],
+  table: [640, 320],
+  'alarm-list': [640, 320],
+  'overview-card': [480, 240],
+  image: [420, 260],
+}
+const cardCellStyle = (type: string) => {
+  const [w, h] = CARD_SIZE[type] ?? [400, 200]
+  return { width: `${w}px`, height: `${h}px` }
+}
 /** 普通页面:把当前组件存为可复用卡片(向导接住,放进卡片库编辑器) */
 function saveAsCard() {
   const w = selectedWidget.value
@@ -414,7 +447,7 @@ function importFile(e: Event) {
 // ---------- 撤销 / 重做 + 快捷键 ----------
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape' && previewOpen.value) {
-    previewOpen.value = false
+    closePreview()
     return
   }
   if (previewOpen.value) return
@@ -435,6 +468,20 @@ window.addEventListener('keydown', onKey)
 
 // ---------- 预览(T3.6):隐藏编辑壳,用编辑器已登录的租户连接 / 现场登录的 Customer 渲染 ----------
 const previewOpen = ref(false)
+/** 从卡片库列表点「预览」进来的:只为看预览临时进的全屏,关掉预览就退出全屏(不让人看到编辑画布) */
+const previewOnly = ref(false)
+function closePreview() {
+  previewOpen.value = false
+  if (previewOnly.value) {
+    previewOnly.value = false
+    void exitFullscreen()
+  }
+}
+async function previewCards() {
+  previewOnly.value = !fullscreen.value
+  if (!fullscreen.value) await enterFullscreen()
+  previewOpen.value = true
+}
 const customerIdentity = computed(() => meta.identities.find(i => i.id === 'customer'))
 const previewTitle = computed(() =>
   !meta.connected.value
@@ -516,7 +563,9 @@ defineExpose({
   },
   enterFullscreen,
   exitFullscreen,
-  /** 卡片库列表(向导)用:进全屏并选中某格;格是空的就弹组件选择 */
+  /** 卡片库列表(向导)用:用真数据按「检视」列表预览全部卡片;关掉预览自动退出全屏 */
+  previewCards,
+  /** 卡片库列表(向导)用:进全屏并选中某张卡;空位就弹组件选择 */
   async editSlot(slot: string) {
     await enterFullscreen()
     selected.value = slot
@@ -545,7 +594,9 @@ defineExpose({
         :tenant-user="meta.conn.user"
         :customer-user="customerIdentity?.user"
         :customer-pass="customerIdentity?.pass"
-        @close="previewOpen = false"
+        :cards="isCards"
+        :page-id="refPageId"
+        @close="closePreview"
       />
       <div
         v-else
@@ -745,10 +796,48 @@ defineExpose({
                 errorCount ? `${errorCount} 个错误,不可发布` : warningCount ? `${warningCount} 个提示` : '校验通过'
               }}</span>
             </div>
-            <div class="ed-status">
-              点击槽位选择组件 · {{ template.name }} · {{ ed.config.value.widgets.length }} 个组件
-            </div>
-            <SlotBoard :config="ed.config.value" :template="template" :selected="selected" @select="onSelect" />
+            <!-- 卡片库(2026-09-17):不画 48 格画布,按单卡编辑——上面一排卡片标签切换,中间只画当前这一张 -->
+            <template v-if="isCards">
+              <div class="ed-status">
+                一张一张配;上面切换卡片,右栏改它的绑定与属性 · 共 {{ ed.config.value.widgets.length }} 张
+              </div>
+              <div class="ed-cards-tabs" data-role="cards-tabs">
+                <button
+                  v-for="c in cardsList"
+                  :key="c.w.id"
+                  type="button"
+                  class="ed-card-tab"
+                  :class="{ on: c.w.slot === selected }"
+                  :data-card="c.w.id"
+                  @click="selectCard(c.w.slot)"
+                >
+                  {{ c.title }}<span class="dim"> · {{ c.typeName }}</span>
+                </button>
+                <button type="button" class="ed-card-tab add" data-role="cards-add" @click="addCard">
+                  ＋ 新建卡片
+                </button>
+              </div>
+              <div v-if="selectedWidget" class="ed-card-stage" data-role="card-stage">
+                <div class="ed-card-cell" :style="cardCellStyle(selectedWidget.type)">
+                  <ScadaWidget :key="selectedWidget.id" :config="selectedWidget" design :expandable="false" />
+                </div>
+                <div class="dim">
+                  {{ cardTitle(selectedWidget) }} · {{ selectedDef?.name ?? selectedWidget.type }} ·
+                  用示例数据画;真数据点工具栏「预览」
+                </div>
+              </div>
+              <div v-else class="ed-card-stage ed-card-empty" data-role="card-stage-empty">
+                <span class="dim">{{
+                  ed.config.value.widgets.length ? '点上面一张卡开始编辑' : '还没有卡片,点「＋ 新建卡片」'
+                }}</span>
+              </div>
+            </template>
+            <template v-else>
+              <div class="ed-status">
+                点击槽位选择组件 · {{ template.name }} · {{ ed.config.value.widgets.length }} 个组件
+              </div>
+              <SlotBoard :config="ed.config.value" :template="template" :selected="selected" @select="onSelect" />
+            </template>
             <div v-if="toastMsg" class="ed-toast">{{ toastMsg }}</div>
           </main>
 
@@ -1225,6 +1314,49 @@ body {
   padding: 1px 5px;
   border: 1px solid rgba(83, 196, 255, 0.25);
   border-radius: 4px;
+}
+/* 卡片库单卡编辑:卡片标签排 + 当前卡 */
+.ed-cards-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+.ed-card-tab {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--ed-line, rgba(83, 196, 255, 0.25));
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.ed-card-tab.on {
+  border-color: var(--ed-accent, #19b7ff);
+  background: rgba(25, 183, 255, 0.15);
+}
+.ed-card-tab.add {
+  border-style: dashed;
+}
+.ed-card-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.ed-card-cell {
+  max-width: 100%;
+  box-sizing: border-box;
+  outline: 1px dashed rgba(255, 255, 255, 0.25);
+  background: #020817;
+}
+.ed-card-empty {
+  min-height: 200px;
+  justify-content: center;
+  align-items: center;
+  border: 1px dashed var(--ed-line, rgba(83, 196, 255, 0.25));
+  border-radius: 8px;
 }
 .ed-scope-toggle {
   float: right;

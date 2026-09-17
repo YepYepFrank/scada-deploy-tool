@@ -36,7 +36,7 @@ beforeEach(() => {
 const DEV = { type: 'DEVICE', id: 'd1', name: '设备一' } as const
 
 describe('内置模板', () => {
-  it('四个模板已注册(含卡片库 cards 24 格),scaled 槽位在设计稿内且互不重叠,grid 的 areas 覆盖全部槽位', () => {
+  it('四个模板已注册(含卡片库 cards 48 格),scaled 槽位在设计稿内且互不重叠,grid 的 areas 覆盖全部槽位', () => {
     expect(
       listTemplates()
         .map(t => t.id)
@@ -44,8 +44,8 @@ describe('内置模板', () => {
     ).toEqual(['cards', 'grid-3x3', 'monitor-3col', 'overview-a'])
     const lib = builtinTemplates.find(t => t.id === 'cards')!
     expect(lib.kind).toBe('grid')
-    expect(lib.slots).toHaveLength(24)
-    expect(lib.areas).toHaveLength(6)
+    expect(lib.slots).toHaveLength(48)
+    expect(lib.areas).toHaveLength(12)
     expect(lib.slots.every(s => !s.required && !s.accepts && !s.fixed)).toBe(true)
     for (const t of builtinTemplates) {
       if (t.kind === 'scaled') {

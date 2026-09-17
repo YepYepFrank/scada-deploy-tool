@@ -2388,7 +2388,7 @@ function onSaveCard(card) {
   const title = (card.props && typeof card.props.title === 'string' && card.props.title) || card.type
   cardsMsg.value = slot
     ? `已把「${title}」存进卡片库(格 ${slot});切到「卡片库」标签可查看,第 5 步与页面一起发布`
-    : `卡片库已满(24 格),先删掉不用的卡再存「${title}」`
+    : `卡片库已满,先删掉不用的卡再存「${title}」`
   setTimeout(() => (cardsMsg.value = ''), 6000)
 }
 /** 卡片库列表的三个动作(2026-09-17):编辑某张 → 全屏编辑器选中该格;新建 → 第一个空格;删除 → 确认后移除 */
@@ -2397,8 +2397,16 @@ function cardEdit(slot) {
 }
 function cardAdd() {
   const slot = cardsRef.value?.firstEmptySlot()
-  if (!slot) return (cardsMsg.value = '卡片库已满(24 格),先删掉不用的卡')
+  if (!slot) return (cardsMsg.value = '卡片库已满,先删掉不用的卡')
   void cardsRef.value?.editSlot(slot)
+}
+/** 卡片库「预览(实时值)」:编辑器的预览面板按检视列表画(左栏实时渲染、右栏前端引用) */
+function cardPreview() {
+  void cardsRef.value?.previewCards()
+}
+/** 第 5 步「打开检视页」:大屏 site.html 的卡片库模式(登录后逐卡看实时值与引用),要先发布过 */
+function openCardsInspect() {
+  window.open(`/site.html?site=${encodeURIComponent(site.name)}&base=${encodeURIComponent(curEnv.value.base)}&cards=1`, '_blank')
 }
 async function cardRemove(id, slot) {
   const w = cardsState.value?.config.widgets.find(x => x.id === id)
@@ -3546,6 +3554,7 @@ function openFrontend() {
             @edit="cardEdit"
             @add="cardAdd"
             @remove="cardRemove"
+            @preview="cardPreview"
           />
         </div>
         <!-- 卡片库编辑器常驻但不显示缩略图:全屏编辑 Teleport 到 body,与是否隐藏无关 -->
@@ -3604,6 +3613,20 @@ function openFrontend() {
             {{ pagePubMsg }}
           </p>
           <div class="frow">
+            <button
+              v-if="cardsState && cardsState.config.widgets.length"
+              class="btn ghost sm"
+              :disabled="!cardsState.published[cardsState.currentPageName]"
+              :title="
+                cardsState.published[cardsState.currentPageName]
+                  ? '在大屏 site.html 里逐张检视卡片库:左栏实时值、右栏前端引用与数据源'
+                  : '卡片库发布后才能打开检视页(发布前可在第 4 步「预览卡片库」看)'
+              "
+              data-role="cards-inspect"
+              @click="openCardsInspect"
+            >
+              打开卡片库检视页
+            </button>
             <button class="btn ghost sm" data-role="page-versions" @click="pageVerOpen = !pageVerOpen">
               {{ pageVerOpen ? '收起页面版本与回滚 ▲' : '页面版本与回滚 ▼' }}
             </button>

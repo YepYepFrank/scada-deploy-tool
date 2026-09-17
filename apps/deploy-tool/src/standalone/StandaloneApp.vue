@@ -11,6 +11,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { registerBuiltins, ScadaPage, validatePageConfig, type PageConfig } from '@grid/scada-renderer'
+import CardsInspect from '../components/CardsInspect.vue'
 import { LegacyDataSource } from '@grid/tb-client'
 import { resolveApiBase, resolveKzBase } from '../api/tb.js'
 import { TokenKeeper } from './session'
@@ -41,7 +42,7 @@ interface PageItem {
 }
 
 // ---------- 会话 ----------
-const stage = ref<'login' | 'list' | 'view'>('login')
+const stage = ref<'login' | 'list' | 'view' | 'cards'>('login')
 const session = ref<Session | null>(null)
 const form = ref({
   base: resolveApiBase(QS),
@@ -181,8 +182,6 @@ async function loadPages() {
       }
       for (const a of page.data) {
         const kind = a.additionalInfo?.kind ?? null
-        // 卡片库(kind: 'cards')是给宿主按卡引用的,不是大屏页,列表里不显示(2026-09-14)
-        if (kind === 'cards') continue
         out.push({
           id: a.id.id,
           name: a.name,
@@ -194,16 +193,21 @@ async function loadPages() {
       }
       hasNext = page.hasNext
     }
-    pages.value = (siteFilter ? await onlySite(out, siteFilter, base) : out).sort((a, b) =>
+    const scoped = (siteFilter ? await onlySite(out, siteFilter, base) : out).sort((a, b) =>
       a.name.localeCompare(b.name, 'zh-Hans-CN')
     )
-    listMsg.value = pages.value.length
-      ? ''
-      : '当前账号看不到任何页面:请让管理员把 ScadaPage 资产分配给你所属的 Customer'
+    // 卡片库(kind: 'cards')是给宿主按卡引用的,不是大屏页:不进页面列表,单独记着给「检视」用(2026-09-14 / 09-17)
+    cardsPage.value = scoped.find(p => p.kind === 'cards') ?? null
+    pages.value = scoped.filter(p => p.kind !== 'cards')
+    listMsg.value =
+      pages.value.length || cardsPage.value
+        ? ''
+        : '当前账号看不到任何页面:请让管理员把 ScadaPage 资产分配给你所属的 Customer'
     const want = QS.get('page')
     const hit = want ? pages.value.find(x => x.id === want || x.name === want) : null
-    if (hit) await open(hit)
-    else if (pages.value.length === 1) await open(pages.value[0]!)
+    if (QS.get('cards') !== null && cardsPage.value) await openCards()
+    else if (hit) await open(hit)
+    else if (pages.value.length === 1 && !cardsPage.value) await open(pages.value[0]!)
     else stage.value = 'list'
   } catch (e) {
     listMsg.value = '读取失败:' + (e instanceof Error ? e.message : String(e))
@@ -249,6 +253,46 @@ const denied = ref<Record<string, string>>({})
 function disposeSource() {
   source.value?.dispose()
   source.value = null
+}
+/** 站点的卡片库页(kind: 'cards');`?cards=1` 直接进检视,列表页也有入口 */
+const cardsPage = ref<PageItem | null>(null)
+const cardsConfig = shallowRef<PageConfig | null>(null)
+function ensureSource() {
+  if (source.value) return
+  const s = session.value!
+  source.value = new LegacyDataSource({
+    baseUrl: s.base,
+    // 不能直接给 s.token:大屏一挂几天,这里必须每次现取。REST 每次请求、WS 每次重连都会调它
+    getToken: () => freshToken(),
+    kzBaseUrl: resolveKzBase(QS, s.base),
+  })
+}
+async function readConfig(p: PageItem): Promise<PageConfig> {
+  const attrs = (await api(`/api/plugins/telemetry/ASSET/${p.id}/values/attributes/SERVER_SCOPE?keys=pageConfig`)) as {
+    key: string
+    value: unknown
+  }[]
+  const raw = attrs.find(a => a.key === 'pageConfig')?.value
+  if (raw === undefined) throw new Error('资产上没有 pageConfig,请先在部署工具里发布')
+  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+  const sv = validatePageConfig(parsed)
+  if (!sv.ok) throw new Error('页面配置不符合契约:' + sv.issues.map(i => `${i.path} ${i.message}`).join('; '))
+  return sv.value
+}
+/** 卡片库检视(2026-09-17):一张一张看——左栏实时渲染,右栏前端引用与数据源 */
+async function openCards() {
+  const p = cardsPage.value
+  if (!p) return
+  current.value = p
+  cardsConfig.value = null
+  pageErr.value = ''
+  stage.value = 'cards'
+  try {
+    cardsConfig.value = await readConfig(p)
+    ensureSource()
+  } catch (e) {
+    pageErr.value = e instanceof Error ? e.message : String(e)
+  }
 }
 async function open(p: PageItem) {
   current.value = p
@@ -349,6 +393,10 @@ onMounted(async () => {
       <main>
         <h2>页面</h2>
         <p v-if="listMsg" class="sa-msg">{{ listMsg }}</p>
+        <p v-if="cardsPage" class="sa-dim sa-cards-link">
+          这个站点有卡片库(给前端应用单独引用的卡):
+          <button type="button" class="sa-mini" data-role="open-cards" @click="openCards">检视卡片库</button>
+        </p>
         <div class="sa-pages">
           <button v-for="p in pages" :key="p.id" type="button" class="sa-page" :data-page="p.name" @click="open(p)">
             <b>{{ p.label }}</b>
@@ -357,6 +405,29 @@ onMounted(async () => {
             >
           </button>
         </div>
+      </main>
+    </div>
+
+    <!-- 卡片库检视(2026-09-17):左栏实时渲染的卡,右栏前端引用与数据源 -->
+    <div v-else-if="stage === 'cards'" class="sa-view" data-role="cards-view">
+      <header class="sa-bar">
+        <span class="sa-brand">{{ current?.label ?? '卡片库' }} <small>卡片库检视</small></span>
+        <span class="sa-status" :data-status="status">{{
+          status === 'live' ? '● 实时' : status === 'offline' ? '○ 离线 · 重连中' : '… 连接中'
+        }}</span>
+        <span class="sa-clock">{{ dateStr }} {{ clock }}</span>
+        <button type="button" class="sa-mini" @click="stage = 'list'">页面</button>
+        <button type="button" class="sa-mini" @click="logout()">退出</button>
+      </header>
+      <main class="sa-stage" style="overflow: auto">
+        <div v-if="pageErr" class="sa-error" data-role="page-error">{{ pageErr }}</div>
+        <CardsInspect
+          v-else-if="cardsConfig && source"
+          :config="cardsConfig"
+          :page-id="current?.id ?? null"
+          :data-source="source"
+        />
+        <div v-else class="sa-dim sa-center">读取卡片库…</div>
       </main>
     </div>
 

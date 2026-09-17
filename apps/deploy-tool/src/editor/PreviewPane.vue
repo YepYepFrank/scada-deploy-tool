@@ -8,6 +8,7 @@
  */
 import { computed, onBeforeUnmount, reactive, ref, shallowRef, watch } from 'vue'
 import { ScadaPage, type PageConfig } from '@grid/scada-renderer'
+import CardsInspect from '../components/CardsInspect.vue'
 import { LegacyDataSource, type DataSource } from '@grid/tb-client'
 
 type Source = DataSource & { dispose?(): void }
@@ -28,6 +29,10 @@ const props = withDefaults(
     makeSource?: typeof defaultMake
     /** 测试注入:登录请求 */
     fetchImpl?: typeof fetch
+    /** 卡片库(2026-09-17):不按整页画,按「检视」列表画——每张卡左栏实时渲染、右栏前端引用 */
+    cards?: boolean
+    /** 卡片库页面资产 id(已发布才有),给检视列表的「复制引用」 */
+    pageId?: string | null
   }>(),
   { tenantUser: '', customerUser: '', customerPass: '' }
 )
@@ -150,9 +155,16 @@ onBeforeUnmount(() => source.value?.dispose?.())
       </ul>
     </div>
 
-    <div class="pv-stage">
+    <div class="pv-stage" :class="{ 'pv-cards': cards }">
+      <CardsInspect
+        v-if="source && cards"
+        :key="'c' + sourceKey"
+        :config="config"
+        :page-id="pageId ?? null"
+        :data-source="source"
+      />
       <ScadaPage
-        v-if="source"
+        v-else-if="source"
         :key="sourceKey"
         :config="config"
         :data-source="source"
@@ -249,6 +261,10 @@ onBeforeUnmount(() => source.value?.dispose?.())
 }
 .pv-stage > .sr-page {
   height: 100%;
+}
+/* 卡片库检视是一列一列的,要能滚 */
+.pv-stage.pv-cards {
+  overflow: auto;
 }
 .pv-empty {
   display: grid;
