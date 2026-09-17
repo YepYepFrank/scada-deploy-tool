@@ -66,8 +66,9 @@ const card = checked.ok ? pickWidget(checked.value, 'w_3k9f2a1c') : undefined //
 </template>
 ```
 
-- 数据源同 `<ScadaPage>`:`provideDataSource()` 注入,或 `:dataSource` 显式传。同一页放 N 张卡就是 N 份独立订阅,各自退订。
-- props:`config`(必填)、`dataSource?`、`theme?`(默认 `default`)、`design?`(sampleData,不订阅)。事件:`invalid`(类型未知 / 绑定形状错,卡片显示错误态)、`bindError(widgetId, slot, message)`。
+- 数据源同 `<ScadaPage>`:`provideDataSource()` 注入,或 `:dataSource` 显式传。同一页放 N 张卡就是 N 份独立订阅,各自退订;一次读回 `pageConfig` 后 `pickWidget` 多次取,不必每张卡各读一遍资产。
+- props:`config`(必填)、`dataSource?`、`theme?`(默认 `default`)、`design?`(sampleData,不订阅)、`expandable?`(0.3.2 起,默认 `true`,右上角「放大」)。事件:`invalid`(类型未知 / 绑定形状错,卡片显示错误态)、`bindError(widgetId, slot, message)`(某个绑定订阅失败,如无权访问实体,卡片显示「不可用」)、`expand(widgetId | null)`。
+- 卡可以来自普通页面或**卡片库**(资产 `additionalInfo.kind === 'cards'`,模板 `cards`);读法完全一样,列页面时按 `kind` 把卡片库和大屏页分开。部署工具的大屏 `site.html?site=X&cards=1` 是卡片库的检视页:每张卡左栏用真数据渲染、右栏引用信息,给宿主对照用。
 - 主题令牌在卡片根节点(`.sr-page.sr-widget-standalone`)生效,祖先上覆盖 `--sr-*` 即可换色;图表随容器 ResizeObserver 自动 resize。
 - **组件 id 的稳定性**:工具在创建组件时生成一次(`w_` + 8 位随机),改属性 / 绑定 / 换模板都不变;把槽位里的组件换成别的类型 = 另一张卡 = 新 id。旧页面里 `w-<slot>` / `<type>-<slot>` 形式的 id 同样有效。
 - `listWidgetRefs(pageConfig)` 列出一页里全部卡片的 `{ id, type, slot, title }`,给对照 / 排查引用用。
