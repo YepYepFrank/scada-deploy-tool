@@ -7,7 +7,7 @@ import globals from 'globals'
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/dist-site/**', '**/node_modules/**', '**/*.schema.json'],
+    ignores: ['**/dist/**', '**/dist-site/**', '**/node_modules/**', '**/*.schema.json', '**/.claude/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
