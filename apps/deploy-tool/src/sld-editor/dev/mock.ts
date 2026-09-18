@@ -63,7 +63,7 @@ export function makeMockContent(): SldEditorContent {
       [900, 220],
     ],
   })
-  labels.push({ id: 'l7', x: 90, y: 80, kind: 'text', text: '10kV Ⅰ段母线', size: 14, color: 'a' })
+  labels.push({ id: 'l7', x: 80, y: 60, kind: 'text', text: '10kV Ⅰ段母线', size: 14, color: 'a' })
   const doc: SldDoc = {
     v: 1,
     canvas: { w: 1200, h: 600, grid: 10 },

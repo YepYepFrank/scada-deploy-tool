@@ -8,6 +8,9 @@ import { computed, inject, onBeforeUnmount, shallowRef } from 'vue'
 import type { Node } from '@antv/x6'
 import { SldSymbolBox, type SldNode } from '@grid/scada-renderer'
 
+// x6-vue-shape 还会把 node / graph 当 props 传进来;这里用 inject,别让它们作为 attribute 落到 DOM 上
+defineOptions({ inheritAttrs: false })
+
 const getNode = inject<() => Node>('getNode')
 if (!getNode) throw new Error('SldNodeView 必须作为 x6-vue-shape 节点使用')
 const cell = getNode()

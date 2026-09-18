@@ -44,7 +44,16 @@ import {
   type SldFragment,
   type SldGeometryPatch,
 } from './doc-ops'
-import { readEdge, readNodeMove, selectionIds, selectionOfCells, syncGraph } from './x6-adapter'
+import {
+  captureBusTaps,
+  readEdge,
+  readNodeMove,
+  repinBusTaps,
+  selectionIds,
+  selectionOfCells,
+  syncGraph,
+  type SldBusTap,
+} from './x6-adapter'
 import { createSldCanvas, kindOfCell, type SldCanvas } from './x6-graph'
 
 const props = defineProps<{
@@ -405,7 +414,9 @@ function onDropSymbol(symbolId: string, at: SldPoint): void {
   const def = lookupSldSymbol(symbolId)
   if (!def) return
   const id = store.newId('n')
-  if (apply(d => void addNode(d.doc, id, def, at.x, at.y), `放置${def.name}`)) store.select({ nodes: [id] })
+  // Dnd 在对齐线吸附生效时不再吸栅格(落点可能是 983 这种数),这里统一吸回栅格
+  const [x, y] = [snapGrid(at.x), snapGrid(at.y)]
+  if (apply(d => void addNode(d.doc, id, def, x, y), `放置${def.name}`)) store.select({ nodes: [id] })
 }
 
 function geometryLabel(p: SldGeometryPatch): string {
@@ -491,6 +502,18 @@ onMounted(async () => {
     if (apply(d => (addWire(d.doc, id, ends.from, ends.to) ? undefined : false), '连线')) store.select({ wires: [id] })
   })
 
+  // 母线拉伸过程中接点留在原来的画面位置(从 (x1,y1) 端拉时不跟着母线滑走);松手后的文档修改见 commitGeometry
+  let taps: SldBusTap[] = []
+  g.on('node:resize', ({ node }) => {
+    taps = kindOfCell(node) === 'bus' ? captureBusTaps(g, node.id) : []
+  })
+  g.on('node:resizing', ({ node }) => {
+    if (taps.length) repinBusTaps(g, node.id, taps)
+  })
+  g.on('node:resized', () => {
+    taps = []
+  })
+
   // 选中连线 → 拐点 / 线段手柄(拐点吸附栅格由 X6 的 snapToGrid 保证;双击拐点删除是 vertices 工具自带的)
   g.on('edge:selected', ({ edge }) => {
     if (isReadonly.value || kindOfCell(edge) !== 'wire') return
@@ -507,12 +530,23 @@ onMounted(async () => {
 
   syncGraph(g, doc.value)
   pushSelection()
-  g.zoomToFit({ padding: 40, maxScale: 1 })
+  // 首次「适应窗口」要等画布拿到真实尺寸(autoResize 的第一次回调);此前 X6 量到的可能是 0
+  let fitted = false
+  const fitOnce = (): void => {
+    const el = canvasEl.value?.parentElement
+    if (fitted || !el || el.clientWidth < 50 || el.clientHeight < 50) return
+    fitted = true
+    g.resize(el.clientWidth, el.clientHeight)
+    g.zoomToFit({ padding: 40, maxScale: 1 })
+    refreshView()
+  }
+  g.on('resize', () => setTimeout(fitOnce, 0))
+  fitOnce()
   refreshView()
 
   document.addEventListener('pointerdown', onDocPointerDown, true)
   document.addEventListener('mousedown', onDocMouseDown, true)
-  document.addEventListener('mouseup', onDocMouseUp)
+  document.addEventListener('mouseup', onDocMouseUp, true)
   window.addEventListener('keydown', onKeyDown)
 })
 
@@ -527,7 +561,7 @@ onBeforeUnmount(() => {
   clearTimeout(noticeTimer)
   document.removeEventListener('pointerdown', onDocPointerDown, true)
   document.removeEventListener('mousedown', onDocMouseDown, true)
-  document.removeEventListener('mouseup', onDocMouseUp)
+  document.removeEventListener('mouseup', onDocMouseUp, true)
   window.removeEventListener('keydown', onKeyDown)
   canvas.value?.dispose()
 })
@@ -552,7 +586,11 @@ function onDrawDown(e: PointerEvent): void {
     mode.value = 'select'
     return
   }
-  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  try {
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  } catch {
+    // 合成事件(自动化测试)没有真实的 pointerId,捕获不了也不影响:move / up 照样落在这一层上
+  }
   draft.value = { a: at, b: at }
 }
 function onDrawMove(e: PointerEvent): void {

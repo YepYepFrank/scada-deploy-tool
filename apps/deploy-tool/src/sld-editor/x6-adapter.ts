@@ -21,6 +21,7 @@ import {
   SLD_GRID,
   busLength,
   busOffset,
+  busPoint,
   lookupSldSymbol,
   nodeBox,
   portDirection,
@@ -669,4 +670,42 @@ export function readEdge(
   const from = read('source')
   const to = read('target')
   return from && to ? { from, to } : undefined
+}
+
+/** 母线上一个接点在画面上的位置(拉伸开始时记下来) */
+export interface SldBusTap {
+  edgeId: string
+  type: 'source' | 'target'
+  p: SldPoint
+}
+
+/** 母线开始拉伸:记下线上每个接点此刻的画面位置 */
+export function captureBusTaps(graph: Graph, busId: string): SldBusTap[] {
+  const cell = graph.getCellById(busId)
+  const bus = cell?.isNode() ? busOfCell(snapshotOf(cell)) : undefined
+  if (!cell || !bus) return []
+  const taps: SldBusTap[] = []
+  for (const edge of graph.getConnectedEdges(cell))
+    for (const type of ['source', 'target'] as const) {
+      const end = endOfTerminal(edge.getTerminal(type) as SldTerminal)
+      if (end && 'bus' in end && end.bus === busId) taps.push({ edgeId: edge.id, type, p: busPoint(bus, end.d) })
+    }
+  return taps
+}
+
+/**
+ * 母线拉伸过程中:按当前的母线线段重算各接点的 d,让接点留在原来的画面位置(只动画布,不动文档——
+ * 松手后文档那边由 doc-ops.resizeBus 算出同样的结果,再经 syncGraph 对齐)。
+ */
+export function repinBusTaps(graph: Graph, busId: string, taps: ReadonlyArray<SldBusTap>): void {
+  const cell = graph.getCellById(busId)
+  const bus = cell?.isNode() ? busOfCell(snapshotOf(cell)) : undefined
+  if (!bus) return
+  for (const tap of taps) {
+    const edge = graph.getCellById(tap.edgeId)
+    if (!edge?.isEdge()) continue
+    const d = busOffset(bus, tap.p)
+    const now = endOfTerminal(edge.getTerminal(tap.type) as SldTerminal)
+    if (now && 'bus' in now && now.d !== d) edge.setTerminal(tap.type, terminalOf({ bus: busId, d }), SYNC)
+  }
 }

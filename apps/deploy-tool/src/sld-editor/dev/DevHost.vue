@@ -14,6 +14,7 @@ const readonly = ref(false)
 const updates = ref(0)
 const message = ref('')
 const fileEl = ref<HTMLInputElement>()
+const editorEl = ref<InstanceType<typeof SldEditor>>()
 const host: SldEditorHost = { siteName: 'mock-site', meta: { mock: true } }
 
 function onUpdate(next: SldEditorContent): void {
@@ -65,6 +66,10 @@ Object.assign(window, {
     get content() {
       return content.value
     },
+    /** <SldEditor> 暴露的 { ctx, store }(调试用) */
+    get editor() {
+      return editorEl.value
+    },
     load(text: string) {
       content.value = parseContent(text)
     },
@@ -88,6 +93,7 @@ Object.assign(window, {
     </header>
     <div class="sld-dev-body">
       <SldEditor
+        ref="editorEl"
         :content="content"
         :host="host"
         :readonly="readonly"
