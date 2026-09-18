@@ -12,6 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@antv/x6": "^3.1.8",
+    "@antv/x6-vue-shape": "^3.0.2",
     "@grid/scada-renderer": "workspace:*",
     "@grid/tb-client": "workspace:*",
     "@grid/tbsite-compiler": "workspace:*",
