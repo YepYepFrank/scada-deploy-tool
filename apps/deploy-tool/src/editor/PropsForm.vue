@@ -15,13 +15,24 @@ const props = defineProps<{
   /** 嵌套层级(数组子表单)时的路径前缀,只用于 issues 定位 */
   pathPrefix?: string
 }>()
-const emit = defineEmits<{ 'update:modelValue': [value: Record<string, unknown>]; issues: [issues: FieldIssue[]] }>()
+const emit = defineEmits<{
+  'update:modelValue': [value: Record<string, unknown>]
+  issues: [issues: FieldIssue[]]
+  /** 点了「编辑接线图」:由外层(EditorApp)打开接线图编辑器,整体读写 modelValue[key] 与该组件的 pt.* 绑定 */
+  'edit-sld': [key: string]
+}>()
 
 const fields = computed(() =>
   Object.entries(props.schema.properties).map(([key, s]) => ({ key, schema: s, kind: fieldKind(s) }))
 )
 const issues = computed(() => validateProps(props.schema, props.modelValue, props.pathPrefix ?? ''))
 const issueOf = (path: string) => issues.value.find(i => i.path === (props.pathPrefix ?? '') + path)?.message
+/** 接线图字段的一行摘要(节点 / 母线 / 连线数);还没画过显示「未绘制」 */
+function sldSummary(v: unknown): string {
+  const d = v as { nodes?: unknown[]; buses?: unknown[]; wires?: unknown[] } | undefined
+  if (!d || typeof d !== 'object' || !Array.isArray(d.nodes)) return '未绘制'
+  return `节点 ${d.nodes.length} · 母线 ${d.buses?.length ?? 0} · 连线 ${d.wires?.length ?? 0}`
+}
 /** JSON 兜底字段的解析失败态(不进 modelValue) */
 const jsonBad = reactive<Record<string, boolean>>({})
 
@@ -201,6 +212,11 @@ function setRow(key: string, i: number, row: Record<string, unknown>) {
           }}
         </button>
       </div>
+      <!-- 一次接线图:不在属性面板里编辑,交给接线图编辑器(ADR-005 D5) -->
+      <div v-else-if="f.kind === 'sld-doc'" class="pf-sld">
+        <button type="button" class="pf-add" data-role="edit-sld" @click="emit('edit-sld', f.key)">编辑接线图…</button>
+        <span class="pf-sld-sum">{{ sldSummary(modelValue[f.key]) }}</span>
+      </div>
       <!-- 兜底:JSON -->
       <textarea
         v-else
@@ -327,6 +343,15 @@ function setRow(key: string, i: number, row: Record<string, unknown>) {
 }
 .pf-del {
   color: #ff8a8a;
+}
+.pf-sld {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pf-sld-sum {
+  font-size: 12px;
+  opacity: 0.7;
 }
 .pf-add {
   background: none;

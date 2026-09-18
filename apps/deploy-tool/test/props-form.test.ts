@@ -163,3 +163,21 @@ describe('useEditorState.setWidgetProps 合并撤销步', () => {
     expect(ed.state.pastCount).toBe(5)
   })
 })
+
+describe('sld-doc 字段(ADR-005 D5)', () => {
+  const schema: PropsSchema = {
+    type: 'object',
+    properties: { doc: { type: 'object', title: '接线图', format: 'sld-doc' } },
+    additionalProperties: false,
+  }
+  it('认成 sld-doc,不算兜底字段', () => {
+    expect(fieldKind(schema.properties.doc!)).toBe('sld-doc')
+    expect(fallbackFields(schema)).toEqual([])
+  })
+  it('值必须是对象;缺省不报', () => {
+    expect(validateProps(schema, {})).toEqual([])
+    expect(validateProps(schema, { doc: { v: 1, nodes: [] } })).toEqual([])
+    expect(validateProps(schema, { doc: 'x' })).toEqual([{ path: 'doc', message: '必须是接线图文档对象' }])
+    expect(validateProps(schema, { doc: [] })).toHaveLength(1)
+  })
+})

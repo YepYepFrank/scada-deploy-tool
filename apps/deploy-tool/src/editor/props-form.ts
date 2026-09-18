@@ -4,7 +4,18 @@
  */
 import type { PropSchema, PropsSchema } from '@grid/scada-renderer'
 
-export type FieldKind = 'text' | 'multiline' | 'url' | 'color' | 'number' | 'boolean' | 'enum' | 'array' | 'json'
+export type FieldKind =
+  | 'text'
+  | 'multiline'
+  | 'url'
+  | 'color'
+  | 'number'
+  | 'boolean'
+  | 'enum'
+  | 'array'
+  /** 一次接线图文档(ADR-005 D5):属性面板不画输入框,画「编辑接线图」按钮,由接线图编辑器整体读写 */
+  | 'sld-doc'
+  | 'json'
 
 /** schema → 表单控件;认不出的类型走 'json' 兜底(文本框 + JSON 校验) */
 export function fieldKind(s: PropSchema): FieldKind {
@@ -23,6 +34,7 @@ export function fieldKind(s: PropSchema): FieldKind {
     const arr = s as Extract<PropSchema, { type: 'array' }>
     return arr.items?.type === 'object' && arr.items.properties ? 'array' : 'json'
   }
+  if (t === 'object' && (s as { format?: string }).format === 'sld-doc') return 'sld-doc'
   return 'json'
 }
 
@@ -118,6 +130,10 @@ export function validateProps(schema: PropsSchema, values: Record<string, unknow
         })
         break
       }
+      case 'sld-doc':
+        // 只看是不是对象;图的结构校验归 validateSldDoc(editor/validate.ts 调),不在属性层重复
+        if (typeof v !== 'object' || Array.isArray(v)) issues.push({ path, message: '必须是接线图文档对象' })
+        break
       case 'json':
         break
     }
