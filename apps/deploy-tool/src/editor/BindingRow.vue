@@ -7,7 +7,7 @@
  *            形状与校验规则在 `ext-params.ts`,与校验层共用一份
  * 只负责产出契约形状的 Binding;校验(必填 / 类型)由 BindingsPanel 与校验层做。
  */
-import { computed, inject, ref, watch } from 'vue'
+import { computed, inject, ref, watch, type Ref } from 'vue'
 import { dual, type KeyCnFn } from '../naming'
 import type { Binding, BindingMode, BindingSlotSpec } from '@grid/scada-renderer'
 import type { EntityRef } from '@grid/tb-client'
@@ -48,6 +48,9 @@ const emit = defineEmits<{ 'update:modelValue': [b: Binding | null]; split: [key
 /** 测点中文名(EditorApp 从 useMeta 提供;没有就只显示英文)——名称一律「中文(英文)」(2026-09-11) */
 const keyCn = inject<KeyCnFn>('keyCn', () => '')
 const keyText = (key: string) => dual(keyCn(key), key)
+/** 全屏编辑时实体树加高(EditorApp 注入;嵌入态 260px,全屏 460px)——2026-09-18 点选空间太小的反馈 */
+const pickerTall = inject<Ref<boolean>>('pickerTall', ref(false))
+const treeHeight = computed(() => (pickerTall.value ? 460 : 260))
 
 const ALL_MODES: BindingMode[] = ['ts', 'ts-history', 'attr', 'alarm', 'const', 'ext']
 const MODE_LABEL: Record<BindingMode, string> = {
@@ -331,7 +334,7 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
       </template>
     </div>
     <div v-if="treeOpen && tree" class="br-tree">
-      <EntityTree :root="tree" :selected-id="entity?.id ?? null" :height="260" @select="pickEntity" />
+      <EntityTree :root="tree" :selected-id="entity?.id ?? null" :height="treeHeight" @select="pickEntity" />
     </div>
 
     <!-- ts -->

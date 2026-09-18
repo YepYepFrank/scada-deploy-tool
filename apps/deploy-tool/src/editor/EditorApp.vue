@@ -206,6 +206,51 @@ const templateId = computed({
 const leftCollapsed = ref(false)
 
 /**
+ * 全屏右栏宽度可拖(2026-09-18 YY:收起左栏后点选空间还是小):默认 600px,拖动记到本机浏览器,
+ * 范围 [420px, 70vw];双击分隔条恢复默认。嵌入态不受影响(仍 340px)。
+ */
+const RIGHT_W_KEY = 'gridops_editor_right_w'
+const RIGHT_W_DEFAULT = 600
+function loadRightWidth(): number {
+  try {
+    const n = Number(localStorage.getItem(RIGHT_W_KEY))
+    return n >= 420 ? n : RIGHT_W_DEFAULT
+  } catch {
+    return RIGHT_W_DEFAULT
+  }
+}
+const rightWidth = ref(loadRightWidth())
+function clampRightWidth(n: number) {
+  return Math.round(Math.min(window.innerWidth * 0.7, Math.max(420, n)))
+}
+function saveRightWidth() {
+  try {
+    localStorage.setItem(RIGHT_W_KEY, String(rightWidth.value))
+  } catch {
+    /* 私密窗口等存不了就算了 */
+  }
+}
+function startRightResize(e: PointerEvent) {
+  e.preventDefault()
+  const el = e.currentTarget as HTMLElement
+  el.setPointerCapture(e.pointerId)
+  const move = (ev: PointerEvent) => {
+    rightWidth.value = clampRightWidth(window.innerWidth - ev.clientX)
+  }
+  const up = () => {
+    el.removeEventListener('pointermove', move)
+    el.removeEventListener('pointerup', up)
+    saveRightWidth()
+  }
+  el.addEventListener('pointermove', move)
+  el.addEventListener('pointerup', up)
+}
+function resetRightWidth() {
+  rightWidth.value = RIGHT_W_DEFAULT
+  saveRightWidth()
+}
+
+/**
  * 绑定选择器用的实体树(2026-09-17):向导传了 scope 就默认只列本站点范围(认领的设备 + 运算涉及的资产 + 站点资产),
  * 「全部实体」开关可切回全库;校验层仍用全库树(绑到范围外的实体也是存在的,不算错)。
  */
@@ -493,6 +538,11 @@ const previewTitle = computed(() =>
 
 // ---------- 全屏编辑(嵌入向导时:缩略图 → 点击全屏;Esc / 返回向导 退出) ----------
 const fullscreen = ref(false)
+/** 全屏时绑定行里的实体树加高(BindingRow 注入;2026-09-18) */
+provide(
+  'pickerTall',
+  computed(() => fullscreen.value)
+)
 /** 嵌入且未全屏:只画缩略图 + 一行状态,左右栏与工具栏都不显示 */
 const compact = computed(() => !!props.embedded && !fullscreen.value)
 /** 右栏 JSON 源码默认折起(高级功能,不和「当前槽位」抢空间) */
@@ -607,6 +657,7 @@ defineExpose({
           'ed-fullscreen': fullscreen,
           'ed-left-collapsed': fullscreen && leftCollapsed,
         }"
+        :style="fullscreen ? { '--ed-right-w': rightWidth + 'px' } : undefined"
       >
         <div v-if="publishOpen" class="ed-modal" data-role="publish-modal">
           <div class="ed-modal-box">
@@ -842,6 +893,14 @@ defineExpose({
           </main>
 
           <aside class="ed-right">
+            <div
+              v-if="fullscreen"
+              class="ed-splitter"
+              data-role="right-splitter"
+              title="拖动调整右栏宽度,双击恢复默认"
+              @pointerdown="startRightResize"
+              @dblclick="resetRightWidth"
+            ></div>
             <h2>当前槽位</h2>
             <div v-if="selectedSlot" class="ed-slot-info">
               <b>{{ selectedSlot.title ?? selectedSlot.name }}</b> <code>{{ selectedSlot.name }}</code>
@@ -1074,10 +1133,31 @@ body {
 .ed.ed-fullscreen {
   height: 100vh;
   grid-template-rows: auto minmax(0, 1fr);
+  /* 右栏宽度由 --ed-right-w 决定(默认 600px,可拖,见 startRightResize) */
+  grid-template-columns: 280px 1fr var(--ed-right-w, 600px);
 }
-/* 全屏左栏收起:左边只留一条竖条,省下的宽度给右边属性 / 绑定栏(340 → 520px) */
+/* 全屏左栏收起:左边只留一条竖条,省下的宽度全给画布 */
 .ed.ed-fullscreen.ed-left-collapsed {
-  grid-template-columns: 40px 1fr 520px;
+  grid-template-columns: 40px 1fr var(--ed-right-w, 600px);
+}
+/* 右栏左缘的拖动条:8px 宽,悬停 / 拖动时亮起 */
+.ed-fullscreen .ed-right {
+  position: relative;
+}
+.ed-splitter {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 2;
+  touch-action: none;
+}
+.ed-splitter:hover,
+.ed-splitter:active {
+  background: linear-gradient(to right, var(--ed-accent, #19b7ff), transparent);
+  opacity: 0.6;
 }
 .ed-left-strip {
   padding: 8px 0;
