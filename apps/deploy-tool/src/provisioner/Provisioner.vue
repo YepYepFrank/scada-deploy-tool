@@ -96,12 +96,14 @@ function confirmAnswer(v) {
 }
 
 /* ── connection & discovery ─────────────────────────────── */
-/* 两个内置环境都指向生产镜像 TB(192.168.20.61),区别只是代理前缀:
-   mirror 走 /tbm(默认,大屏链接带 ?env=mirror 时可用 kz 报表)、demo 走 /api。
-   演示环境 20.60 已退役,密码不再内置——两个环境都需手工输入。 */
+/* 两个内置环境都走 vite 代理,指向同一台 TB(.env.local 的 TB_BASE,不填是生产镜像 192.168.20.61),
+   区别只是代理前缀:mirror 走 /tbm(默认,大屏链接带 ?env=mirror 时可用 kz 报表)、demo 走 /api。
+   下拉里显示的地址由 vite.config.js 注入(VITE_TB_PROXY_TARGET),换后端只改 .env.local;密码不内置。 */
+const PROXY_TARGET = (import.meta.env.VITE_TB_PROXY_TARGET || 'http://192.168.20.61:8080').replace(/^https?:\/\//, '')
+const PROXY_NAME = PROXY_TARGET.startsWith('192.168.20.61') ? '生产镜像' : '开发代理'
 const ENVS = {
-  demo: { label: '生产镜像 · 192.168.20.61(/api 直连)', base: '', defUser: 'tenant@thingsboard.org', defPass: '' },
-  mirror: { label: '生产镜像 · 192.168.20.61', base: '/tbm', defUser: 'tenant@thingsboard.org', defPass: '' },
+  demo: { label: `${PROXY_NAME} · ${PROXY_TARGET}(/api 直连)`, base: '', defUser: 'tenant@thingsboard.org', defPass: '' },
+  mirror: { label: `${PROXY_NAME} · ${PROXY_TARGET}`, base: '/tbm', defUser: 'tenant@thingsboard.org', defPass: '' },
 }
 
 /* ── 自定义项目环境:工程人员手动录入新项目的 TB 地址,存本机 ──

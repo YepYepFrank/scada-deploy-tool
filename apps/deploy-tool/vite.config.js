@@ -24,6 +24,8 @@ export default defineConfig(({ mode }) => {
   return {
     // 只读 monorepo 根的 .env*(VITE_ 前缀才会进页面):编辑器 / 大屏的开发期账号预填
     envDir: ROOT,
+    // 把代理的真实目标告诉页面,第 1 步环境下拉的内置项按它显示,不再写死 IP
+    define: { 'import.meta.env.VITE_TB_PROXY_TARGET': JSON.stringify(TB) },
     plugins: [vue()],
     // 渲染器包按需引入 echarts 子路径,须一起预构建(否则 use()/init() 不在同一实例,图表空白)
     optimizeDeps: { include: ['echarts/core', 'echarts/charts', 'echarts/components', 'echarts/renderers'] },

@@ -3,7 +3,7 @@
 // 现在看得到什么完全由登录身份在 TB 里的分配决定,凭据只在运行时输入。
 //
 // ?base=<TB 地址>:单文件部署(dist-site/site.html 放进任意静态目录)时必填,指向 TB 的 http://host:8080;
-// 开发 / 预览时留空走同源 /api(vite 代理到镜像),?env=mirror 走 /tbm(两条现在等价,留着兼容旧书签)。
+// 开发 / 预览时留空走同源 /api(vite 代理到 .env.local 的 TB_BASE,缺省镜像),?env=mirror 走 /tbm(两条等价,留着兼容旧书签)。
 export const ENVS = {
   demo: { base: '' },
   mirror: { base: '/tbm' },
