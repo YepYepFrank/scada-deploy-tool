@@ -6,16 +6,26 @@
  *   ③ template —— 模板必填槽位已放组件、组件必填绑定槽位已绑
  *   ④ actions  —— 一期一律 warning「写操作二期启用,渲染为禁用态」,且只允许绑 DEVICE(否则 error)
  * 另附 registry(类型 / 槽位 / mode / multiple)与 props(propsSchema 值域)两层,来自渲染器注册表和 T3.3。
+ * 一次接线图(`sld`,ADR-005)另有一组「图 ↔ 绑定」一致性检查(T5.4,见 validateSldWidget):图的问题归 props 层,
+ * 测点绑定缺 / 多归 template 层。
  * error 阻止发布,warning 只提示。每条问题都定位到 widget id(和槽位名)。
  */
 import {
+  SLD_POINT_SLOT_PREFIX,
+  collectPointRefs,
   getTemplate,
   getWidget,
   isPageConfig,
+  isSldDoc,
+  lookupSldSymbol,
+  sldPointSlot,
   validateAgainstRegistry,
   validatePageConfig,
+  validateSldDoc,
   type Binding,
   type PageConfig,
+  type SldDoc,
+  type SldIssue,
   type WidgetConfig,
 } from '@grid/scada-renderer'
 import type { EntityRef } from '@grid/tb-client'
@@ -144,6 +154,130 @@ function collapseBindingIssue(
   return { level: 'error', layer: 'schema', ...at, path, message }
 }
 
+// ---------- 一次接线图:图(props.doc)↔ 测点绑定(bindings['pt.<id>'])一致性 ----------
+
+const slotBound = (w: WidgetConfig, slot: string): boolean => {
+  const v = w.bindings?.[slot]
+  return Array.isArray(v) ? v.length > 0 : !!v
+}
+
+/** 「节点 n3(1# 进线柜)的开关状态」/「数值标签 l7(Ia)」—— 让人在图上找得到是谁引用的 */
+function describePointOwner(doc: SldDoc, from: 'state' | 'label', owner: string): string {
+  if (from === 'state') {
+    const n = doc.nodes.find(x => x.id === owner)
+    return `节点 ${owner}${n?.name ? `(${n.name})` : ''}的开关状态`
+  }
+  const l = doc.labels.find(x => x.id === owner)
+  const title = l?.kind === 'value' ? l.title : undefined
+  return `数值标签 ${owner}${title ? `(${title})` : ''}`
+}
+
+/**
+ * `type === 'sld'` 的组件(ADR-005 D2 / D4):
+ * - doc 形状坏 → error;没有 doc / 空图 → warning
+ * - 图里引用的测点没有对应的 `pt.<id>` 绑定 → error(逐处引用报,带上是谁引用的)
+ * - 有 `pt.*` 绑定但图里没人引用 → warning(发布时仍会订阅)
+ * - 节点写了 entity,但名下(开关状态 + 依附它的数值标签)没有任何绑到该实体的测点 → warning:
+ *   图里的实体只存名字,运行时的实体 id 是从名下测点绑定里取的(D4),取不到则告警匹配与点击事件对这个节点无效
+ * - 结构校验交给渲染器的 validateSldDoc,issue 原样映射(path 前拼组件路径);它抛错(T5.1 落地前是桩)就跳过
+ */
+export function validateSldWidget(w: WidgetConfig): PageIssue[] {
+  const issues: PageIssue[] = []
+  const base = `/widgets/${w.id}`
+  const docPath = `${base}/props/doc`
+  const raw = (w.props as Record<string, unknown> | undefined)?.doc
+  let doc: SldDoc | null = null
+  if (raw === undefined || raw === null)
+    issues.push({ level: 'warning', layer: 'props', path: docPath, widgetId: w.id, message: '还没画接线图' })
+  else if (!isSldDoc(raw))
+    issues.push({
+      level: 'error',
+      layer: 'props',
+      path: docPath,
+      widgetId: w.id,
+      message:
+        '接线图数据损坏(不是合法的接线图文档:缺 v / nodes / buses / wires / labels),请在接线图编辑器里重新保存或重画',
+    })
+  else {
+    doc = raw
+    if (doc.nodes.length + doc.buses.length + doc.wires.length + doc.labels.length === 0)
+      issues.push({ level: 'warning', layer: 'props', path: docPath, widgetId: w.id, message: '还没画接线图(空图)' })
+  }
+  // 形状坏的图读不出引用,「多余绑定」会全体误报,到此为止
+  if (raw !== undefined && raw !== null && !doc) return issues
+
+  if (doc) {
+    let structural: SldIssue[] = []
+    try {
+      structural = validateSldDoc(doc, lookupSldSymbol)
+    } catch {
+      structural = [] // 未实现 / 内部出错:跳过结构校验,不挡别的检查
+    }
+    for (const i of structural)
+      issues.push({
+        level: i.level === 'error' ? 'error' : 'warning',
+        layer: 'props',
+        path: `${docPath}/${i.path.replace(/^\/+/, '')}`,
+        widgetId: w.id,
+        message: i.message,
+      })
+  }
+
+  const refs = doc ? collectPointRefs(doc) : []
+  const used = new Set<string>()
+  for (const r of refs) {
+    const slot = sldPointSlot(r.pt)
+    used.add(slot)
+    if (slotBound(w, slot)) continue
+    issues.push({
+      level: 'error',
+      layer: 'template',
+      path: `${base}/bindings/${slot}`,
+      widgetId: w.id,
+      slot,
+      message: `${describePointOwner(doc!, r.from, r.owner)}引用了测点「${r.pt}」,但没有对应的绑定 "${slot}"`,
+    })
+  }
+  for (const slot of Object.keys(w.bindings ?? {})) {
+    if (!slot.startsWith(SLD_POINT_SLOT_PREFIX) || used.has(slot) || !slotBound(w, slot)) continue
+    issues.push({
+      level: 'warning',
+      layer: 'template',
+      path: `${base}/bindings/${slot}`,
+      widgetId: w.id,
+      slot,
+      message: `多余的测点绑定 "${slot}":图里没有任何节点 / 标签引用它,发布时仍会订阅`,
+    })
+  }
+
+  if (doc) {
+    const entityOfSlot = (slot: string): Array<{ type?: string; name?: string }> => {
+      const v = w.bindings?.[slot]
+      return (Array.isArray(v) ? v : v ? [v] : []).flatMap(b => ('entity' in b && b.entity ? [b.entity] : []))
+    }
+    for (const n of doc.nodes) {
+      if (!n.entity) continue
+      const pts = [
+        ...(n.state ? [n.state.pt] : []),
+        ...doc.labels.flatMap(l => (l.kind === 'value' && l.attach === n.id ? [l.pt] : [])),
+      ]
+      const bound = pts.flatMap(pt => entityOfSlot(sldPointSlot(pt)))
+      if (bound.some(e => e.type === n.entity!.type && e.name === n.entity!.name)) continue
+      const who = `节点 ${n.id}${n.name ? `(${n.name})` : ''}`
+      issues.push({
+        level: 'warning',
+        layer: 'props',
+        path: `${docPath}/nodes/${n.id}`,
+        widgetId: w.id,
+        message: bound.length
+          ? `${who}写的实体是「${n.entity.name}」,但名下测点绑的都是别的实体(${[...new Set(bound.map(e => e.name || '(空)'))].join('、')});运行时取不到它的实体 id,告警匹配与点击事件对它无效`
+          : `${who}写了实体「${n.entity.name}」,但名下没有任何已绑定的测点(开关状态 / 依附它的数值标签);运行时取不到它的实体 id,告警匹配与点击事件对它无效`,
+      })
+    }
+  }
+  return issues
+}
+
 // ---------- 同步层:① schema、registry、props、③ template、④ actions ----------
 
 /** 不需要 TB 连接的全部层。输入可以是任意 JSON(schema 不过时其余层跳过)。 */
@@ -238,6 +372,9 @@ export function validateStatic(input: unknown): PageIssue[] {
         issues.push({ level: e.level, layer: 'schema', path: base + e.sub, widgetId: w.id, slot, message: e.message })
     }
   }
+
+  // 一次接线图:图 ↔ 测点绑定一致性
+  for (const w of cfg.widgets) if (w.type === 'sld') issues.push(...validateSldWidget(w))
 
   // ③ template:模板必填槽位 + 组件必填绑定槽位
   const tpl = getTemplate(cfg.template)
