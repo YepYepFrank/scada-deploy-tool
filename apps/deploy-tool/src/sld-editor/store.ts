@@ -76,7 +76,8 @@ const errorsOf = (issues: SldIssue[]): SldIssue[] => issues.filter(i => i.level 
 /** 图内已用的全部元素 id(节点 / 母线 / 连线 / 标签 / 分组框) */
 export function usedElementIds(doc: SldDoc): Set<string> {
   const ids = new Set<string>()
-  for (const list of [doc.nodes, doc.buses, doc.wires, doc.labels, doc.frames ?? []]) for (const x of list) ids.add(x.id)
+  for (const list of [doc.nodes, doc.buses, doc.wires, doc.labels, doc.frames ?? []])
+    for (const x of list) ids.add(x.id)
   return ids
 }
 

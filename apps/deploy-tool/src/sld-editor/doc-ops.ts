@@ -138,7 +138,8 @@ export function moveSelection(doc: SldDoc, sel: SldSelection, dx: number, dy: nu
     }
   const endMoved = (e: SldWireEnd): boolean => ('bus' in e ? buses.has(e.bus) : nodes.has(e.node))
   for (const w of doc.wires)
-    if (w.vertices?.length && endMoved(w.from) && endMoved(w.to)) w.vertices = w.vertices.map(([x, y]) => [x + dx, y + dy])
+    if (w.vertices?.length && endMoved(w.from) && endMoved(w.to))
+      w.vertices = w.vertices.map(([x, y]) => [x + dx, y + dy])
 }
 
 /** 删除选中元素;连在被删节点 / 母线上的线、依附在被删节点上的标签一并删。绑定不动(没人引用的 pt.* 由问题清单提示) */
@@ -262,7 +263,9 @@ export function pasteFragment(
       id,
       from: remapEnd(w.from),
       to: remapEnd(w.to),
-      ...(w.vertices?.length ? { vertices: w.vertices.map(([x, y]): [number, number] => [x + offset, y + offset]) } : {}),
+      ...(w.vertices?.length
+        ? { vertices: w.vertices.map(([x, y]): [number, number] => [x + offset, y + offset]) }
+        : {}),
     })
     sel.wires.push(id)
   }
