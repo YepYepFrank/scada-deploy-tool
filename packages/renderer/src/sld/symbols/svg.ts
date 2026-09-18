@@ -42,6 +42,58 @@ export function rect(x: number, y: number, w: number, h: number, opts: SvgStroke
   return `<rect x="${x}" y="${y}" width="${w}" height="${h}" ${STROKE} fill="none"${opts.dashed ? DASH : ''}></rect>`
 }
 
+/** 实心矩形(简化开关的合位) */
+export function block(x: number, y: number, w: number, h: number): string {
+  int(x, y, w, h)
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" ${STROKE} fill="currentColor"></rect>`
+}
+
+export interface SvgShapeOptions extends SvgStrokeOptions {
+  /** 填实(箭头头部等);缺省空心 */
+  filled?: boolean
+}
+
+function pointList(points: Array<[number, number]>): string {
+  for (const [x, y] of points) int(x, y)
+  return points.map(([x, y]) => `${x},${y}`).join(' ')
+}
+
+/** 折线(不闭合):手车插头的 ∧ / ∨、开口箭头 */
+export function polyline(points: Array<[number, number]>, opts: SvgStrokeOptions = {}): string {
+  return `<polyline points="${pointList(points)}" ${STROKE} fill="none"${opts.dashed ? DASH : ''}></polyline>`
+}
+
+/** 多边形(闭合):三角形、箭头头部;filled 填 currentColor */
+export function polygon(points: Array<[number, number]>, opts: SvgShapeOptions = {}): string {
+  const fill = opts.filled ? 'currentColor' : 'none'
+  return `<polygon points="${pointList(points)}" ${STROKE} fill="${fill}"${opts.dashed ? DASH : ''}></polygon>`
+}
+
+/** 任意路径(不填充);d 里只许整数——弧线、正弦波这类 line / circle 拼不出来的形状用 */
+export function path(d: string, opts: SvgStrokeOptions = {}): string {
+  if (/\d\.\d/.test(d) || /[^MLHVQCAZ\d\s-]/i.test(d))
+    throw new Error(`图元路径只许整数坐标与 M/L/H/V/Q/C/A/Z,收到 "${d}"`)
+  return `<path d="${d}" ${STROKE} fill="none"${opts.dashed ? DASH : ''}></path>`
+}
+
+/** 圆弧:从 (x1, y1) 沿半径 r 的圆画到 (x2, y2);large = 走大弧,sweep = 顺时针 */
+export function arc(
+  x1: number,
+  y1: number,
+  r: number,
+  x2: number,
+  y2: number,
+  opts: SvgStrokeOptions & { large?: boolean; sweep?: boolean } = {}
+): string {
+  int(x1, y1, r, x2, y2)
+  return path(`M${x1} ${y1} A${r} ${r} 0 ${opts.large ? 1 : 0} ${opts.sweep ? 1 : 0} ${x2} ${y2}`, opts)
+}
+
+/** 接地符号:以 (cx, y) 为顶边中点的三条渐短横线,占高 10(接地开关、避雷器、带电显示器) */
+export function ground(cx: number, y: number): string {
+  return line(cx - 12, y, cx + 12, y) + line(cx - 8, y + 5, cx + 8, y + 5) + line(cx - 4, y + 10, cx + 4, y + 10)
+}
+
 /** 以 (cx, cy) 为中心、半边长 r 的叉(断路器的灭弧标记) */
 export function cross(cx: number, cy: number, r: number): string {
   return line(cx - r, cy - r, cx + r, cy + r) + line(cx + r, cy - r, cx - r, cy + r)

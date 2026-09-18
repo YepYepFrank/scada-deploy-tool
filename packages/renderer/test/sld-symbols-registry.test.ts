@@ -1,4 +1,4 @@
-/** T5.0 图元注册表:注册校验各条;三个桩图元合规(端口落栅格、片段只用 currentColor、坐标为整数)。 */
+/** T5.0 图元注册表:注册校验各条;内置图元合规(端口落栅格、片段只用 currentColor、坐标为整数)。 */
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   registerSldSymbol,
@@ -100,12 +100,13 @@ describe('图元文字约定', () => {
   })
 })
 
-describe('内置桩图元', () => {
+describe('内置图元', () => {
   it('registerBuiltinSldSymbols:全部通过校验,可重复调用', () => {
     registerBuiltinSldSymbols()
     registerBuiltinSldSymbols()
-    expect(listSldSymbols().map(s => s.id)).toEqual(['breaker', 'meter', 'junction'])
-    expect(builtinSldSymbols).toEqual([breakerSymbol, meterSymbol, junctionSymbol])
+    // T5.2 起内置图元是整套图元库(清单与逐项约定见 sld-symbols-library.test.ts);T5.0 的三个样板仍在其中
+    expect(listSldSymbols().map(s => s.id)).toEqual(builtinSldSymbols.map(s => s.id))
+    expect(builtinSldSymbols).toEqual(expect.arrayContaining([breakerSymbol, meterSymbol, junctionSymbol]))
     expect(new Set(builtinSldSymbols.map(s => s.id)).size).toBe(builtinSldSymbols.length)
   })
 
