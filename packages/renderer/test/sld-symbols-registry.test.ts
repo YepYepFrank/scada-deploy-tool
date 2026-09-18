@@ -98,6 +98,14 @@ describe('图元文字约定', () => {
       registerSldSymbol({ ...meterSymbol, id: 'bad-text', body: meterSymbol.body + '<text x="0" y="0">A</text>' })
     ).toThrow(/texts/)
   })
+
+  it('片段里带自闭合标签的图元注册时被拒', () => {
+    expect(() =>
+      registerSldSymbol({ ...meterSymbol, id: 'bad-close', body: '<line x1="0" y1="0" x2="10" y2="10" />' })
+    ).toThrow(/显式闭合/)
+    const stateBody = { open: '', closed: '<circle cx="5" cy="5" r="2"/>', unknown: ' ' }
+    expect(() => registerSldSymbol({ ...meterSymbol, id: 'bad-close-state', stateBody })).toThrow(/显式闭合/)
+  })
 })
 
 describe('内置图元', () => {

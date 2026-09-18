@@ -29,6 +29,9 @@ export function registerSldSymbol(def: SldSymbolDefinition): void {
   const fragments = [def.body, ...Object.values(def.stateBody ?? {})]
   if (fragments.some(f => /<text[\s>]/.test(f)))
     throw new Error(`图元 "${def.id}" 的 SVG 片段里不能有 <text>,文字请写 texts`)
+  // 自闭合标签经 v-html 塞进非 SVG 命名空间的宿主时会被 HTML 解析器套成父子(见 svg.ts),一律显式闭合
+  if (fragments.some(f => f.includes('/>')))
+    throw new Error(`图元 "${def.id}" 的 SVG 片段里不能有自闭合标签(/>),请显式闭合`)
   symbols.set(def.id, def)
 }
 
