@@ -9,6 +9,8 @@
  *   alarm      → subscribeAlarms                        → AlarmInfo[]
  *   const      → 直接注入
  *   ext        → ds.ext(query)(一次性;不订阅)        → SeriesValue[](按返回的序列名)
+ * 槽位规格 stamped 为 true 时(接线图动态槽位,计划 D6 ①),单个标量绑定(ts / attr / const)的值改给 { v, ts }:
+ *   ts 取数据点时间戳;attr 取 lastUpdateTs(数据源给不出则 Date.now());const 用 Date.now()。其余槽位不受影响。
  * 卸载时全部退订;退订次数 == 订阅次数由测试保证。
  */
 import type { DataSource, TsPoint, AlarmInfo, Unsubscribe, EntityRef } from '@grid/tb-client'
@@ -24,7 +26,11 @@ export interface SeriesValue {
   value?: SlotValue
 }
 
-export type SlotValue = number | string | boolean | null | SeriesValue | SeriesValue[] | AlarmInfo[] | unknown
+/** stamped 槽位的值:v 已按 valueType 整形,ts 为数据时间戳(毫秒)——过期判断用它,不用到达时间 */
+export type StampedValue = { v: unknown; ts: number }
+
+export type SlotValue =
+  number | string | boolean | null | SeriesValue | SeriesValue[] | AlarmInfo[] | StampedValue | unknown
 
 export interface ResolverHandle {
   /** 当前值:values[widgetId][slotName] */
@@ -47,6 +53,17 @@ export interface ResolverOptions {
 }
 
 const lastValue = (points: TsPoint[]): TsPoint['value'] => (points.length ? points[points.length - 1]!.value : null)
+
+/** 给值盖时间戳;ts 不是有限数(数据源没给)时退到当前时间 */
+const stamp = (v: unknown, ts: unknown): StampedValue => ({
+  v,
+  ts: typeof ts === 'number' && Number.isFinite(ts) ? ts : Date.now(),
+})
+/** stamped 槽位的 ts 推送:取最后一点的值与时间戳;空包与非 stamped 一样给 null */
+function stampedLast(points: TsPoint[], vt: SlotValueType | undefined): SlotValue {
+  const last = points[points.length - 1]
+  return last ? stamp(shapeScalar(last.value, vt), last.ts) : null
+}
 
 function shapeScalar(v: TsPoint['value'], vt: SlotValueType | undefined): SlotValue {
   if (v === null || v === undefined) return null
@@ -118,7 +135,7 @@ export function resolveBindings(
         const one = list[0]!
         switch (one.mode) {
           case 'const':
-            set(w.id, slot, one.value as SlotValue)
+            set(w.id, slot, spec?.stamped ? stamp(one.value, undefined) : (one.value as SlotValue))
             break
           case 'ts': {
             set(w.id, slot, null)
@@ -129,7 +146,14 @@ export function resolveBindings(
                   [one.key],
                   ups => {
                     const u = ups.find(x => x.key === one.key)
-                    if (u) set(w.id, slot, shapeScalar(lastValue(u.points), spec?.valueType))
+                    if (u)
+                      set(
+                        w.id,
+                        slot,
+                        spec?.stamped
+                          ? stampedLast(u.points, spec.valueType)
+                          : shapeScalar(lastValue(u.points), spec?.valueType)
+                      )
                   },
                   e => fail(w.id, slot, e)
                 )
@@ -149,7 +173,10 @@ export function resolveBindings(
                   [one.key],
                   ups => {
                     const u = ups.find(x => x.key === one.key)
-                    if (u) set(w.id, slot, shapeScalar(u.value as TsPoint['value'], spec?.valueType))
+                    if (u) {
+                      const v = shapeScalar(u.value as TsPoint['value'], spec?.valueType)
+                      set(w.id, slot, spec?.stamped ? stamp(v, u.ts) : v)
+                    }
                   },
                   e => fail(w.id, slot, e)
                 )

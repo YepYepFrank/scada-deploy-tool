@@ -3,12 +3,15 @@
  * 组件放大层(2026-09-16):把一个组件铺满整个视口再渲染一份。
  * - Teleport 到 body、position: fixed,不受模板缩放影响(--sr-scale 固定 1);根节点自带主题类,令牌照常生效;
  * - 用的是同一份 values / errors(按组件 id 共享的响应式状态),**不新建订阅**;关掉即卸载;
+ * - 组件抛的 widget-event 补上 widgetId / type 后原样上抛,由 ScadaPage / ScadaWidget 再抛给宿主;
  * - Esc / 右上角 ✕ 关闭;「浏览器全屏」按钮走 Fullscreen API(可选,浏览器不允许时只用覆盖层)。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { WidgetConfig } from './schema/page-config'
 import type { WidgetDefinition } from './schema/registry'
+import type { WidgetEventPayload } from './schema/scada-page'
 import type { SlotValue } from './binding-resolver'
+import { toWidgetEvent } from './widget-runtime'
 
 const props = defineProps<{
   config: WidgetConfig
@@ -19,7 +22,14 @@ const props = defineProps<{
   disabled?: boolean
   theme: string
 }>()
-const emit = defineEmits<{ (e: 'close'): void }>()
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'widget-event', payload: WidgetEventPayload): void
+}>()
+function onWidgetEvent(ev: unknown) {
+  const payload = toWidgetEvent(props.config, ev)
+  if (payload) emit('widget-event', payload)
+}
 
 const root = ref<HTMLElement | null>(null)
 const title = computed(() => {
@@ -87,7 +97,14 @@ onBeforeUnmount(() => {
       </div>
       <div class="sr-expand-body">
         <div class="sr-widget" :data-widget="config.id" :data-type="config.type">
-          <component :is="def.component" v-bind="widgetProps" :values="values" :errors="errors" :disabled="disabled" />
+          <component
+            :is="def.component"
+            v-bind="widgetProps"
+            :values="values"
+            :errors="errors"
+            :disabled="disabled"
+            @widget-event="onWidgetEvent"
+          />
         </div>
       </div>
     </div>

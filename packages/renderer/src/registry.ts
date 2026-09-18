@@ -1,6 +1,7 @@
 /**
  * 注册表:组件与模板的运行时登记 + 针对注册表的配置校验(契约 §9「注册表运行时」层)。
  * 契约层(JSON Schema)只管形状;这里管「template / type 存在、slot 在模板内、绑定槽位与 valueType / modes / multiple 相符」。
+ * 槽位先按静态 bindingSlots 的名字找,找不到再按 dynamicSlots 的前缀匹配(接线图的 `pt.<pointId>`)。
  */
 import type { PageConfig, WidgetConfig, Binding } from './schema/page-config'
 import type { WidgetDefinition, TemplateDefinition, BindingSlotSpec } from './schema/registry'
@@ -25,7 +26,39 @@ export function registerWidget(def: WidgetDefinition): void {
     if (names.has(s.name)) throw new Error(`widget "${def.type}" 绑定槽位 "${s.name}" 重复`)
     names.add(s.name)
   }
+  const prefixes = new Set<string>()
+  for (const d of def.dynamicSlots ?? []) {
+    if (!d.prefix) throw new Error(`widget "${def.type}" 动态槽位的 prefix 不能为空`)
+    if (prefixes.has(d.prefix)) throw new Error(`widget "${def.type}" 动态槽位前缀 "${d.prefix}" 重复`)
+    prefixes.add(d.prefix)
+    // 静态槽位同名优先,落进动态前缀里的静态名会让同一个名字有两种读法,直接拒绝
+    for (const n of names)
+      if (n.startsWith(d.prefix))
+        throw new Error(`widget "${def.type}" 动态槽位前缀 "${d.prefix}" 与静态槽位 "${n}" 冲突`)
+  }
   widgets_.set(def.type, def)
+}
+
+/**
+ * 查一个槽位名的规格:先静态 bindingSlots,再按 dynamicSlots 前缀(槽位名以 prefix 开头且长度大于 prefix;
+ * 多个前缀都匹配时取最长的)。动态匹配上时构造一个等价的 BindingSlotSpec(非必填、非多序列)。
+ */
+export function findSlotSpec(def: WidgetDefinition, name: string): BindingSlotSpec | undefined {
+  const fixed = def.bindingSlots.find(s => s.name === name)
+  if (fixed) return fixed
+  let hit: NonNullable<WidgetDefinition['dynamicSlots']>[number] | undefined
+  for (const d of def.dynamicSlots ?? []) {
+    if (name.length > d.prefix.length && name.startsWith(d.prefix) && (!hit || d.prefix.length > hit.prefix.length))
+      hit = d
+  }
+  if (!hit) return undefined
+  return {
+    name,
+    ...(hit.title !== undefined ? { title: hit.title } : {}),
+    valueType: hit.valueType,
+    ...(hit.modes ? { modes: hit.modes } : {}),
+    ...(hit.stamped ? { stamped: true } : {}),
+  }
 }
 
 export function registerTemplate(def: TemplateDefinition): void {
@@ -133,10 +166,10 @@ export function validateWidgetAgainstRegistry(w: WidgetConfig, tpl?: TemplateDef
 
 function validateBindings(w: WidgetConfig, def: WidgetDefinition, base: string): RegistryIssue[] {
   const issues: RegistryIssue[] = []
-  const specs = new Map(def.bindingSlots.map(s => [s.name, s]))
   for (const [name, b] of Object.entries(w.bindings)) {
     const p = `${base}/bindings/${name}`
-    const spec = specs.get(name)
+    // 静态槽位找不到时按动态前缀匹配;动态规格不带 multiple,下面「必须是单个对象」的检查自然生效
+    const spec = findSlotSpec(def, name)
     if (!spec) {
       issues.push({ level: 'warning', path: p, message: `组件 "${def.type}" 没有绑定槽位 "${name}",已忽略` })
       continue

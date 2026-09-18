@@ -9,11 +9,12 @@
  */
 
 import type { Component } from 'vue'
-import type { BindingMode } from './page-config'
+import type { BindingMode, WidgetConfig } from './page-config'
 
 /**
  * propsSchema 使用 JSON Schema draft-07 的一个子集,保证属性面板能无兜底地生成表单(计划 T3.3):
- * string / number(min,max,step) / boolean / enum / color(string + format:'color') / array<object>。
+ * string / number(min,max,step) / boolean / enum / color(string + format:'color') / array<object>,
+ * 外加一支不透明对象 object + format:'sld-doc'(接线图文档;面板不展开字段,画成「编辑接线图」按钮,接线图计划 D5)。
  * 这里只给出结构类型,不引入完整 JSON Schema 类型库。
  */
 export interface PropsSchema {
@@ -45,6 +46,7 @@ export type PropSchema =
     }
   | { type: 'boolean'; title?: string; description?: string; default?: boolean }
   | { type: 'array'; title?: string; description?: string; items: PropsSchema; minItems?: number; maxItems?: number }
+  | { type: 'object'; title?: string; description?: string; format: 'sld-doc' }
 
 /** 绑定槽位的值类型;渲染器据此把 Binding 的结果整形后交给组件。 */
 export type SlotValueType =
@@ -68,6 +70,22 @@ export interface BindingSlotSpec {
    * 由 registerWidget / <ScadaPage> 运行时校验(T0.1 回填 B2,2026-09-04)。
    */
   multiple?: boolean
+  /** true:标量值以 { v, ts } 形式交给组件(ts = 数据时间戳,毫秒);缺省 / false 只给值本身 */
+  stamped?: boolean
+}
+
+/**
+ * 动态绑定槽位(接线图计划 D2 / D5):槽位名不固定、按前缀匹配,如 sld 的 `pt.<pointId>`。
+ * 匹配规则:槽位名以 prefix 开头且长度大于 prefix;静态 bindingSlots 同名优先。动态槽位的绑定必须是单个对象(不支持数组)。
+ */
+export interface DynamicSlotSpec {
+  prefix: string
+  title?: string
+  valueType: SlotValueType
+  /** 允许的 Binding.mode;为空表示全部允许 */
+  modes?: BindingMode[]
+  /** true:值以 { v, ts } 形式交给组件(ts = 数据时间戳,毫秒) */
+  stamped?: boolean
 }
 
 /** 写操作槽位(二期);一期注册表里可声明但渲染器只渲染禁用态。 */
@@ -88,11 +106,16 @@ export interface WidgetDefinition<P extends Record<string, unknown> = Record<str
   component: Component
   propsSchema: PropsSchema
   bindingSlots: BindingSlotSpec[]
+  /** 按前缀匹配的动态槽位(可选);静态槽位找不到时才看这里 */
+  dynamicSlots?: DynamicSlotSpec[]
   actionSlots?: ActionSlotSpec[]
   /** props 默认值;工具新建组件时填入 */
   defaults?: Partial<P>
-  /** /dev 展示页与编辑器缩略图用的假数据:按 bindingSlots 名给值 */
-  sampleData?: () => Record<string, unknown>
+  /**
+   * /dev 展示页与编辑器缩略图用的假数据:按 bindingSlots 名给值。
+   * 设计态渲染时会把该组件的配置传进来(无参实现照常可用)——有动态槽位的组件据 `cfg.bindings` 的键出占位值。
+   */
+  sampleData?: (cfg?: WidgetConfig) => Record<string, unknown>
   /**
    * 旧 props 键名迁移(渲染前调用,返回新对象;输入不改)。用于组件改了属性名但 TB 上已发布的配置还是旧名——
    * 例:line 的 `style` → `chartStyle`(0.2.0)。编辑器 / 迁移器也应调用它把旧配置正规化。

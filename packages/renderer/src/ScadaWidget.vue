@@ -8,8 +8,9 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DataSource } from '@grid/tb-client'
 import type { WidgetConfig } from './schema/page-config'
+import type { WidgetEventPayload } from './schema/scada-page'
 import { getWidget, validateWidgetAgainstRegistry } from './registry'
-import { useBindingRuntime, widgetPropsOf } from './widget-runtime'
+import { toWidgetEvent, useBindingRuntime, widgetPropsOf } from './widget-runtime'
 import { DATA_SOURCE_KEY } from './provide'
 import WidgetExpand from './WidgetExpand.vue'
 
@@ -31,6 +32,8 @@ const emit = defineEmits<{
   (e: 'bindError', widgetId: string, slot: string, message: string): void
   /** 放大 / 关闭:放大时给组件 id,关闭时 null */
   (e: 'expand', widgetId: string | null): void
+  /** 组件事件透传(与 <ScadaPage> 同):组件内 emit('widget-event', { name, detail }),补上 widgetId / type 抛给宿主 */
+  (e: 'widget-event', payload: WidgetEventPayload): void
 }>()
 const expanded = ref(false)
 function expand(on: boolean) {
@@ -70,6 +73,11 @@ watch(() => props.design, setup)
 onBeforeUnmount(rt.teardown)
 
 const widgetProps = computed(() => widgetPropsOf(props.config))
+/** 组件抛的 widget-event:补 widgetId / type 后向外抛;形状不对的忽略 */
+function onWidgetEvent(ev: unknown) {
+  const payload = toWidgetEvent(props.config, ev)
+  if (payload) emit('widget-event', payload)
+}
 const themeClass = computed(() => `sr-theme-${props.theme ?? 'default'}`)
 
 defineExpose({ issues, values: rt.values, bindErrors: rt.bindErrors })
@@ -88,6 +96,7 @@ defineExpose({ issues, values: rt.values, bindErrors: rt.bindErrors })
         :values="rt.values[config.id] ?? {}"
         :errors="rt.bindErrors[config.id] ?? {}"
         :disabled="!!config.actions"
+        @widget-event="onWidgetEvent"
       />
       <button
         v-if="expandable && !design"
@@ -111,6 +120,7 @@ defineExpose({ issues, values: rt.values, bindErrors: rt.bindErrors })
       :disabled="!!config.actions"
       :theme="theme ?? 'default'"
       @close="expand(false)"
+      @widget-event="emit('widget-event', $event)"
     />
   </div>
 </template>

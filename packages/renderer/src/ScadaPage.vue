@@ -8,10 +8,10 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef
 import type { ConnectionStatus, DataSource } from '@grid/tb-client'
 import type { PageConfig, WidgetConfig } from './schema/page-config'
 import { SCHEMA_VERSION } from './schema/page-config'
-import type { ScadaPageProps } from './schema/scada-page'
+import type { ScadaPageProps, WidgetEventPayload } from './schema/scada-page'
 import type { TemplateDefinition, WidgetDefinition } from './schema/registry'
 import { getTemplate, getWidget, validateAgainstRegistry, type RegistryIssue } from './registry'
-import { useBindingRuntime, widgetPropsOf } from './widget-runtime'
+import { toWidgetEvent, useBindingRuntime, widgetPropsOf } from './widget-runtime'
 import { computeScale, rootStyle, slotStyle, wrapperStyle } from './layout/template-style'
 import { DATA_SOURCE_KEY } from './provide'
 import WidgetExpand from './WidgetExpand.vue'
@@ -24,6 +24,8 @@ const emit = defineEmits<{
   (e: 'bindError', widgetId: string, slot: string, message: string): void
   /** 组件放大 / 关闭(2026-09-16):放大时给组件 id,关闭时 null */
   (e: 'expand', widgetId: string | null): void
+  /** 组件事件透传:组件内 emit('widget-event', { name, detail }),补上 widgetId / type 抛给宿主(放大层里触发的也走这里) */
+  (e: 'widget-event', payload: WidgetEventPayload): void
 }>()
 const themeName = computed(() => props.theme ?? props.config.theme ?? 'default')
 
@@ -90,6 +92,12 @@ const placed = computed<Placed[]>(() => {
 
 /** 组件 props:defaults + 配置(先过组件的 migrateProps 把旧键名正规化) */
 const widgetProps = (w: Placed['widgets'][number]) => widgetPropsOf(w.cfg)
+
+/** 组件抛的 widget-event:补 widgetId / type 后向外抛;形状不对的忽略 */
+function onWidgetEvent(cfg: WidgetConfig, ev: unknown) {
+  const payload = toWidgetEvent(cfg, ev)
+  if (payload) emit('widget-event', payload)
+}
 
 // ---------- 组件放大(2026-09-16):右上角按钮 → 铺满视口再渲染一份,共用 values / bindErrors,不新建订阅 ----------
 const expandedId = ref<string | null>(null)
@@ -236,6 +244,7 @@ defineExpose({ issues, status, values, bindErrors })
                   :values="values[w.cfg.id] ?? {}"
                   :errors="bindErrors[w.cfg.id] ?? {}"
                   :disabled="!!w.cfg.actions"
+                  @widget-event="onWidgetEvent(w.cfg, $event)"
                 />
                 <button
                   v-if="expandable && !design"
@@ -276,6 +285,7 @@ defineExpose({ issues, status, values, bindErrors })
         :disabled="!!expandedW.cfg.actions"
         :theme="themeName"
         @close="expand(null)"
+        @widget-event="emit('widget-event', $event)"
       />
     </template>
   </div>

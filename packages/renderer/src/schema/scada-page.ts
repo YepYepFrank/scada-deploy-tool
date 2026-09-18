@@ -29,10 +29,29 @@ export interface ScadaPageProps {
   expandable?: boolean
 }
 
+/** 组件内 `emit('widget-event', { name, detail? })` 的载荷(组件自己定义 name,如接线图的 node-click) */
+export interface WidgetEventInput {
+  name: string
+  detail?: unknown
+}
+
+/** 渲染器向宿主抛出的 widget-event 载荷:在组件给的 name / detail 上补组件 id 与类型 */
+export interface WidgetEventPayload {
+  widgetId: string
+  type: string
+  name: string
+  detail?: unknown
+}
+
 /** 渲染器根节点向外抛出的事件。 */
 export interface ScadaPageEmits {
   /** 配置校验失败(schemaVersion 不符、未知组件 / 模板、绑定形状错) */
   (e: 'invalid', issues: { path: string; message: string }[]): void
   /** 连接状态变化(即使 showStatus=false 也会抛,宿主可自行呈现) */
   (e: 'status', status: 'connecting' | 'live' | 'offline'): void
+  /**
+   * 组件事件透传(接线图计划 D6 ②):组件内 `emit('widget-event', { name, detail })`,这里补上 widgetId / type 原样抛给宿主;
+   * 放大层里触发的也从这里出去。渲染器不解释 name,含义由组件约定(如 sld 的 node-click)。
+   */
+  (e: 'widget-event', payload: WidgetEventPayload): void
 }
