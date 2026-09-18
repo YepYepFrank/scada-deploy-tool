@@ -25,6 +25,10 @@ export function registerSldSymbol(def: SldSymbolDefinition): void {
       if (typeof def.stateBody?.[s] !== 'string')
         throw new Error(`图元 "${def.id}" 是开关(conduct = 'switch'),stateBody 必须三态齐全,缺 "${s}"`)
   }
+  // 文字写进 body 会跟着旋转躺倒、镜像反字:一律写 texts(<SldSymbol> 单独正向画)
+  const fragments = [def.body, ...Object.values(def.stateBody ?? {})]
+  if (fragments.some(f => /<text[\s>]/.test(f)))
+    throw new Error(`图元 "${def.id}" 的 SVG 片段里不能有 <text>,文字请写 texts`)
   symbols.set(def.id, def)
 }
 

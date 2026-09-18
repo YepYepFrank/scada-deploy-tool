@@ -10,7 +10,13 @@
  * 3. 图元只用 `currentColor` 上色,颜色由运行时按带电 / 电压等级 / 告警决定。
  *
  * 本文件在一个波次内只读;要改先回主会话。
+ *
+ * 2026-09-18 修订(T5.0 收尾,ADR-005「契约修订」):节点坐标语义、栅格固定 10、母线接点改整数距离 d、
+ * 图元文字保持正向、标签颜色与枚举文字、分组框 frames。
  */
+
+/** 栅格:v1 固定 10(图元按 10 画;doc.canvas.grid 保留字段但必须等于它,validateSldDoc 会报) */
+export const SLD_GRID = 10
 
 /** 文档版本;破坏性变更时 +1,并在 migrateSldDoc 里补迁移。 */
 export const SLD_DOC_VERSION = 1 as const
@@ -46,7 +52,7 @@ export interface SldNode {
   id: string
   /** 图元 id,在图元注册表里查 */
   symbol: string
-  /** 图元包围盒左上角(未旋转时),画布坐标,落在栅格上 */
+  /** **旋转 / 镜像之后**画面上看到的包围盒左上角,画布坐标,落在栅格上(旋转不会让节点离开栅格,见 geometry.nodeBox) */
   x: number
   y: number
   rot: SldRotation
@@ -55,7 +61,7 @@ export interface SldNode {
   /** 显示名(如「1# 进线柜」) */
   name?: string
   entity?: SldEntityName
-  /** conduct = 'switch' 的图元用;缺省视为常合 */
+  /** conduct = 'switch' 的图元用;**没配 state 视为常合**(resolveSwitchState(undefined) = 'closed',energize 同) */
   state?: SldStateRef
   /** 电源点:带电计算的起点;kv 为该点电压等级(着色用) */
   source?: { kv?: number }
@@ -63,7 +69,7 @@ export interface SldNode {
   portKv?: Record<string, number>
 }
 
-/** 母线:水平或垂直的一段粗线,线上任意位置可接线。 */
+/** 母线:水平或垂直的一段粗线,线上任意栅格位置可接线。约定 (x1,y1) 是左端 / 上端。 */
 export interface SldBus {
   id: string
   x1: number
@@ -75,8 +81,12 @@ export interface SldBus {
   kv?: number
 }
 
-/** 连线端点:接在节点端口上,或接在母线的参数位置 t ∈ [0,1](x1,y1 → x2,y2)。 */
-export type SldWireEnd = { node: string; port: string } | { bus: string; t: number }
+/**
+ * 连线端点:接在节点端口上,或接在母线上距 (x1,y1) 为 d 的位置(像素,栅格整数倍,0 ≤ d ≤ 母线长)。
+ * 用整数距离而不是比例:接点恒落栅格、没有浮点漂移;母线从 (x2,y2) 端拉伸时接点不动,
+ * 从 (x1,y1) 端拉伸时由编辑器给该母线上的 d 统一加减位移(保持画面位置)。
+ */
+export type SldWireEnd = { node: string; port: string } | { bus: string; d: number }
 
 export interface SldWire {
   id: string
@@ -91,10 +101,24 @@ export interface SldValueFormat {
   unit?: string
   /** 显示值 = 原值 × scale */
   scale?: number
+  /** 枚举文字:值按 String() 命中就显示对应文字(如 `{ '0': '停止', '1': '制冷' }`),命中后不再套 digits / unit */
+  map?: Record<string, string>
 }
 
+/** 标签颜色:缺省随主题;相色约定 a 黄 / b 绿 / c 红(现有一次图的习惯),也可直接给颜色值 */
+export type SldLabelColor = 'a' | 'b' | 'c' | string
+
 export type SldLabel =
-  | { id: string; x: number; y: number; attach?: string; kind: 'text'; text: string; size?: number }
+  | {
+      id: string
+      x: number
+      y: number
+      attach?: string
+      kind: 'text'
+      text: string
+      size?: number
+      color?: SldLabelColor
+    }
   | {
       id: string
       x: number
@@ -107,7 +131,18 @@ export type SldLabel =
       title?: string
       format?: SldValueFormat
       size?: number
+      color?: SldLabelColor
     }
+
+/** 分组框:虚线矩形 + 标题(柜体 / 系统分区,如「LP3」「储能系统」);纯装饰,不参与连通与带电计算 */
+export interface SldFrame {
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  title?: string
+}
 
 export interface SldDoc {
   v: typeof SLD_DOC_VERSION
@@ -118,6 +153,8 @@ export interface SldDoc {
   buses: SldBus[]
   wires: SldWire[]
   labels: SldLabel[]
+  /** 可选:旧图没有这个字段 */
+  frames?: SldFrame[]
 }
 
 /* ───────────── 图元定义 ───────────── */
@@ -145,6 +182,15 @@ export type SldConduct = 'always' | 'switch' | 'transformer' | 'none'
 export type SldSymbolCategory =
   'switch' | 'transformer' | 'measure' | 'source' | 'load' | 'storage' | 'protect' | 'connect'
 
+/** 图元里的文字(如电表的「Wh」):位置跟着图元镜像 / 旋转,**字形保持正向**,所以不写进 body */
+export interface SldSymbolText {
+  /** 文字中心,图元局部坐标 */
+  x: number
+  y: number
+  text: string
+  size?: number
+}
+
 export interface SldSymbolDefinition {
   id: string
   name: string
@@ -156,11 +202,15 @@ export interface SldSymbolDefinition {
   conduct: SldConduct
   /** 拖进画布时默认标为电源点(电网电源、发电机、光伏…) */
   defaultSource?: boolean
-  /** SVG 片段(不含外层 <svg> / <g>),局部坐标;只用 currentColor(约定 3) */
+  /** SVG 片段(不含外层 <svg> / <g>),局部坐标;只用 currentColor(约定 3);**不放文字**(文字写 texts) */
   body: string
+  texts?: SldSymbolText[]
   /** 随开关状态追加的片段(如刀闸的动触头);conduct = 'switch' 的图元必须三态齐全 */
   stateBody?: Record<SldSwitchState, string>
-  /** 数值标签的默认落点(相对包围盒左上角),从设备树拖入时依次使用 */
+  /**
+   * 数值标签的默认落点,从设备树拖入时依次使用。图元局部坐标(rot = 0、未镜像时相对包围盒左上角),
+   * 落点按与端口相同的规则变换;标签文字本身不旋转,左对齐、垂直居中。
+   */
   labelSlots?: Array<{ dx: number; dy: number }>
 }
 
@@ -214,6 +264,8 @@ export interface SldIssue {
     | 'unknown-point-owner'
     | 'no-source'
     | 'bad-version'
+    | 'bad-grid'
+    | 'bus-end-out-of-range'
   message: string
 }
 
@@ -226,4 +278,5 @@ export interface SldSelection {
   buses: string[]
   wires: string[]
   labels: string[]
+  frames?: string[]
 }

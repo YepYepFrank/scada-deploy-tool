@@ -46,13 +46,23 @@ describe('<SldSymbol>', () => {
 
   it('旋转 / 镜像:transform 与 geometry 同一套规则(旋转后包围盒左上角仍在原点)', async () => {
     const w = mount(SldSymbol, { props: { symbol: 'breaker' } })
-    expect(w.attributes('transform')).toBeUndefined()
+    const tf = () => w.find('.sr-sld-symbol-shape').attributes('transform')
+    expect(tf()).toBeUndefined()
     await w.setProps({ rot: 90 })
-    expect(w.attributes('transform')).toBe('translate(60 0) rotate(90)')
+    expect(tf()).toBe('translate(60 0) rotate(90)')
     await w.setProps({ rot: 180, flip: true })
-    expect(w.attributes('transform')).toBe('translate(40 60) rotate(180) translate(40 0) scale(-1 1)')
+    expect(tf()).toBe('translate(40 60) rotate(180) translate(40 0) scale(-1 1)')
     await w.setProps({ rot: 270, flip: false })
-    expect(w.attributes('transform')).toBe('translate(0 40) rotate(270)')
+    expect(tf()).toBe('translate(0 40) rotate(270)')
+  })
+
+  it('图元文字不进旋转的 <g>:位置跟着转,字形保持正向', async () => {
+    const w = mount(SldSymbol, { props: { symbol: 'meter', rot: 90, flip: true } })
+    const t = w.find('text.sr-sld-symbol-text')
+    expect(t.text()).toBe('Wh')
+    expect(t.attributes('transform')).toBeUndefined()
+    expect(w.find('.sr-sld-symbol-shape text').exists()).toBe(false)
+    expect([t.attributes('x'), t.attributes('y')]).toEqual(['20', '20'])
   })
 
   it('未知图元:带「?」的虚线框,不旋转', () => {
@@ -61,7 +71,7 @@ describe('<SldSymbol>', () => {
     expect(w.text()).toBe('?')
     expect(w.html()).toContain('stroke-dasharray')
     expect(w.find('.sr-sld-symbol-state').exists()).toBe(false)
-    expect(w.attributes('transform')).toBeUndefined()
+    expect(w.find('.sr-sld-symbol-shape').attributes('transform')).toBeUndefined()
   })
 
   it('不写颜色:渲染结果里只有 currentColor / none', () => {
@@ -81,7 +91,7 @@ describe('<SldSymbolBox>', () => {
 
     await w.setProps({ rot: 90 })
     expect(w.attributes('viewBox')).toBe('0 0 60 40')
-    expect(w.find('g.sr-sld-symbol').attributes('transform')).toBe('translate(60 0) rotate(90)')
+    expect(w.find('g.sr-sld-symbol-shape').attributes('transform')).toBe('translate(60 0) rotate(90)')
   })
 
   it('未知图元:40×40 占位', () => {

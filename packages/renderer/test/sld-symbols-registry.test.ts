@@ -92,6 +92,14 @@ describe('registerSldSymbol 校验', () => {
   })
 })
 
+describe('图元文字约定', () => {
+  it('片段里带 <text> 的图元注册时被拒', () => {
+    expect(() =>
+      registerSldSymbol({ ...meterSymbol, id: 'bad-text', body: meterSymbol.body + '<text x="0" y="0">A</text>' })
+    ).toThrow(/texts/)
+  })
+})
+
 describe('内置桩图元', () => {
   it('registerBuiltinSldSymbols:全部通过校验,可重复调用', () => {
     registerBuiltinSldSymbols()
@@ -109,7 +117,9 @@ describe('内置桩图元', () => {
     ])
     expect(meterSymbol).toMatchObject({ conduct: 'always', w: 40, h: 40 })
     expect(meterSymbol.labelSlots).toHaveLength(3)
-    expect(meterSymbol.body).toContain('>Wh<')
+    // 文字不写进 body(会跟着旋转躺倒 / 镜像反字),写 texts
+    expect(meterSymbol.body).not.toContain('<text')
+    expect(meterSymbol.texts).toEqual([{ x: 20, y: 20, text: 'Wh', size: 12 }])
     expect(junctionSymbol).toMatchObject({ conduct: 'always', w: 20, h: 20 })
     expect(junctionSymbol.ports.map(p => p.dir).sort()).toEqual(['e', 'n', 's', 'w'])
   })

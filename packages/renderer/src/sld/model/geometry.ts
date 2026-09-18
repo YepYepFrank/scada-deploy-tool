@@ -50,6 +50,14 @@ function transformDir(dir: SldPortDir, rot: SldRotation, flip: boolean): SldPort
   return d
 }
 
+/**
+ * 图元局部坐标里的一个点 → 镜像 + 旋转之后的局部坐标(与端口同一套规则)。
+ * 图元文字(texts)、数值标签默认落点(labelSlots)用它定位:位置跟着转,文字本身不转。
+ */
+export function symbolPoint(def: SldSymbolDefinition, rot: SldRotation, flip: boolean, x: number, y: number): SldPoint {
+  return transformLocal(def, rot, flip, x, y)
+}
+
 /** 图元旋转后的包围盒尺寸(90 / 270 宽高互换) */
 export function symbolBoxSize(def: SldSymbolDefinition, rot: SldRotation = 0): { w: number; h: number } {
   return rot === 90 || rot === 270 ? { w: def.h, h: def.w } : { w: def.w, h: def.h }
@@ -91,21 +99,28 @@ export function nodeBox(node: SldNode, def: SldSymbolDefinition): { x: number; y
   return { x: node.x, y: node.y, ...symbolBoxSize(def, node.rot) }
 }
 
-const clamp01 = (t: number): number => (t > 1 ? 1 : t > 0 ? t : 0) // NaN → 0
+/** 母线长度(像素);母线约定水平或垂直,斜的(validateSldDoc 会报)按欧氏长度算 */
+export function busLength(bus: SldBus): number {
+  return Math.round(Math.hypot(bus.x2 - bus.x1, bus.y2 - bus.y1))
+}
 
-/** 母线上参数 t ∈ [0,1] 处的点(t 越界夹到两端;画布坐标一律取整像素,免得浮点误差让共线判断落空) */
-export function busPoint(bus: SldBus, t: number): SldPoint {
-  const k = clamp01(t)
+const clampD = (d: number, len: number): number => (d > len ? len : d > 0 ? d : 0) // NaN → 0
+
+/** 母线上距 (x1,y1) 为 d 像素处的点(d 越界夹到两端;结果取整像素,免得浮点误差让共线判断落空) */
+export function busPoint(bus: SldBus, d: number): SldPoint {
+  const len = busLength(bus)
+  if (len === 0) return { x: bus.x1, y: bus.y1 }
+  const k = clampD(d, len) / len
   return { x: Math.round(bus.x1 + (bus.x2 - bus.x1) * k), y: Math.round(bus.y1 + (bus.y2 - bus.y1) * k) }
 }
 
-/** 离 p 最近的母线参数 t(夹到 [0,1]) */
-export function busParam(bus: SldBus, p: SldPoint): number {
-  const dx = bus.x2 - bus.x1
-  const dy = bus.y2 - bus.y1
-  const len2 = dx * dx + dy * dy
-  if (len2 === 0) return 0
-  return clamp01(((p.x - bus.x1) * dx + (p.y - bus.y1) * dy) / len2)
+/** 离 p 最近的母线位置 d(距 (x1,y1) 的像素数,夹到 [0, 母线长],并吸附到栅格 grid;grid ≤ 0 不吸附) */
+export function busOffset(bus: SldBus, p: SldPoint, grid = 10): number {
+  const len = busLength(bus)
+  if (len === 0) return 0
+  const raw = ((p.x - bus.x1) * (bus.x2 - bus.x1) + (p.y - bus.y1) * (bus.y2 - bus.y1)) / len
+  const snapped = grid > 0 ? Math.round(raw / grid) * grid : raw
+  return clampD(snapped, len)
 }
 
 /** 连线端点解析结果:坐标 + 出线朝向(母线端的朝向要等知道另一端在哪才能定) */
@@ -118,7 +133,7 @@ interface ResolvedEnd {
 function resolveEnd(doc: SldDoc, end: SldWireEnd, symbols: SldSymbolLookup): ResolvedEnd | undefined {
   if ('bus' in end) {
     const bus = doc.buses.find(b => b.id === end.bus)
-    return bus ? { p: busPoint(bus, end.t), bus } : undefined
+    return bus ? { p: busPoint(bus, end.d), bus } : undefined
   }
   const node = doc.nodes.find(n => n.id === end.node)
   const def = node && symbols(node.symbol)
@@ -128,7 +143,7 @@ function resolveEnd(doc: SldDoc, end: SldWireEnd, symbols: SldSymbolLookup): Res
 }
 
 /** 母线端的出线朝向:垂直于母线、指向 other 所在一侧;other 正好落在母线所在直线上则没有朝向(不出短线) */
-function busDirection(bus: SldBus, at: SldPoint, other: SldPoint): SldPortDir | undefined {
+export function busDirection(bus: SldBus, at: SldPoint, other: SldPoint): SldPortDir | undefined {
   // 斜母线(validateSldDoc 会报)按主方向当水平 / 垂直处理
   const horizontal = Math.abs(bus.x2 - bus.x1) >= Math.abs(bus.y2 - bus.y1)
   if (horizontal) return other.y > at.y ? 's' : other.y < at.y ? 'n' : undefined
@@ -177,11 +192,25 @@ export function wirePoints(doc: SldDoc, wire: SldWire, symbols: SldSymbolLookup)
   const a = from.p
   const b = to.p
   if (wire.vertices?.length) return [a, ...wire.vertices.map(([x, y]) => ({ x, y })), b]
-  if (a.x === b.x || a.y === b.y) return simplify([a, b])
-
-  const grid = doc.canvas.grid > 0 ? doc.canvas.grid : FALLBACK_GRID
   const da = from.bus ? busDirection(from.bus, a, b) : from.dir
   const db = to.bus ? busDirection(to.bus, b, a) : to.dir
+  return routeOrthogonal(a, da, b, db, doc.canvas.grid)
+}
+
+/**
+ * 缺省正交走线的纯函数:两端坐标 + 出线朝向 → 完整折线(含两端)。
+ * 单独导出是为了让编辑器的 X6 自定义 router 调**同一个**函数——编辑器里看到的线必须和发布后运行时画的一样
+ * (Spike A 结论,ADR-005)。朝向给 undefined 表示该端没有出线方向(落在母线所在直线上的特殊情况)。
+ */
+export function routeOrthogonal(
+  a: SldPoint,
+  da: SldPortDir | undefined,
+  b: SldPoint,
+  db: SldPortDir | undefined,
+  gridSize: number = FALLBACK_GRID
+): SldPoint[] {
+  if (a.x === b.x || a.y === b.y) return simplify([a, b])
+  const grid = gridSize > 0 ? gridSize : FALLBACK_GRID
   const step = (p: SldPoint, d: SldPortDir | undefined): SldPoint =>
     d ? { x: p.x + DIR_VEC[d][0] * grid, y: p.y + DIR_VEC[d][1] * grid } : p
   const a1 = step(a, da)

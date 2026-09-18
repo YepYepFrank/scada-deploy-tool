@@ -29,7 +29,7 @@ const doc: SldDoc = {
   ],
   buses: [{ id: 'b1', x1: 40, y1: 40, x2: 360, y2: 40 }],
   wires: [
-    { id: 'w1', from: { bus: 'b1', t: 0.25 }, to: { node: 'qf1', port: 'a' } },
+    { id: 'w1', from: { bus: 'b1', d: 80 }, to: { node: 'qf1', port: 'a' } },
     { id: 'w2', from: { node: 'qf1', port: 'b' }, to: { node: 'm1', port: 'a' } },
   ],
   labels: [

@@ -10,7 +10,8 @@ import {
   symbolBoxSize,
   symbolTransform,
   busPoint,
-  busParam,
+  busOffset,
+  busLength,
   wirePoints,
 } from '../src/sld'
 import type {
@@ -116,33 +117,41 @@ describe('portPosition / portDirection / nodeBox', () => {
   })
 })
 
-describe('busPoint / busParam', () => {
+describe('busPoint / busOffset / busLength', () => {
   const h: SldBus = { id: 'b1', x1: 100, y1: 50, x2: 500, y2: 50 }
-  const v: SldBus = { id: 'b2', x1: 80, y1: 400, x2: 80, y2: 100 } // 反向:从下往上
+  const v: SldBus = { id: 'b2', x1: 80, y1: 100, x2: 80, y2: 400 }
 
-  it('取点', () => {
+  it('按距 (x1,y1) 的像素数取点;长度', () => {
+    expect(busLength(h)).toBe(400)
+    expect(busLength(v)).toBe(300)
     expect(busPoint(h, 0)).toEqual({ x: 100, y: 50 })
-    expect(busPoint(h, 0.25)).toEqual({ x: 200, y: 50 })
-    expect(busPoint(h, 1)).toEqual({ x: 500, y: 50 })
-    expect(busPoint(v, 0.5)).toEqual({ x: 80, y: 250 })
+    expect(busPoint(h, 100)).toEqual({ x: 200, y: 50 })
+    expect(busPoint(h, 400)).toEqual({ x: 500, y: 50 })
+    expect(busPoint(v, 150)).toEqual({ x: 80, y: 250 })
   })
 
-  it('互逆', () => {
-    for (const bus of [h, v])
-      for (const t of [0, 0.1, 0.3, 0.5, 0.75, 1]) expect(busParam(bus, busPoint(bus, t))).toBeCloseTo(t, 10)
-    // 0.3 这类小数乘回去有浮点误差,取点结果仍是整像素
-    expect(busPoint(h, busParam(h, { x: 220, y: 50 }))).toEqual({ x: 220, y: 50 })
+  it('busOffset 与 busPoint 互逆(栅格点上)', () => {
+    for (const bus of [h, v]) for (const d of [0, 10, 120, 300]) expect(busOffset(bus, busPoint(bus, d))).toBe(d)
+    expect(busPoint(h, busOffset(h, { x: 220, y: 50 }))).toEqual({ x: 220, y: 50 })
   })
 
-  it('夹取:线外的点投影到线上,越界夹到两端', () => {
-    expect(busParam(h, { x: 300, y: 999 })).toBeCloseTo(0.5, 10)
-    expect(busParam(h, { x: -50, y: 50 })).toBe(0)
-    expect(busParam(h, { x: 9999, y: 0 })).toBe(1)
-    expect(busParam(v, { x: 0, y: 1000 })).toBe(0)
+  it('取垂足、吸附栅格、越界夹取', () => {
+    expect(busOffset(h, { x: 300, y: 999 })).toBe(200)
+    expect(busOffset(h, { x: 304, y: 50 })).toBe(200)
+    expect(busOffset(h, { x: 306, y: 50 })).toBe(210)
+    expect(busOffset(h, { x: 306, y: 50 }, 0)).toBe(206)
+    expect(busOffset(h, { x: -50, y: 50 })).toBe(0)
+    expect(busOffset(h, { x: 9999, y: 0 })).toBe(400)
+    expect(busOffset(v, { x: 0, y: 1000 })).toBe(300)
     expect(busPoint(h, -1)).toEqual({ x: 100, y: 50 })
-    expect(busPoint(h, 2)).toEqual({ x: 500, y: 50 })
-    // 零长度母线不除零
-    expect(busParam({ id: 'z', x1: 10, y1: 10, x2: 10, y2: 10 }, { x: 50, y: 50 })).toBe(0)
+    expect(busPoint(h, 9999)).toEqual({ x: 500, y: 50 })
+    expect(busPoint(h, NaN)).toEqual({ x: 100, y: 50 })
+  })
+
+  it('零长度母线不除零', () => {
+    const z: SldBus = { id: 'z', x1: 10, y1: 10, x2: 10, y2: 10 }
+    expect(busOffset(z, { x: 50, y: 50 })).toBe(0)
+    expect(busPoint(z, 30)).toEqual({ x: 10, y: 10 })
   })
 })
 
@@ -223,8 +232,8 @@ describe('wirePoints', () => {
 
   it('母线端:朝向垂直于母线、指向另一端所在一侧', () => {
     const bus: SldBus = { id: 'bus', x1: 0, y1: 50, x2: 400, y2: 50 }
-    const down: SldWire = { id: 'w1', from: { bus: 'bus', t: 0.5 }, to: { node: 'n1', port: 'a' } }
-    const up: SldWire = { id: 'w2', from: { node: 'n0', port: 'b' }, to: { bus: 'bus', t: 0.75 } }
+    const down: SldWire = { id: 'w1', from: { bus: 'bus', d: 200 }, to: { node: 'n1', port: 'a' } }
+    const up: SldWire = { id: 'w2', from: { node: 'n0', port: 'b' }, to: { bus: 'bus', d: 300 } }
     const d = doc([node('n1', 100, 100), node('n0', 100, -100)], [down, up], [bus])
     // 节点在母线下方:从 (200, 50) 向下出线
     const p1 = wirePoints(d, down, lookup)!
@@ -243,7 +252,7 @@ describe('wirePoints', () => {
     expect(p2[p2.length - 2]!.y).toBeLessThan(50)
     expectOrthogonal(p2)
     // 正对着母线的端口:一条直线
-    const straight: SldWire = { id: 'w3', from: { bus: 'bus', t: 0.3 }, to: { node: 'n1', port: 'a' } }
+    const straight: SldWire = { id: 'w3', from: { bus: 'bus', d: 120 }, to: { node: 'n1', port: 'a' } }
     expect(xy(wirePoints(d, straight, lookup))).toEqual([
       [120, 50],
       [120, 100],
@@ -256,7 +265,7 @@ describe('wirePoints', () => {
     const bad: SldWire['to'][] = [
       { node: 'ghost', port: 'a' },
       { node: 'n1', port: 'zz' },
-      { bus: 'ghost', t: 0.5 },
+      { bus: 'ghost', d: 200 },
       { node: 'n9', port: 'a' },
     ]
     for (const to of bad) {

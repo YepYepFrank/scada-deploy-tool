@@ -1,7 +1,7 @@
 import type { SldSymbolDefinition } from '../model/types'
-import { circle, line, text } from './svg'
+import { circle, line } from './svg'
 
-/** 电表(串在回路里,常通):圆圈里写 Wh;右侧纵向给 3 个数值标签落点,从设备树拖测点进来时依次使用。 */
+/** 电表(串在回路里,常通):圆圈里写 Wh(写在 texts,旋转 / 镜像时字保持正向);右侧纵向给 3 个数值标签落点,从设备树拖测点进来时依次使用。 */
 export const meterSymbol: SldSymbolDefinition = {
   id: 'meter',
   name: '电表',
@@ -13,7 +13,8 @@ export const meterSymbol: SldSymbolDefinition = {
     { id: 'b', x: 20, y: 40, dir: 's' },
   ],
   conduct: 'always',
-  body: line(20, 0, 20, 6) + circle(20, 20, 14) + text(20, 20, 'Wh') + line(20, 34, 20, 40),
+  body: line(20, 0, 20, 6) + circle(20, 20, 14) + line(20, 34, 20, 40),
+  texts: [{ x: 20, y: 20, text: 'Wh', size: 12 }],
   labelSlots: [
     { dx: 50, dy: 0 },
     { dx: 50, dy: 20 },

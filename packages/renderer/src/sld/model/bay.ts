@@ -22,7 +22,7 @@ export interface DuplicateBayResult {
 
 /**
  * 输入不改。选择集里的节点 / 连线 / 标签整体复制 count 份;连线另一端在选择集外的(通常是母线),
- * 新连线接到同一条母线上并按位移换算 t(越界则夹到 [0,1])。所有新 id 保证在 doc 内唯一。
+ * 新连线接到同一条母线上并按位移换算 d(越界则夹到母线两端)。所有新 id 保证在 doc 内唯一。
  */
 export function duplicateBay(
   _doc: SldDoc,

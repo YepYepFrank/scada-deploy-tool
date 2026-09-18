@@ -10,7 +10,7 @@
  */
 import { computed } from 'vue'
 import type { SldRotation, SldSwitchState } from './model/types'
-import { symbolTransform } from './model/geometry'
+import { symbolPoint, symbolTransform } from './model/geometry'
 import { getSldSymbol } from './symbols/registry'
 import { unknownSldSymbol } from './symbols/placeholder'
 
@@ -29,6 +29,14 @@ const props = withDefaults(
 const def = computed(() => getSldSymbol(props.symbol))
 const shown = computed(() => def.value ?? unknownSldSymbol)
 const stateHtml = computed(() => def.value?.stateBody?.[props.state] ?? '')
+// 图元文字:位置跟着镜像 / 旋转,字形保持正向(不进 transform 的 <g>)
+const texts = computed(() =>
+  (def.value?.texts ?? []).map(t => ({
+    ...symbolPoint(def.value!, props.rot, props.flip, t.x, t.y),
+    text: t.text,
+    size: t.size ?? 12,
+  }))
+)
 // 占位框不跟着转:「?」保持正着
 const transform = computed(() => (def.value ? symbolTransform(def.value, props.rot, props.flip) : undefined))
 </script>
@@ -39,10 +47,25 @@ const transform = computed(() => (def.value ? symbolTransform(def.value, props.r
     :class="{ 'sr-sld-symbol-unknown': !def }"
     :data-symbol="symbol"
     :data-state="def?.stateBody ? state : undefined"
-    :transform="transform"
   >
     <!-- eslint-disable vue/no-v-text-v-html-on-component -->
-    <g class="sr-sld-symbol-body" v-html="shown.body" />
-    <g v-if="stateHtml" class="sr-sld-symbol-state" v-html="stateHtml" />
+    <g class="sr-sld-symbol-shape" :transform="transform">
+      <g class="sr-sld-symbol-body" v-html="shown.body" />
+      <g v-if="stateHtml" class="sr-sld-symbol-state" v-html="stateHtml" />
+    </g>
+    <text
+      v-for="(t, i) in texts"
+      :key="i"
+      class="sr-sld-symbol-text"
+      :x="t.x"
+      :y="t.y"
+      :font-size="t.size"
+      text-anchor="middle"
+      dominant-baseline="central"
+      fill="currentColor"
+      stroke="none"
+    >
+      {{ t.text }}
+    </text>
   </g>
 </template>
