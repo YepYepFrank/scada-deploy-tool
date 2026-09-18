@@ -3025,6 +3025,11 @@ function openFrontend() {
         </div>
         <p v-if="permMsg" class="ok-msg" style="margin-top: 6px">{{ permMsg }}</p>
       </details>
+      <!-- 连接成功后的「确认并继续」(2026-09-18 YY):以前只能点顶部的步骤页签 -->
+      <div v-if="conn.status === 'ok'" class="step-foot">
+        <span class="draft-msg">已连接 {{ curEnv.label }},站点「{{ site.name || '(未填)' }}」</span>
+        <button class="btn" :disabled="!site.name || !!siteIdError" @click="step = 1">确认并进入设备与测点 →</button>
+      </div>
     </div>
 
     <!-- 2 设备与测点 -->
