@@ -21,9 +21,9 @@ import { useEditorState } from '../src/editor/useEditorState'
 registerBuiltins()
 
 describe('props-form 逻辑', () => {
-  it('10 个内置组件的 propsSchema 全部能生成表单,无兜底字段', () => {
+  it('11 个内置组件的 propsSchema 全部能生成表单,无兜底字段', () => {
     const all = listWidgets()
-    expect(all).toHaveLength(10)
+    expect(all).toHaveLength(11)
     for (const w of all) expect(fallbackFields(w.propsSchema), w.type).toEqual([])
   })
 

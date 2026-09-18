@@ -19,7 +19,13 @@ export {
   migrateConfigProps,
   type RegistryIssue,
 } from './registry'
-export { resolveBindings, type ResolverHandle, type SeriesValue, type SlotValue } from './binding-resolver'
+export {
+  resolveBindings,
+  type ResolverHandle,
+  type SeriesValue,
+  type SlotValue,
+  type StampedValue,
+} from './binding-resolver'
 export { DATA_SOURCE_KEY, provideDataSource, useDataSource } from './provide'
 export { PALETTE, colorAt } from './widgets/_shared/echarts'
 
@@ -33,6 +39,9 @@ export { alarmListWidget } from './widgets/alarm-list'
 export { statusLightWidget } from './widgets/status-light'
 export { tableWidget } from './widgets/table'
 export { imageWidget } from './widgets/image'
+export { sldWidget } from './widgets/sld'
+/** 一次接线图:文档模型与纯函数、图元注册表、共享图元组件(ADR-005);部署工具的接线图编辑器从这里取 */
+export * from './sld'
 export { overviewA, monitor3col, grid3x3, cards, builtinTemplates, CARDS_TEMPLATE_ID } from './templates'
 
 import { registerWidget, registerTemplate } from './registry'
@@ -47,9 +56,11 @@ import { alarmListWidget } from './widgets/alarm-list'
 import { statusLightWidget } from './widgets/status-light'
 import { tableWidget } from './widgets/table'
 import { imageWidget } from './widgets/image'
+import { sldWidget } from './widgets/sld'
+import { registerBuiltinSldSymbols } from './sld'
 import { builtinTemplates } from './templates'
 
-/** 包内自带组件:T2.1 迁入 6 种 + T2.2 新建 status-light / table / image + text */
+/** 包内自带组件:T2.1 迁入 6 种 + T2.2 新建 status-light / table / image + text;T5 加一次接线图 sld */
 export const builtinWidgets: WidgetDefinition[] = [
   numberCardWidget,
   gaugeWidget,
@@ -61,10 +72,12 @@ export const builtinWidgets: WidgetDefinition[] = [
   tableWidget,
   imageWidget,
   textWidget,
+  sldWidget,
 ]
 
 /** 注册包内自带的组件与模板(宿主启动时调用一次)。重复调用安全。 */
 export function registerBuiltins(): void {
   for (const w of builtinWidgets) registerWidget(w)
   for (const t of builtinTemplates) registerTemplate(t)
+  registerBuiltinSldSymbols()
 }
