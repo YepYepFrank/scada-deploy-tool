@@ -2,14 +2,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { ref, shallowRef, type ShallowRef } from 'vue'
-import { registerBuiltinSldSymbols, type SldSelection } from '@grid/scada-renderer'
+import { getSldSymbol, nodeBox, registerBuiltinSldSymbols, type SldSelection } from '@grid/scada-renderer'
 import { SLD_EDITOR_CTX, type SldEditorContent, type SldEditorContext, type SldEditorHost } from '../src/sld-editor/ext'
 import { emptySelection } from '../src/sld-editor/store'
 import { makeMockContent } from '../src/sld-editor/dev/mock'
 import BindingPanel from '../src/sld-editor/panels/binding/BindingPanel.vue'
 import bindingExt from '../src/sld-editor/panels/binding/index'
 import { mockHost } from '../src/sld-editor/panels/binding/dev-mock'
-import { ENTITY_DRAG_TYPE } from '../src/sld-editor/panels/binding/drop'
+import { ENTITY_DRAG_TYPE, centerSpot } from '../src/sld-editor/panels/binding/drop'
 
 registerBuiltinSldSymbols()
 
@@ -182,5 +182,17 @@ describe('从设备树拖设备进画布', () => {
       ENTITY_DRAG_TYPE,
       JSON.stringify({ type: 'DEVICE', name: 'PDR1_METER1', deviceType: 'METER' })
     )
+  })
+
+  it('放到画布中央:落点不压在已有节点上', () => {
+    const ctx = makeCtx()
+    const p = centerSpot(ctx, { type: 'DEVICE', name: 'PDR1_LP9_IED1' })
+    const size = getSldSymbol('breaker')!
+    for (const n of ctx.content.value.doc.nodes) {
+      const b = nodeBox(n, getSldSymbol(n.symbol)!)
+      const overlap = p.x < b.x + b.w && p.x + size.w > b.x && p.y < b.y + b.h && p.y + size.h > b.y
+      expect(overlap, n.id).toBe(false)
+    }
+    expect((p.x % 10) + (p.y % 10)).toBe(0)
   })
 })

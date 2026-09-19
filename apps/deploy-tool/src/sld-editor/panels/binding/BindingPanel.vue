@@ -80,7 +80,7 @@ function onDragStart(e: DragEvent): void {
 async function placeCenter(): Promise<void> {
   const data = picked.value && dragDataOf(picked.value)
   if (!data) return
-  const id = await placeEntity(ctx!, data, centerSpot(ctx!))
+  const id = await placeEntity(ctx!, data, centerSpot(ctx!, data))
   if (id) ctx!.select({ nodes: [id] }, { center: true })
 }
 
@@ -311,6 +311,29 @@ function addLabel(): void {
   color: #f59e0b;
   background: rgba(245, 158, 11, 0.1);
   border-radius: 4px;
+}
+.sld-bd-sec,
+.sld-bd-label,
+.sld-bd-sub,
+.sld-bd-map,
+.sld-bd .br {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sld-bd .br .kp {
+  min-width: 0;
+}
+/* 复用的 BindingRow / KeyPicker 在窄面板里:长设备名 / 测点名截断,不把面板撑出横向滚动 */
+.sld-bd .br-entity,
+.sld-bd .kp-btn {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sld-bd .kp-sel {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sld-bd-sec {
   display: grid;
