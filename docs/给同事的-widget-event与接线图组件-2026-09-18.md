@@ -34,7 +34,7 @@ interface WidgetEventPayload {
 interface SldNodeClickDetail {
   nodeId: string // 图上的节点 id
   name?: string // 节点显示名,如「1# 进线柜」
-  entity?: { type: 'DEVICE' | 'ASSET'; id: string; name: string } // 节点绑的 TB 实体(没绑就没有)
+  entity?: { type: 'DEVICE' | 'ASSET'; name: string; id?: string } // 节点绑的 TB 实体(没绑就没有)
 }
 ```
 
