@@ -126,17 +126,38 @@ export function flattenAlarms(x: unknown, depth = 0): AlarmInfo[] {
 export const entityKey = (type: string | undefined, name: string): string => `${type ?? ''}|${name}`
 
 /**
- * 未清除(status 以 ACTIVE 开头)的告警按 originator 的「类型 + 名称」归并,取最高严重级别。
- * 名称取 `originatorName`,没有再取 `originator.name`;两个都没有的告警匹配不了任何节点(交付说明里记了这个缺口)。
+ * 本组件绑定里出现的实体:「类型 + 名称」→ id(方案 A,2026-09-19:组件定义声明 receivesBindings,宿主把绑定传进来)。
+ * 图里只存名字(ADR-005 D4),发布器按名解析后 id 在绑定里;没解析(id 为空)的跳过。ext 绑定的实体在 params.entity。
  */
-export function alarmLevelsByEntity(alarms: AlarmInfo[]): Map<string, SldAlarmLevel> {
+export function entityIdsFromBindings(bindings: Record<string, unknown> | undefined): Map<string, string> {
+  const out = new Map<string, string>()
+  const take = (e: unknown) => {
+    const x = e as { type?: string; id?: string; name?: string } | undefined
+    if (x && typeof x === 'object' && x.id && x.name) out.set(entityKey(x.type, x.name), x.id)
+  }
+  for (const b of Object.values(bindings ?? {}))
+    for (const one of Array.isArray(b) ? b : [b]) {
+      const o = one as { entity?: unknown; params?: { entity?: unknown } } | undefined
+      take(o?.entity)
+      take(o?.params?.entity)
+    }
+  return out
+}
+
+/**
+ * 未清除(status 以 ACTIVE 开头)的告警按节点实体归并,取最高严重级别;返回键是 entityKey(类型, 名称)。
+ * 优先按 originator 的 **id** 反查(`keyById` 由 entityIdsFromBindings 反转而来,可靠);
+ * 查不到再按名称(`originatorName`,没有再取 `originator.name`)——两个都没有的告警匹配不了任何节点。
+ */
+export function alarmLevelsByEntity(alarms: AlarmInfo[], keyById?: Map<string, string>): Map<string, SldAlarmLevel> {
   const out = new Map<string, SldAlarmLevel>()
   for (const a of alarms) {
     if (!a.status.startsWith('ACTIVE')) continue
+    const byId = a.originator?.id ? keyById?.get(a.originator.id) : undefined
     const name = a.originatorName || a.originator?.name
-    if (!name) continue
+    if (!byId && !name) continue
     const level: SldAlarmLevel = a.severity === 'CRITICAL' || a.severity === 'MAJOR' ? 'bad' : 'warn'
-    const key = entityKey(a.originator?.type, name)
+    const key = byId ?? entityKey(a.originator?.type, name!)
     if (out.get(key) !== 'bad') out.set(key, level)
   }
   return out

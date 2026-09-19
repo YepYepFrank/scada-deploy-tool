@@ -60,6 +60,8 @@ export const sldWidget: WidgetDefinition = {
   bindingSlots: [
     { name: SLD_ALARMS_SLOT, title: '告警', valueType: 'alarms', modes: ['alarm', 'const'], multiple: true },
   ],
+  // 方案 A(2026-09-19):要从绑定里取节点实体的 id(node-click 带 id、告警按 id 匹配)
+  receivesBindings: true,
   dynamicSlots: [
     { prefix: SLD_POINT_SLOT_PREFIX, title: '测点', valueType: 'any', modes: ['ts', 'attr', 'const'], stamped: true },
   ],

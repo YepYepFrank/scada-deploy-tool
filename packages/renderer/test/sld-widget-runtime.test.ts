@@ -12,6 +12,7 @@ import {
   resetRegistry,
   validateSldDoc,
   validateWidgetAgainstRegistry,
+  type Binding,
   type SldDoc,
   type WidgetConfig,
 } from '../src'
@@ -536,5 +537,48 @@ describe('/dev 样例接线图', () => {
       { type: 'ASSET', id: 'a', name: 'A' }
     )
     expect(validateWidgetAgainstRegistry(cfg).filter(i => i.level === 'error')).toEqual([])
+  })
+})
+
+describe('方案 A:从绑定取节点实体的 id(receivesBindings)', () => {
+  const QF1 = { type: 'DEVICE', id: 'dev-uuid-qf1', name: 'QF1_DEV' } as const
+  const bindings: Record<string, Binding> = { 'pt.p9': { mode: 'ts', entity: QF1, key: 'P' } }
+
+  it('告警只有 originator id、没有名字时,按 id 也能匹配到节点', () => {
+    const noName = {
+      id: 'al-1',
+      type: '越限',
+      severity: 'MAJOR',
+      status: 'ACTIVE_UNACK',
+      startTs: 1,
+      originator: { type: 'DEVICE', id: 'dev-uuid-qf1' },
+    }
+    const without = mountSld({ doc: DOC, values: vals(1, { alarms: [noName] }) }).w
+    expect(without.find('.sr-sld-node[data-id="qf1"]').classes()).not.toContain('sr-sld-alarm-bad')
+    const withIds = mountSld({ doc: DOC, bindings, values: vals(1, { alarms: [noName] }) }).w
+    expect(withIds.find('.sr-sld-node[data-id="qf1"]').classes()).toContain('sr-sld-alarm-bad')
+  })
+
+  it('<ScadaWidget> 传入绑定后,node-click 的 entity 带 id', async () => {
+    vi.spyOn(sldCoords, 'mapper').mockReturnValue((x, y) => ({ x, y }))
+    const cfg: WidgetConfig = {
+      id: 'w_sld',
+      type: 'sld',
+      slot: 'main',
+      props: { doc: DOC },
+      bindings: { 'pt.p1': { mode: 'const', value: 1 }, ...bindings },
+    }
+    // 不给数据源:运行时走样例值,不建订阅;非 design 态才响应点击
+    const page = mount(ScadaWidget, { props: { config: cfg } })
+    await nextTick()
+    const hit = page.find('.sr-sld-node[data-id="qf1"] .sr-sld-hit')
+    await hit.trigger('pointerdown', { button: 0, pointerId: 1 })
+    await hit.trigger('pointerup', { button: 0, pointerId: 1 })
+    expect((page.emitted('widget-event')?.[0]?.[0] as { detail: unknown }).detail).toEqual({
+      nodeId: 'qf1',
+      name: '1# 出线柜',
+      entity: { type: 'DEVICE', name: 'QF1_DEV', id: 'dev-uuid-qf1' },
+    })
+    page.unmount()
   })
 })

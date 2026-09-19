@@ -25,7 +25,15 @@ import {
 } from '../../sld'
 import { SLD_CONTEXT_KEY } from './context'
 import { sldCoords, type SldScreenMapper } from './coords'
-import { DEFAULT_KV_COLORS, alarmLevelsByEntity, asPointValue, flattenAlarms, type SldKvColor } from './format'
+import {
+  DEFAULT_KV_COLORS,
+  alarmLevelsByEntity,
+  asPointValue,
+  entityIdsFromBindings,
+  entityKey,
+  flattenAlarms,
+  type SldKvColor,
+} from './format'
 import SldScene from './SldScene.vue'
 
 const props = withDefaults(
@@ -41,6 +49,8 @@ const props = withDefaults(
     interactive?: boolean
     /** 电压等级配色 */
     kvColors?: SldKvColor[]
+    /** 本组件的绑定(组件定义声明了 receivesBindings,宿主传入,只读):取节点实体的 id */
+    bindings?: Record<string, unknown>
     values?: Record<string, unknown>
     errors?: Record<string, string>
     disabled?: boolean
@@ -52,6 +62,7 @@ const props = withDefaults(
     energizeColoring: true,
     interactive: true,
     kvColors: () => DEFAULT_KV_COLORS,
+    bindings: () => ({}),
     values: () => ({}),
     errors: () => ({}),
     disabled: false,
@@ -158,7 +169,10 @@ const energy = computed(() => {
 
 /* ───────────── 告警 ───────────── */
 
-const alarms = computed(() => alarmLevelsByEntity(flattenAlarms(props.values[SLD_ALARMS_SLOT])))
+/** 「类型|名称」→ 实体 id(来自绑定,发布器已按名解析);告警按 id 匹配、node-click 带 id 都靠它 */
+const entityIds = computed(() => entityIdsFromBindings(props.bindings))
+const keyById = computed(() => new Map([...entityIds.value].map(([k, id]) => [id, k] as const)))
+const alarms = computed(() => alarmLevelsByEntity(flattenAlarms(props.values[SLD_ALARMS_SLOT]), keyById.value))
 
 const hints = computed(() => {
   const out: string[] = []
@@ -268,13 +282,14 @@ function onPointerUp(e: PointerEvent) {
   if (moved || !nodeId) return
   const node = doc.value?.nodes.find(n => n.id === nodeId)
   if (!node) return
-  // entity 只有 { type, name }:图里不存 id(ADR-005 D4),组件也拿不到 bindings
+  // 图里只存名字(ADR-005 D4);id 从本组件的绑定里按「类型 + 名称」取,取不到就不带
+  const id = node.entity ? entityIds.value.get(entityKey(node.entity.type, node.entity.name)) : undefined
   emit('widget-event', {
     name: 'node-click',
     detail: {
       nodeId: node.id,
       ...(node.name ? { name: node.name } : {}),
-      ...(node.entity ? { entity: { type: node.entity.type, name: node.entity.name } } : {}),
+      ...(node.entity ? { entity: { type: node.entity.type, name: node.entity.name, ...(id ? { id } : {}) } } : {}),
     },
   })
 }

@@ -10,18 +10,19 @@
   - 开关三态按测点值取(`state.map`);接地刀、状态灯这类有状态图形的图元同样按 `state` 画;没配 `state` 的开关视为常合。
   - 带电着色:从电源点沿连线 / 母线 / 合位开关 / 变压器传播,按电压等级取色(缺省 35 kV 黄、10 kV 红、0.4 kV 橙,其余主题强调色),失电灰;开关状态未知时其后部分画成同色虚线半透明(「不确定」,不当带电画)。图里没标电源点时不着色并在角落提示。
   - 数据过期按**数据时间戳**判(`staleSeconds`,缺省 600,0 为不判):数值变灰并提示「数据时间 …」,开关按未知画。
-  - 告警闪烁:`alarms` 槽位里未清除的告警按 originator 的**类型 + 名称**(`originatorName`)匹配节点的 `entity`,CRITICAL / MAJOR 红、其余黄;尊重 `prefers-reduced-motion`。
+  - 告警闪烁:`alarms` 槽位里未清除的告警先按 originator 的 **id** 匹配(id 取自本组件绑定里的实体),取不到再按**类型 + 名称**(`originatorName`)匹配节点的 `entity`,CRITICAL / MAJOR 红、其余黄;尊重 `prefers-reduced-motion`。
   - 交互:滚轮缩放(以指针为中心)、拖动平移、双击复位;坐标一律经 `getScreenCTM()` 换算,放在 `transform: scale()` 的大屏里也准。design 态不响应。放大层里那份的缩放状态独立。
   - props:`doc`、`staleSeconds`、`showNames`(默认 true)、`energizeColoring`(默认 true)、`interactive`(默认 true)、`kvColors`(`[{ kv, color }]`)。
   - 模板:`monitor-3col` 的 `main`、`overview-a` 的 `g1`–`g4` 接受 `sld`。
 - **动态槽位**:`WidgetDefinition.dynamicSlots`(按前缀匹配,如 `pt.<pointId>`);`stamped: true` 的槽位值为 `{ v, ts }`;`sampleData(cfg)` 收到组件配置。`PropSchema` 加不透明对象 `{ type: 'object', format: 'sld-doc' }`。
+- **`WidgetDefinition.receivesBindings`**:组件定义声明后,渲染器把该组件自己的 `bindings` 作为只读 prop 传入(`<ScadaPage>` / `<ScadaWidget>` / 放大层一致);`sld` 用它取节点实体 id。其他组件不受影响。
 - **组件事件 `widget-event`**:`<ScadaPage>` / `<ScadaWidget>`(含放大层)新增事件,载荷 `{ widgetId, type, name, detail? }`。`sld` 发 `node-click`,`detail` 为:
 
   ```ts
-  { nodeId: string; name?: string; entity?: { type: 'DEVICE' | 'ASSET'; name: string } }
+  { nodeId: string; name?: string; entity?: { type: 'DEVICE' | 'ASSET'; name: string; id?: string } }
   ```
 
-  **与 2026-09-18 预告的出入**:`entity` 暂不带 `id`——图里只存实体名(ADR-005 D4),组件又拿不到绑定,实体 id 要等渲染器把节点名下测点绑定的实体交给组件后再补(纯新增字段)。宿主请先按 `entity.name` 查设备。
+  `entity.id` 来自本组件绑定里同名实体(发布器按名解析后才有);未发布 / 没解析时不带,宿主可退回按 `entity.name` 查。
 - **图元库**:`SldSymbol` / `SldSymbolBox` 组件与 29 个内置图元(开关、常通、变压器、终端、电源、储能 / 变流、通用),`registerSldSymbol` 可加自定义图元;`SldDoc` 模型的纯函数(几何、带电计算、校验、复制间隔、迁移)一并从包入口导出。
 
 - `cards`(卡片库)模板从 4 × 6 = 24 格放到 4 × 12 = 48 格(2026-09-17):工具里「格子」只是存储位置,不再作为概念出现(按列表看、按单卡编辑、检视页逐卡看实时值);已发布的卡片库页面不受影响(槽位名 `c01…c24` 仍在前 24 个)。

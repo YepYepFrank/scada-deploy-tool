@@ -121,6 +121,12 @@ export interface WidgetDefinition<P extends Record<string, unknown> = Record<str
    * 例:line 的 `style` → `chartStyle`(0.2.0)。编辑器 / 迁移器也应调用它把旧配置正规化。
    */
   migrateProps?: (props: Record<string, unknown>) => Record<string, unknown>
+  /**
+   * 为 true 时渲染器把该组件自己的 `WidgetConfig.bindings` 作为 prop `bindings` 一并传入(只读)。
+   * 用途:组件需要知道绑定里的实体 id(如接线图按名存实体、运行时要 id 给点击事件与告警匹配,ADR-005 D4)。
+   * 缺省不传——别的组件没有这个 prop,传了会落成根元素上的 attribute。
+   */
+  receivesBindings?: boolean
   /** 推荐最小尺寸(模板槽位单位:栅格格数),工具用于 accepts 之外的软提示 */
   minSize?: { w: number; h: number }
 }

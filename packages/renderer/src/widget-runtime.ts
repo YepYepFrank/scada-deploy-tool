@@ -86,9 +86,14 @@ export function toWidgetEvent(cfg: WidgetConfig, ev: unknown): WidgetEventPayloa
   return { widgetId: cfg.id, type: cfg.type, name, ...(detail !== undefined ? { detail } : {}) }
 }
 
-/** 组件 props:defaults + 配置(先过组件的 migrateProps 把旧键名正规化) */
+/**
+ * 组件 props:defaults + 配置(先过组件的 migrateProps 把旧键名正规化);
+ * 组件定义声明 `receivesBindings` 时再附上它自己的绑定(prop `bindings`,只读)。
+ * <ScadaPage> / <ScadaWidget> / 放大层都经这里取 props,三处行为一致。
+ */
 export function widgetPropsOf(cfg: WidgetConfig): Record<string, unknown> {
   const def = getWidget(cfg.type)
   const raw = (cfg.props ?? {}) as Record<string, unknown>
-  return { ...(def?.defaults ?? {}), ...(def?.migrateProps ? def.migrateProps(raw) : raw) }
+  const props = { ...(def?.defaults ?? {}), ...(def?.migrateProps ? def.migrateProps(raw) : raw) }
+  return def?.receivesBindings ? { ...props, bindings: cfg.bindings } : props
 }
