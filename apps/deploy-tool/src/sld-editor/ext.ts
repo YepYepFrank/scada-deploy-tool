@@ -11,6 +11,7 @@
  * 骨架负责把文档变化同步到画布并记入撤销栈。
  *
  * 本文件在一个波次内只读;要改先回主会话。
+ * 2026-09-19 修订(T5.5 交付后):ctx.view、apply 返回是否提交、工具 active。
  */
 import type { Component, InjectionKey, Ref } from 'vue'
 import type { Binding, SldDoc, SldPoint, SldSelection } from '@grid/scada-renderer'
@@ -35,8 +36,11 @@ export interface SldEditorContext {
   /** 只读模式(预览实时值时为 true):扩展应禁用会改文档的操作 */
   readonly readonly: Readonly<Ref<boolean>>
 
-  /** 改文档;一次 apply = 撤销栈里的一步。label 显示在「撤销:xxx」里 */
-  apply(recipe: SldRecipe, label?: string): void
+  /**
+   * 改文档;一次 apply = 撤销栈里的一步。label 显示在「撤销:xxx」里。
+   * 返回这一笔是否真的提交了:只读、recipe 返回 false、内容没变、或校验回滚时为 false(扩展据此决定要不要关对话框 / 提示)
+   */
+  apply(recipe: SldRecipe, label?: string): boolean
   /** 设置选择集(缺的键视为空);center 为 true 时把选中元素滚到视口中央(问题清单点一条用) */
   select(sel: Partial<SldSelection>, opts?: { center?: boolean }): void
 
@@ -45,8 +49,22 @@ export interface SldEditorContext {
   /** 屏幕坐标 → 画布坐标;snap 缺省 true(吸附栅格) */
   toCanvas(client: { x: number; y: number }, snap?: boolean): SldPoint
 
+  /** 视口操作(扩展不直接碰 X6,缩放 / 适应窗口走这里) */
+  readonly view: SldEditorView
+
   /** 宿主提供的服务(第 4 步编辑器里是真的设备树 / 测点元数据;独立开发入口里是 mock) */
   readonly host: SldEditorHost
+}
+
+export interface SldEditorView {
+  /** 当前缩放倍数(1 = 100%) */
+  readonly zoom: Readonly<Ref<number>>
+  /** 整张图缩放到窗口内并居中(最大不超过 100%) */
+  fit(): void
+  /** 以视口中心为基准缩放:factor > 1 放大 */
+  zoomBy(factor: number): void
+  /** 回到 100% */
+  resetZoom(): void
 }
 
 /**
@@ -81,6 +99,8 @@ export interface SldToolExt {
   order?: number
   /** 快捷键,如 'ctrl+d';与骨架内置快捷键冲突时以内置为准并在控制台告警 */
   shortcut?: string
+  /** 模式类工具(底图描摹、画母线…)的激活态:为 true 时工具栏按钮高亮;缺省不高亮 */
+  active?: (ctx: SldEditorContext) => boolean
   /** 当前是否可用(如「对齐」要求选中 ≥ 2 个节点);缺省恒可用 */
   enabled?: (ctx: SldEditorContext) => boolean
   /** 点击执行;需要参数的工具(复制间隔 ×N)自己弹对话框,再调 ctx.apply */

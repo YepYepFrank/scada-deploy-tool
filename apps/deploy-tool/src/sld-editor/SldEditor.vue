@@ -21,8 +21,14 @@ import {
   type SldSymbolCategory,
   type SldSymbolDefinition,
 } from '@grid/scada-renderer'
-import { SLD_EDITOR_CTX, type SldEditorContent, type SldEditorHost, type SldRecipe, type SldToolExt } from './ext'
-import type { SldEditorContextEx } from './context'
+import {
+  SLD_EDITOR_CTX,
+  type SldEditorContent,
+  type SldEditorContext,
+  type SldEditorHost,
+  type SldRecipe,
+  type SldToolExt,
+} from './ext'
 import { discoverExtensions } from './discover'
 import { buildKeymap, comboOfEvent, dispatchDrop, findDrop, groupTools, isTypingTarget } from './extensions'
 import { createSldStore, selectionSize } from './store'
@@ -142,11 +148,11 @@ function select(sel: Partial<SldSelection>, opts?: { center?: boolean }): void {
   if (box) g.centerPoint(box.x + box.width / 2, box.y + box.height / 2)
 }
 
-const ctx: SldEditorContextEx = {
+const ctx: SldEditorContext = {
   content: store.content,
   selection: store.selection,
   readonly: isReadonly,
-  apply: (recipe, label) => void apply(recipe, label),
+  apply: (recipe, label) => apply(recipe, label),
   select,
   newId: kind => store.newId(kind),
   toCanvas,
@@ -255,7 +261,6 @@ function escape(): void {
 /** 内置工具也按 SldToolExt 的形状写,和扩展工具一起排进工具栏;active / keys 是骨架内部的附加字段 */
 interface BuiltinTool extends SldToolExt {
   keys?: string[]
-  active?: () => boolean
   hint?: () => string | undefined
 }
 const editable = (): boolean => !isReadonly.value
@@ -675,7 +680,7 @@ defineExpose({ ctx, store })
           :key="t.id"
           type="button"
           class="sld-ed-btn"
-          :class="{ 'sld-ed-btn-on': t.active?.() }"
+          :class="{ 'sld-ed-btn-on': t.active?.(ctx) }"
           :data-tool="t.id"
           :disabled="t.enabled ? !t.enabled(ctx) : false"
           :title="toolTitle(t)"
