@@ -64,7 +64,7 @@ export function sldDocKey(def: Pick<WidgetDefinition, 'propsSchema'> | undefined
   return null
 }
 
-const looksLikeDoc =(v: unknown): v is SldDoc =>
+const looksLikeDoc = (v: unknown): v is SldDoc =>
   !!v && typeof v === 'object' && !Array.isArray(v) && Array.isArray((v as { nodes?: unknown }).nodes)
 
 /**
