@@ -6,7 +6,14 @@
  * - 接线图编辑器关闭时**一次性**写回(页面编辑器的撤销栈里只占一步);内容没变不写。
  * - 发布到 TB 之前剥掉描摹底图 `doc.background`(D10);项目文件 / 草稿保留。
  */
-import { emptySldDoc, SLD_POINT_SLOT_PREFIX, type Binding, type SldDoc, type WidgetConfig } from '@grid/scada-renderer'
+import {
+  emptySldDoc,
+  SLD_POINT_SLOT_PREFIX,
+  type Binding,
+  type SldDoc,
+  type WidgetConfig,
+  type WidgetDefinition,
+} from '@grid/scada-renderer'
 import type { SldEditorContent } from '../sld-editor/ext'
 
 type Bindings = WidgetConfig['bindings']
@@ -50,7 +57,14 @@ export function countSldPoints(bindings: Bindings | undefined): number {
   return n
 }
 
-const looksLikeDoc = (v: unknown): v is SldDoc =>
+/** 组件 propsSchema 里第一个接线图字段(`format: 'sld-doc'`)的键;没有返回 null */
+export function sldDocKey(def: Pick<WidgetDefinition, 'propsSchema'> | undefined): string | null {
+  for (const [k, s] of Object.entries(def?.propsSchema.properties ?? {}))
+    if ((s as { format?: string }).format === 'sld-doc') return k
+  return null
+}
+
+const looksLikeDoc =(v: unknown): v is SldDoc =>
   !!v && typeof v === 'object' && !Array.isArray(v) && Array.isArray((v as { nodes?: unknown }).nodes)
 
 /**
