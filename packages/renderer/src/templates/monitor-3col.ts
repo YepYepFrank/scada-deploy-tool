@@ -15,7 +15,7 @@ const SIDE = [
 
 /**
  * 三栏监控屏(← 现有 LAYOUT_TEMPLATES.monitor3):左右各三块面板 + 中央主视区 + 主视区下方双图。
- * 原「主视区预留」改为开放槽位 `main`(接线图暂缓,一期放 image / table / line)。
+ * 原「主视区预留」改为开放槽位 `main`(一期放 image / table / line;0.4.0 起可放一次接线图 sld)。
  */
 export const monitor3col: TemplateDefinition = {
   id: 'monitor-3col',
@@ -37,7 +37,7 @@ export const monitor3col: TemplateDefinition = {
       name: 'main',
       title: '主视区',
       area: { x: 504, y: 104, w: 912, h: 560 },
-      accepts: ['image', 'table', 'line', 'dual-axis', 'text'],
+      accepts: ['sld', 'image', 'table', 'line', 'dual-axis', 'text'],
     },
     {
       name: 'c1',

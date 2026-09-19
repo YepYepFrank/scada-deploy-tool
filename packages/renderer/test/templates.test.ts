@@ -161,6 +161,23 @@ describe('内置模板', () => {
     })
   }
 
+  it('一次接线图 sld 可放进 monitor-3col 的 main 与 overview-a 的四个图表位,侧栏 / 指标位不接受', () => {
+    const acc = (tid: string, slot: string) =>
+      builtinTemplates.find(t => t.id === tid)!.slots.find(s => s.name === slot)!.accepts ?? []
+    expect(acc('monitor-3col', 'main')).toContain('sld')
+    for (const g of ['g1', 'g2', 'g3', 'g4']) expect(acc('overview-a', g)).toContain('sld')
+    expect(acc('monitor-3col', 'l1')).not.toContain('sld')
+    expect(acc('overview-a', 's1')).not.toContain('sld')
+    const cfg: PageConfig = {
+      schemaVersion: 1,
+      template: 'monitor-3col',
+      widgets: [{ id: 'w-main', slot: 'main', type: 'sld', props: {}, bindings: {} }],
+    }
+    expect(validateAgainstRegistry(cfg).filter(i => i.level === 'error')).toEqual([])
+    const bad: PageConfig = { ...cfg, widgets: [{ ...cfg.widgets[0]!, id: 'w-l1', slot: 'l1' }] }
+    expect(validateAgainstRegistry(bad).some(e => e.path === '/widgets/w-l1/slot')).toBe(true)
+  })
+
   it('accepts 违规被注册表拦下(overview-a 的指标位不接受曲线)', () => {
     const cfg: PageConfig = {
       schemaVersion: 1,

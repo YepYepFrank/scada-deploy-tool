@@ -2,7 +2,7 @@ import type { TemplateDefinition } from '../schema/registry'
 
 // 指标位也接受紧凑告警列表(旧组态的「告警状态卡」迁入 T3.1)
 const STAT = ['number-card', 'gauge', 'status-light', 'overview-card', 'alarm-list', 'text']
-const CHART = ['line', 'dual-axis', 'overview-card', 'alarm-list', 'table', 'image', 'text']
+const CHART = ['line', 'dual-axis', 'overview-card', 'alarm-list', 'table', 'image', 'text', 'sld']
 
 /** 态势总览台(← 现有 LAYOUT_TEMPLATES.console):4 指标位 + 双列四图 + 顶部告警横幅;1920×1080 设计稿,整体缩放。 */
 export const overviewA: TemplateDefinition = {
