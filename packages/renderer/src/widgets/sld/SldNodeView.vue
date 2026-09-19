@@ -51,15 +51,7 @@ const namePos = computed(() => {
     :data-node-id="clickable ? node.id : undefined"
     :transform="`translate(${node.x} ${node.y})`"
   >
-    <rect
-      v-if="alarm"
-      class="sr-sld-alarm-halo"
-      :x="-6"
-      :y="-6"
-      :width="box.w + 12"
-      :height="box.h + 12"
-      rx="4"
-    />
+    <rect v-if="alarm" class="sr-sld-alarm-halo" :x="-6" :y="-6" :width="box.w + 12" :height="box.h + 12" rx="4" />
     <rect v-if="clickable" class="sr-sld-hit" :x="-2" :y="-2" :width="box.w + 4" :height="box.h + 4" rx="3" />
     <!-- 带电着色只作用在图元上:名称不跟着变灰 / 变虚 -->
     <g class="sr-sld-node-symbol" :class="energyClass" :style="color ? { color } : undefined">

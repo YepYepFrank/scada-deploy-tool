@@ -82,12 +82,12 @@ export const sldWidget: WidgetDefinition = {
       if (slot.startsWith(SLD_POINT_SLOT_PREFIX)) out[slot] = { v: 1, ts }
     const doc = (cfg?.props as Record<string, unknown> | undefined)?.doc
     if (!isSldDoc(doc)) return out
-    for (const l of doc.labels)
-      if (l.kind === 'value') out[sldPointSlot(l.pt)] = { v: sampleValueFor(l.format), ts }
+    for (const l of doc.labels) if (l.kind === 'value') out[sldPointSlot(l.pt)] = { v: sampleValueFor(l.format), ts }
     for (const n of doc.nodes) {
       if (!n.state) continue
       const closed = Object.entries(n.state.map).find(([, s]) => s === 'closed')?.[0]
-      if (closed !== undefined) out[sldPointSlot(n.state.pt)] = { v: /^-?\d+$/.test(closed) ? Number(closed) : closed, ts }
+      if (closed !== undefined)
+        out[sldPointSlot(n.state.pt)] = { v: /^-?\d+$/.test(closed) ? Number(closed) : closed, ts }
     }
     return out
   },
