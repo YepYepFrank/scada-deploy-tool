@@ -52,7 +52,15 @@ function paintOf(e: SldEnergy | undefined): Paint {
 }
 const paintMap = (m: Record<string, SldEnergy> | undefined): Record<string, Paint> =>
   Object.fromEntries(Object.entries(m ?? {}).map(([id, e]) => [id, paintOf(e)]))
-const nodePaint = computed(() => paintMap(props.energy?.nodes))
+/** 没有端口的图元(状态灯这类非电气图形)不在拓扑里,不参与带电着色:否则永远是「失电灰」 */
+const unwired = computed(
+  () => new Set(props.doc.nodes.filter(n => lookupSldSymbol(n.symbol)?.ports.length === 0).map(n => n.id))
+)
+const nodePaint = computed(() => {
+  const out = paintMap(props.energy?.nodes)
+  for (const id of unwired.value) delete out[id]
+  return out
+})
 const busPaint = computed(() => paintMap(props.energy?.buses))
 const wirePaint = computed(() => paintMap(props.energy?.wires))
 

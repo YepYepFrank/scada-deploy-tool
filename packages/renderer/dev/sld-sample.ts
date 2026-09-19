@@ -100,13 +100,13 @@ for (const [k, x, b, d, entity] of [
 /* ── 0.4 kV 出线 ×6 ── */
 const FEEDERS = ['办公照明', '通讯机组', 'UPS', '本所空调', '路灯', '备用']
 FEEDERS.forEach((name, i) => {
-  const x = [100, 180, 380, 460, 660, 740][i]!
+  const x = [90, 170, 370, 460, 650, 740][i]!
   const id = `f${i + 1}`
   sw(`qf_${id}`, 'switch-simple', x - 10, 470, undefined, i === 2 ? 'PDR4_LP1_ATS1' : `PDR4_LP3_${id.toUpperCase()}`)
   node({ id: `arr_${id}`, symbol: 'feeder-arrow', x: x - 10, y: 530, rot: 0, name })
   wire(`w_${id}_a`, bus('b04', x - 60), port(`qf_${id}`))
   wire(`w_${id}_b`, port(`qf_${id}`, 'b'), port(`arr_${id}`))
-  val(`P_${id}`, x + 14, 490, 'P', { digits: 1, unit: 'kW' }, undefined, `qf_${id}`)
+  val(`P_${id}`, x + 12, 490, 'P', { digits: 1, unit: 'kW' }, undefined, `qf_${id}`)
 })
 
 /* ── 光伏 ── */
@@ -116,7 +116,7 @@ node({ id: 'pv', symbol: 'pv-array', x: 960, y: 630, rot: 0, name: '光伏 300kW
 wire('w_pv_a', bus('b04', 920), port('qf_pv'))
 wire('w_pv_b', port('qf_pv', 'b'), port('inv'))
 wire('w_pv_c', port('inv', 'b'), port('pv'))
-val('P_pv', 1005, 575, 'P', { digits: 1, unit: 'kW' })
+val('P_pv', 940, 696, 'P', { digits: 1, unit: 'kW' }) // 逆变器右侧放不下,放到光伏名称下面
 
 /* ── 储能 ── */
 sw('qf_bess', 'breaker', 1060, 470, undefined, 'PDR6_BESS_IED1')
@@ -157,9 +157,9 @@ export const SLD_SAMPLE_DOC: SldDoc = {
   labels,
   frames: [
     { id: 'fr_hv', x: 40, y: 50, w: 1080, h: 180, title: '10kV 开关站' },
-    { id: 'fr_lp3', x: 40, y: 455, w: 380, h: 130, title: 'LP3' },
-    { id: 'fr_lp4', x: 600, y: 455, w: 200, h: 130, title: 'LP4' },
-    { id: 'fr_pv', x: 930, y: 455, w: 90, h: 250, title: '光伏系统' },
+    { id: 'fr_lp3', x: 40, y: 455, w: 500, h: 130, title: 'LP3' },
+    { id: 'fr_lp4', x: 600, y: 455, w: 220, h: 130, title: 'LP4' },
+    { id: 'fr_pv', x: 930, y: 455, w: 90, h: 260, title: '光伏系统' },
     { id: 'fr_bess', x: 1030, y: 455, w: 140, h: 220, title: '储能系统' },
   ],
 }

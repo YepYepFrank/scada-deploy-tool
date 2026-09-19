@@ -258,6 +258,12 @@ describe('带电着色', () => {
     expect(nodeSym(w, 'ld1').attributes('style')).toBeUndefined()
     expect(w.find('.sr-sld-bus').classes()).toContain('sr-sld-e-live')
     expect(nodeSym(w, 'ld2').classes()).toContain('sr-sld-e-live')
+    // 没有端口的状态灯不参与带电着色(不画成失电灰)
+    expect(
+      nodeSym(w, 'sl1')
+        .classes()
+        .filter(c => c.startsWith('sr-sld-e-'))
+    ).toEqual([])
   })
 
   it('unknown 开关下游画 uncertain(同色、虚线半透明)', () => {
