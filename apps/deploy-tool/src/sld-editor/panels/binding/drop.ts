@@ -2,7 +2,7 @@
  * 从设备树拖设备进画布(T5.6):DataTransfer 的类型与数据形状、落点处建节点。
  * 图元由 device-defaults 决定;测点 key 经 ctx.host.client 取(拿不到就只建节点不加测点)。
  */
-import { getSldSymbol, type SldPoint } from '@grid/scada-renderer'
+import { getSldSymbol, nodeBox, type SldPoint } from '@grid/scada-renderer'
 import type { EntityRef } from '@grid/tb-client'
 import type { MetaNode } from '../../../meta/MetaNode'
 import { defaultPoints, pickSymbol, type DefaultPoints } from '../../device-defaults'
@@ -81,18 +81,28 @@ export async function placeEntity(
 }
 
 /**
- * 「放到画布中央」的落点:契约里没有「当前视口中心」,取画布(doc.canvas)中央,
- * 已被别的节点占着就沿右下斜向错开 20,免得连放几台叠在一起。
+ * 「放到画布中央」的落点:契约里没有「当前视口中心」,取画布(doc.canvas)中央;
+ * 和已有节点的包围盒(外扩一格)重叠就向右每次挪两格,一排挪不开换下一排,免得叠在别的设备上。
  */
-export function centerSpot(ctx: SldEditorContext): SldPoint {
+export function centerSpot(ctx: SldEditorContext, data?: EntityDragData): SldPoint {
   const { doc } = ctx.content.value
   const grid = doc.canvas.grid > 0 ? doc.canvas.grid : 10
   const snap = (v: number): number => Math.round(v / grid) * grid
-  const p = { x: snap(doc.canvas.w / 2), y: snap(doc.canvas.h / 2) }
-  const taken = new Set(doc.nodes.map(n => `${n.x},${n.y}`))
-  for (let i = 0; i < 50 && taken.has(`${p.x},${p.y}`); i += 1) {
-    p.x += 2 * grid
-    p.y += 2 * grid
-  }
-  return p
+  const def = data ? getSldSymbol(pickSymbol(data)) : undefined
+  const size = { w: def?.w ?? 40, h: def?.h ?? 40 }
+  const boxes = doc.nodes.flatMap(n => {
+    const d = getSldSymbol(n.symbol)
+    return d ? [nodeBox(n, d)] : []
+  })
+  const hits = (x: number, y: number): boolean =>
+    boxes.some(b => x < b.x + b.w + grid && x + size.w + grid > b.x && y < b.y + b.h + grid && y + size.h + grid > b.y)
+  const x0 = snap(doc.canvas.w / 2 - size.w / 2)
+  const y0 = snap(doc.canvas.h / 2 - size.h / 2)
+  for (let row = 0; row < 20; row += 1)
+    for (let col = 0; col < 30; col += 1) {
+      const x = x0 + col * 2 * grid
+      const y = y0 + row * 6 * grid
+      if (!hits(x, y)) return { x, y }
+    }
+  return { x: x0, y: y0 }
 }
