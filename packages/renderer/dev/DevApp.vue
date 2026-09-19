@@ -10,6 +10,7 @@ import type { DataSource, TsUpdate, ConnectionStatus, AlarmInfo, TsPoint } from 
 import { ScadaPage, ScadaWidget, listWidgets, listTemplates, listWidgetRefs, pickWidget } from '../src/index'
 import { SAMPLE_SVG } from '../src/widgets/image'
 import type { PageConfig, WidgetConfig } from '../src/schema/page-config'
+import { sldMockValue, sldSampleWidget } from './sld-sample'
 
 const widgets = listWidgets()
 const templates = listTemplates()
@@ -25,7 +26,7 @@ const soloSize = ref<'320x160' | '480x280' | '240x120'>('320x160')
 const DEV = { type: 'DEVICE', id: 'dev-0001', name: 'SSP1_GP1_IED1' } as const
 const AST = { type: 'ASSET', id: 'asset-0001', name: '仙人山服务区' } as const
 
-// 各模板的演示配置:覆盖 7 种内置组件
+// 各模板的演示配置:覆盖全部内置组件(monitor-3col 的主视区放样例一次接线图)
 const W = {
   p: (id: string, slot: string): WidgetConfig => ({
     id,
@@ -182,7 +183,7 @@ const configs: Record<string, WidgetConfig[]> = {
     W.p('w-l1', 'l1'),
     W.soc('w-l2', 'l2'),
     W.ov('w-l3', 'l3'),
-    W.img('w-main', 'main'),
+    sldSampleWidget('w-main', 'main', DEV, AST),
     W.line('w-c1', 'c1'),
     W.dual('w-c2', 'c2'),
     W.alarms('w-r1', 'r1'),
@@ -218,8 +219,10 @@ const coveredAll = new Set(templates.flatMap(t => [...typesOf(t.id)]))
 
 // ---------- MockDataSource ----------
 const statusCbs = new Set<(s: ConnectionStatus) => void>()
-const rnd = (k: string) =>
-  k === 'CB'
+// 样例接线图的测点(dev/sld-sample.ts)先按它的规则给:开关偶尔变位、数值在合理范围跳动
+const rnd = (k: string): number =>
+  sldMockValue(k) ??
+  (k === 'CB'
     ? Math.random() > 0.3
       ? 1
       : 0
@@ -229,7 +232,7 @@ const rnd = (k: string) =>
         ? 80 + Math.random() * 40
         : k === 'Q'
           ? 20 + Math.random() * 10
-          : 100 + Math.random() * 60
+          : 100 + Math.random() * 60)
 const hist = (k: string, n: number, stepMs: number): TsPoint[] =>
   Array.from({ length: n }, (_, i) => ({
     ts: Date.now() - (n - i) * stepMs,

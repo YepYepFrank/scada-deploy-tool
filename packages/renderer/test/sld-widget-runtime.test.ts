@@ -5,12 +5,17 @@ import { defineComponent, h, nextTick } from 'vue'
 import type { AlarmInfo } from '@grid/tb-client'
 import {
   ScadaWidget,
+  energize,
+  lookupSldSymbol,
   registerBuiltinSldSymbols,
   registerBuiltins,
   resetRegistry,
+  validateSldDoc,
+  validateWidgetAgainstRegistry,
   type SldDoc,
   type WidgetConfig,
 } from '../src'
+import { SLD_SAMPLE_DOC, sldSampleWidget } from '../dev/sld-sample'
 import SldWidget from '../src/widgets/sld/SldWidget.vue'
 import { sldCoords } from '../src/widgets/sld/coords'
 import {
@@ -494,7 +499,7 @@ describe('经 <ScadaWidget> 与放大层', () => {
     const all = page.findAllComponents(SldWidget)
     expect(all).toHaveLength(2)
     expect(vi.getTimerCount()).toBe(base + 1)
-    const [inline, big] = all as [VueWrapper, VueWrapper]
+    const [inline, big] = all as unknown as [VueWrapper, VueWrapper]
     await big.find('svg').trigger('wheel', { deltaY: -300, clientX: 50, clientY: 50 })
     expect(viewBox(big)).not.toBe('0 0 500 400')
     expect(viewBox(inline)).toBe('0 0 500 400')
@@ -506,5 +511,24 @@ describe('经 <ScadaWidget> 与放大层', () => {
     expect(vi.getTimerCount()).toBe(base)
     page.unmount()
     expect(vi.getTimerCount()).toBe(base - 1)
+  })
+})
+
+describe('/dev 样例接线图', () => {
+  it('通过 validateSldDoc(无 error、无 warning),母联分位时两段 10 kV 与 0.4 kV 母线都带电', () => {
+    const issues = validateSldDoc(SLD_SAMPLE_DOC, lookupSldSymbol)
+    expect(issues).toEqual([])
+    const states = Object.fromEntries(SLD_SAMPLE_DOC.nodes.filter(n => n.state).map(n => [n.id, 'closed' as const]))
+    const e = energize(SLD_SAMPLE_DOC, lookupSldSymbol, { ...states, qf_tie: 'open' })
+    expect(e.buses.b10a).toEqual({ live: true, kv: 10 })
+    expect(e.buses.b10b).toEqual({ live: true, kv: 10 })
+    expect(e.buses.b04).toEqual({ live: true, kv: 0.4 })
+    const cfg = sldSampleWidget(
+      'w',
+      'main',
+      { type: 'DEVICE', id: 'd', name: 'D' },
+      { type: 'ASSET', id: 'a', name: 'A' }
+    )
+    expect(validateWidgetAgainstRegistry(cfg).filter(i => i.level === 'error')).toEqual([])
   })
 })
