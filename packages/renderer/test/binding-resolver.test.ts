@@ -232,3 +232,66 @@ describe('resolveBindings', () => {
     h.dispose()
   })
 })
+
+describe('多条告警绑定(multiple 的 alarms 槽位,接线图用)', () => {
+  const alarm = (id: string) =>
+    ({ id, type: '越限', severity: 'MAJOR', status: 'ACTIVE_UNACK', startTs: 1, originator: DEV }) as const
+  const cfg: PageConfig = {
+    schemaVersion: 1,
+    template: 't',
+    widgets: [
+      {
+        id: 'w-sld',
+        slot: 'main',
+        type: 'sld',
+        bindings: {
+          alarms: [
+            { mode: 'alarm', entity: AST },
+            { mode: 'alarm', entity: DEV },
+          ],
+        },
+      },
+    ],
+  }
+  const spec = () => ({ name: 'alarms', valueType: 'alarms' as const, multiple: true })
+  const collect = () => {
+    const vals: Record<string, unknown> = {}
+    return { vals, onValue: (_w: string, s: string, v: unknown) => void (vals[s] = v) }
+  }
+
+  it('每条各自订阅,槽位值是合并后的 AlarmInfo[](不是 SeriesValue[]),同 id 去重', () => {
+    const ds = createMockDataSource()
+    const c = collect()
+    const h = resolveBindings(cfg, ds, { onValue: c.onValue, slotSpec: spec })
+    expect(ds.calls.filter(x => x.method === 'subscribeAlarms')).toHaveLength(2)
+    expect(c.vals.alarms).toEqual([])
+    // mock 的 pushAlarms 推给所有订阅者:两条绑定都收到同一条告警,合并后只留一条
+    ds.pushAlarms([alarm('a1'), alarm('a2')])
+    expect((c.vals.alarms as { id: string }[]).map(a => a.id)).toEqual(['a1', 'a2'])
+    h.dispose()
+    expect(h.stats.unsubscribed).toBe(h.stats.subscriptions)
+  })
+
+  it('const 绑定给数组时并进来;非 alarm / const 的 mode 报错', () => {
+    const ds = createMockDataSource()
+    const errors: string[] = []
+    const c2: PageConfig = {
+      ...cfg,
+      widgets: [
+        {
+          ...cfg.widgets[0]!,
+          bindings: {
+            alarms: [
+              { mode: 'const', value: [alarm('c1')] },
+              { mode: 'ts', entity: DEV, key: 'P' },
+            ],
+          },
+        },
+      ],
+    }
+    const c = collect()
+    resolveBindings(c2, ds, { onValue: c.onValue, slotSpec: spec, onError: (_w, _s, e) => void errors.push(String(e)) })
+    expect((c.vals.alarms as { id: string }[]).map(a => a.id)).toEqual(['c1'])
+    expect(errors.join()).toMatch(/告警槽位不支持/)
+  })
+})

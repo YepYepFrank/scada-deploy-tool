@@ -114,7 +114,47 @@ export function resolveBindings(
       const spec = opts.slotSpec?.(w, slot)
       const list = Array.isArray(b) ? b : [b]
       const multiple = Array.isArray(b)
-      if (multiple) {
+      if (multiple && spec?.valueType === 'alarms') {
+        // 多条告警绑定(如接线图的 alarms 槽位按设备数量级绑几条):各自订阅,槽位值 = 全部活动告警合并成一个 AlarmInfo[]
+        // (此前多项槽位一律走序列路径,alarm 绑定被当成序列、槽位只拿到空 SeriesValue[],告警永远到不了组件)
+        const parts: AlarmInfo[][] = list.map(() => [])
+        // 同一条告警可能经上卷同时出现在两条绑定里(站点资产 + 设备):按 id 去重
+        const emitAll = () => {
+          const seen = new Set<string>()
+          set(
+            w.id,
+            slot,
+            parts.flat().filter(a => (a.id ? !seen.has(a.id) && !!seen.add(a.id) : true))
+          )
+        }
+        emitAll()
+        list.forEach((one, i) => {
+          if (one.mode === 'const') {
+            parts[i] = Array.isArray(one.value) ? (one.value as AlarmInfo[]) : []
+            emitAll()
+            return
+          }
+          if (one.mode !== 'alarm') {
+            fail(w.id, slot, new Error(`告警槽位不支持 mode "${one.mode}"`))
+            return
+          }
+          try {
+            track(
+              ds.subscribeAlarms(
+                one.entity,
+                one.types,
+                alarms => {
+                  parts[i] = alarms
+                  emitAll()
+                },
+                e => fail(w.id, slot, e)
+              )
+            )
+          } catch (e) {
+            fail(w.id, slot, e)
+          }
+        })
+      } else if (multiple) {
         // 多项槽位:每项一个 SeriesValue,槽位值为数组;任一项更新都整体重设(数组小,直接复制)
         const scalar = spec?.valueType === 'number' || spec?.valueType === 'string' || spec?.valueType === 'boolean'
         const series: SeriesValue[] = list.map((one, i) => ({
