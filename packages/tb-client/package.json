@@ -1,6 +1,6 @@
 {
   "name": "@grid/tb-client",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "ThingsBoard 数据访问包:DataSource 契约类型 + LegacyDataSource(T1.1 预案);同事的 TbClient 实现随 T1.1 加入",
   "type": "module",
   "types": "./src/index.ts",
