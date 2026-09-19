@@ -105,8 +105,8 @@ export function findEntityByName(
   const stack: MetaNode[] = [tree]
   while (stack.length) {
     const n = stack.pop()!
-    if (n.entity && n.entity.type === type && n.entity.name === name)
-      return { ...n.entity, ...(n.profile ? { profile: n.profile } : {}) }
+    if (n.entity && n.entity.type === type && (n.entity.name || n.name) === name)
+      return { ...n.entity, name, ...(n.profile ? { profile: n.profile } : {}) }
     stack.push(...n.children)
   }
   return undefined
