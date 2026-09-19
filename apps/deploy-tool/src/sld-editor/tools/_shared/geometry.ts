@@ -42,7 +42,8 @@ export function selectionBoxes(doc: SldDoc, sel: SldSelection, symbols: SldSymbo
         w: Math.abs(b.x2 - b.x1),
         h: Math.abs(b.y2 - b.y1),
       })
-  for (const f of doc.frames ?? []) if ((sel.frames ?? []).includes(f.id)) boxes.push({ x: f.x, y: f.y, w: f.w, h: f.h })
+  for (const f of doc.frames ?? [])
+    if ((sel.frames ?? []).includes(f.id)) boxes.push({ x: f.x, y: f.y, w: f.w, h: f.h })
   for (const l of doc.labels) if (sel.labels.includes(l.id)) boxes.push({ x: l.x, y: l.y, w: 0, h: 0 })
   return boxes
 }
