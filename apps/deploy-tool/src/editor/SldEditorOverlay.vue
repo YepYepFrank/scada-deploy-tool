@@ -14,7 +14,7 @@ import type { SldEditorContent, SldEditorHost } from '../sld-editor/ext'
 import { sameSldContent } from './sld-integration'
 
 const SldEditor = defineAsyncComponent({
-  loader: () => import('../sld-editor/SldEditor.vue'),
+  loader: () => import('../sld-editor/SldEditor.vue').then(m => m.default),
   delay: 0,
 })
 

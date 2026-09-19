@@ -17,6 +17,7 @@ import {
   type PublishPageResult,
   type PublishedRecord,
 } from '../publish/publishPage'
+import { stripSldBackground } from './sld-integration'
 
 const props = defineProps<{
   config: PageConfig
@@ -92,7 +93,8 @@ async function run(config: PageConfig, label: string) {
   steps.value = []
   result.value = null
   try {
-    const r = await publishPage(config as never, props.api, {
+    // 接线图的描摹底图只留在项目文件,不发布(ADR-005 D10);config 本身(编辑器里的那份)不动
+    const r = await publishPage(stripSldBackground(config) as never, props.api, {
       siteName: props.siteName,
       pageName: assetName.value,
       publishedBy: props.user,

@@ -147,8 +147,8 @@ describe('sldContentOf / sameSldContent / applySldContent', () => {
     const w = sldW({ bindings: { alarms: [alarm], 'pt.old': ts('A', 'o') } })
     const c = bigContent(3)
     applySldContent(w, 'doc', c)
-    expect(w.props.doc).toBe(c.doc)
-    expect(w.props.staleSeconds).toBe(600)
+    expect(w.props!.doc).toBe(c.doc)
+    expect(w.props!.staleSeconds).toBe(600)
     expect(Object.keys(w.bindings).sort()).toEqual(['alarms', 'pt.p1', 'pt.p2'])
   })
 })
@@ -177,9 +177,9 @@ describe('stripSldBackground(ADR-005 D10)', () => {
     expect(out).not.toBe(p)
     expect(JSON.stringify(p)).toBe(before)
     const outSld = out.widgets[0]!
-    expect((outSld.props.doc as Record<string, unknown>).background).toBeUndefined()
-    expect(outSld.props.doc).toEqual(emptySldDoc())
-    expect(outSld.props.staleSeconds).toBe(30)
+    expect((outSld.props!.doc as Record<string, unknown>).background).toBeUndefined()
+    expect(outSld.props!.doc).toEqual(emptySldDoc())
+    expect(outSld.props!.staleSeconds).toBe(30)
     expect(outSld.bindings).toBe(sld.bindings)
     // 只动 sld 组件
     expect(out.widgets[1]).toBe(other)
@@ -197,7 +197,7 @@ describe('useEditorState 层面的一次性写回', () => {
     ed.patchWidget('w_sld', w => applySldContent(w, 'doc', c))
     expect(ed.state.pastCount).toBe(1)
     const w = ed.config.value.widgets[0]!
-    expect(w.props.doc).toEqual(c.doc)
+    expect(w.props!.doc).toEqual(c.doc)
     expect(countSldPoints(w.bindings)).toBe(20)
     expect(w.bindings['pt.gone']).toBeUndefined()
     expect(w.bindings.alarms).toEqual([alarm])

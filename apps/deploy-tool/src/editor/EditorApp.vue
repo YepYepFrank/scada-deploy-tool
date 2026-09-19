@@ -37,6 +37,9 @@ import type { Declared } from './declared-keys'
 import { serializeProject } from '../project/scadaproj'
 import { LAYER_TITLE, sortIssues, validateBindingsLayer, validateStatic, type PageIssue } from './validate'
 import type { BindingFlag } from './binding-check'
+import SldEditorOverlay from './SldEditorOverlay.vue'
+import { applySldContent, sameSldContent, sldContentOf, sldDocKey, stripSldBackground } from './sld-integration'
+import type { SldEditorContent, SldEditorHost } from '../sld-editor/ext'
 
 /**
  * embedded:嵌进向导第 4 步——隐藏标题与 TB 连接面板,采用向导已登录的 session(T3.7 接入)。
@@ -89,7 +92,8 @@ const ed = useEditorState(initial)
 const meta = useMeta()
 // 测点中文名给各绑定行(BindingRow 注入):网关 / 设备 / 测点一律「中文(英文)」(2026-09-11)
 // 向导传来的中文(第 2 步人工改的测点中文名)优先,其次字典 / 派生规则(2026-09-17)
-provide('keyCn', (key: string) => props.names?.keys?.[key] || meta.keyCn(key))
+const keyCn = (key: string) => props.names?.keys?.[key] || meta.keyCn(key)
+provide('keyCn', keyCn)
 watch(
   () => props.session,
   s => {
@@ -392,6 +396,31 @@ function onRemove() {
   pickerOpen.value = false
 }
 
+// ---------- 一次接线图(T5.8,ADR-005):全屏覆盖层编辑 doc + pt.*,关闭时一次性 commit ----------
+/** 打开中的接线图编辑:哪个组件的哪个字段 + 打开时的内容(深拷贝) */
+const sldEdit = ref<{ widgetId: string; key: string; initial: SldEditorContent } | null>(null)
+const sldHost = computed<SldEditorHost>(() => ({
+  tree: tree.value,
+  client: meta.client.value,
+  declared: props.declared ?? null,
+  keyCn,
+  siteName: meta.conn.siteName,
+}))
+/** PropsForm 的「编辑接线图…」(带字段名)或 BindingsPanel 的同名按钮(不带,取 schema 里的 sld-doc 字段) */
+function openSld(key?: string) {
+  const w = selectedWidget.value
+  const k = key ?? sldDocKey(selectedDef.value)
+  if (!w || !k) return
+  sldEdit.value = { widgetId: w.id, key: k, initial: sldContentOf(w, k) }
+}
+function onSldDone(content: SldEditorContent) {
+  const s = sldEdit.value
+  sldEdit.value = null
+  if (!s || sameSldContent(s.initial, content)) return
+  ed.patchWidget(s.widgetId, w => applySldContent(w, s.key, content))
+  toast('接线图已写回页面(撤销一步可退回)')
+}
+
 // ---------- 校验(T3.5 四层:同步层随配置即时算;绑定存在性层连上 TB 后防抖异步跑) ----------
 const staticIssues = computed(() => validateStatic(ed.config.value))
 const bindingIssues = ref<PageIssue[]>([])
@@ -491,6 +520,8 @@ function importFile(e: Event) {
 
 // ---------- 撤销 / 重做 + 快捷键 ----------
 function onKey(e: KeyboardEvent) {
+  // 接线图编辑器打开时键盘归它(它有自己的撤销 / 删除);页面编辑器一概不响应
+  if (sldEdit.value) return
   if (e.key === 'Escape' && previewOpen.value) {
     closePreview()
     return
@@ -564,7 +595,14 @@ async function exitFullscreen() {
 }
 /** 浏览器层按 Esc 退出全屏 → 一起退回向导;预览 / 弹窗打开时 Esc 归它们,覆盖层留着 */
 function onFsChange() {
-  if (fullscreen.value && !document.fullscreenElement && !previewOpen.value && !pickerOpen.value && !publishOpen.value)
+  if (
+    fullscreen.value &&
+    !document.fullscreenElement &&
+    !previewOpen.value &&
+    !pickerOpen.value &&
+    !publishOpen.value &&
+    !sldEdit.value
+  )
     fullscreen.value = false
 }
 document.addEventListener('fullscreenchange', onFsChange)
@@ -585,6 +623,8 @@ function toast(m: string) {
 /** 给外部壳(向导)用的只读状态与少量操作 */
 const state = reactive({
   config: computed(() => ed.config.value),
+  /** 发布到 TB 用的配置:剥掉接线图描摹底图(ADR-005 D10);草稿 / 项目文件用 config(保留底图) */
+  publishConfig: computed(() => stripSldBackground(ed.config.value)),
   errorCount: computed(() => errorCount.value),
   published: computed(() => project.published.value),
   currentPageName: computed(() => currentPageName.value),
@@ -978,11 +1018,17 @@ defineExpose({
                 :declared="declared"
                 @update="onBindings"
                 @flags="bindingFlags = $event"
+                @edit-sld="openSld()"
               />
               <h2>
                 属性 <span class="dim">{{ selectedDef.name }} · 改了即时反映到示意图</span>
               </h2>
-              <PropsForm :key="selectedWidget.id" v-model="widgetProps" :schema="selectedDef.propsSchema" />
+              <PropsForm
+                :key="selectedWidget.id"
+                v-model="widgetProps"
+                :schema="selectedDef.propsSchema"
+                @edit-sld="openSld"
+              />
             </template>
 
             <h2>
@@ -1042,6 +1088,14 @@ defineExpose({
       </div>
     </div>
   </Teleport>
+  <SldEditorOverlay
+    v-if="sldEdit"
+    :initial="sldEdit.initial"
+    :host="sldHost"
+    :title="`组件 ${sldEdit.widgetId} · ${sldEdit.key}`"
+    @done="onSldDone"
+    @cancel="sldEdit = null"
+  />
 </template>
 
 <style>

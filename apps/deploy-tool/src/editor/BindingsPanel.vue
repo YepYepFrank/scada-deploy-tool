@@ -9,6 +9,7 @@ import BindingRow from './BindingRow.vue'
 import { checkSlot, defaultMode, emptyBinding, type BindingFlag } from './binding-check'
 import type { MetaClient, MetaNode, ValueKind } from '../meta/MetaNode'
 import type { Declared } from './declared-keys'
+import { countSldPoints, isSldPointSlot } from './sld-integration'
 
 const props = defineProps<{
   def: WidgetDefinition
@@ -21,7 +22,17 @@ const props = defineProps<{
 const emit = defineEmits<{
   update: [bindings: WidgetConfig['bindings']]
   flags: [flags: Record<string, BindingFlag | null>]
+  /** 接线图组件:摘要行里的「编辑接线图…」(测点绑定在接线图编辑器里维护,T5.8) */
+  'edit-sld': []
 }>()
+
+/**
+ * 接线图(sld)的测点动态槽位 pt.* 可能有几百条,不逐条列(本面板只按 bindingSlots 列静态槽位,pt.* 本来就不在其中),
+ * 只给一行摘要 + 打开接线图编辑器的按钮;改静态槽位(alarms)时 set() 以整份 bindings 为底,pt.* 原样保留。
+ */
+const sldPoints = computed(() =>
+  props.def.dynamicSlots?.some(d => isSldPointSlot(d.prefix)) ? countSldPoints(props.widget.bindings) : null
+)
 
 const VT: Record<string, string> = {
   number: '数值',
@@ -110,6 +121,10 @@ watch(flags, f => emit('flags', f), { immediate: true })
 
 <template>
   <div class="bp">
+    <div v-if="sldPoints !== null" class="bp-sld" data-role="sld-points">
+      <span>测点绑定 {{ sldPoints }} 条,在接线图编辑器里维护</span>
+      <button type="button" class="bp-add" data-role="edit-sld" @click="emit('edit-sld')">编辑接线图…</button>
+    </div>
     <div
       v-for="s in def.bindingSlots"
       :key="s.name"
@@ -163,6 +178,13 @@ watch(flags, f => emit('flags', f), { immediate: true })
 .bp {
   display: grid;
   gap: 10px;
+}
+.bp-sld {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
 }
 .bp-slot {
   border-left: 3px solid transparent;
