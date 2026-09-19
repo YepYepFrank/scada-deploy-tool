@@ -1,7 +1,7 @@
 // T5.4:一次接线图(sld)组件的「图 ↔ 测点绑定」一致性检查(ADR-005 D2 / D4)
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// validateSldDoc 在基线上还是会 throw 的桩(T5.1 并行实现):缺省走真身,个别用例换成给定返回值
+// validateSldDoc 缺省走真身(T5.1 已实现);个别用例换成给定返回值 / 抛错,验证映射与兜底
 const validateSldDocMock = vi.hoisted(() => vi.fn())
 vi.mock('@grid/scada-renderer', async importActual => {
   const actual = await importActual<typeof import('@grid/scada-renderer')>()
@@ -42,6 +42,8 @@ const doc = (): SldDoc => ({
       name: '1# 进线柜',
       entity: { type: 'DEVICE', name: 'QF_1' },
       state: { pt: 'p1', map: { '1': 'closed', '0': 'open' } },
+      // 标成电源点:夹具本身要是一张「干净」的图,否则真的 validateSldDoc 会报「没有电源点」
+      source: { kv: 10 },
     },
   ],
   buses: [{ id: 'b1', x1: 0, y1: 50, x2: 400, y2: 50 }],
@@ -157,7 +159,7 @@ describe('sld 组件校验:doc ↔ bindings', () => {
   it('节点有 entity 但名下没有绑到该实体的测点 → warning(D4:运行时取不到实体 id)', () => {
     // ① 节点既没状态也没依附标签
     const d1 = doc()
-    d1.nodes.push({ id: 'n2', symbol: 'load', x: 200, y: 100, rot: 0, entity: { type: 'DEVICE', name: 'LOAD_1' } })
+    d1.nodes.push({ id: 'n2', symbol: 'meter', x: 200, y: 100, rot: 0, entity: { type: 'DEVICE', name: 'LOAD_1' } })
     const a = validateSldWidget(widget({ props: { doc: d1 } }))
     expect(a).toHaveLength(1)
     expect(a[0]).toMatchObject({
