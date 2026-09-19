@@ -8,6 +8,7 @@ import { isSldDoc } from '@grid/scada-renderer'
 import SldEditor from '../SldEditor.vue'
 import type { SldEditorContent, SldEditorHost } from '../ext'
 import { makeMockContent } from './mock'
+import { mockHost } from '../panels/binding/dev-mock'
 
 const content = shallowRef<SldEditorContent>(makeMockContent())
 const readonly = ref(false)
@@ -15,7 +16,8 @@ const updates = ref(0)
 const message = ref('')
 const fileEl = ref<HTMLInputElement>()
 const editorEl = ref<InstanceType<typeof SldEditor>>()
-const host: SldEditorHost = { siteName: 'mock-site' }
+// 假设备树 + 假 MetaClient(T5.6 的绑定面板在独立入口里也能选设备 / 测点、拖设备进画布)
+const host: SldEditorHost = { siteName: 'mock-site', ...mockHost() }
 
 function onUpdate(next: SldEditorContent): void {
   content.value = next
