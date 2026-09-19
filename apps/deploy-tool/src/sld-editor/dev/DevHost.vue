@@ -15,7 +15,7 @@ const updates = ref(0)
 const message = ref('')
 const fileEl = ref<HTMLInputElement>()
 const editorEl = ref<InstanceType<typeof SldEditor>>()
-const host: SldEditorHost = { siteName: 'mock-site', meta: { mock: true } }
+const host: SldEditorHost = { siteName: 'mock-site' }
 
 function onUpdate(next: SldEditorContent): void {
   content.value = next

@@ -11,10 +11,13 @@
  * 骨架负责把文档变化同步到画布并记入撤销栈。
  *
  * 本文件在一个波次内只读;要改先回主会话。
- * 2026-09-19 修订(T5.5 交付后):ctx.view、apply 返回是否提交、工具 active。
+ * 2026-09-19 修订(T5.5 交付后):ctx.view、apply 返回是否提交、工具 active;SldEditorHost 定形(tree / client / declared / keyCn)。
  */
 import type { Component, InjectionKey, Ref } from 'vue'
 import type { Binding, SldDoc, SldPoint, SldSelection } from '@grid/scada-renderer'
+import type { Declared } from '../editor/declared-keys'
+import type { MetaClient, MetaNode } from '../meta/MetaNode'
+import type { KeyCnFn } from '../naming'
 
 /** 编辑中的内容:图 + 本组件的测点绑定(键为完整槽位名 `pt.<pointId>`)。两者必须一起改、一起撤销。 */
 export interface SldEditorContent {
@@ -68,12 +71,20 @@ export interface SldEditorView {
 }
 
 /**
- * 宿主服务。T5.5 的独立开发入口给 mock 实现;T5.8 接入第 4 步编辑器时给真实现。
- * 绑定面板(T5.6)要复用现有的 EntityTree / KeyPicker / BindingRow,它们需要的元数据对象从这里拿。
+ * 宿主服务:绑定面板(T5.6)复用现有的 EntityTree / KeyPicker / BindingRow,它们要的东西由宿主给。
+ * - 第 4 步编辑器(T5.8)把自己手里的 tree / client / declared / keyCn 原样传进来;
+ * - 独立开发入口(sld-editor.html)给 mock:一棵假设备树 + 返回固定 key 列表的假 MetaClient。
+ * 任何一项缺省时,绑定面板要能降级(tree 为空 → 提示「未连接平台,无法选设备」),不许崩。
  */
 export interface SldEditorHost {
-  /** 现有编辑器的元数据句柄(设备树、测点字典、声明的运算输出…);形状由 T5.6 / T5.8 对齐,骨架只透传 */
-  readonly meta?: unknown
+  /** 设备 / 资产树(EntityTree 的 root、BindingRow 的 tree) */
+  readonly tree?: MetaNode | null
+  /** 元数据客户端(BindingRow 的 client:列测点 key、属性 key…) */
+  readonly client?: MetaClient | null
+  /** 向导第 3 步声明、可能还没发布的运算输出(BindingRow 的 declared) */
+  readonly declared?: Declared | null
+  /** 测点中文名(现有编辑器以 provide('keyCn') 给 BindingRow;接线图编辑器内由骨架用同名 key 再 provide 一次) */
+  readonly keyCn?: KeyCnFn
   /** 站点 / 项目名,用于默认文件名与提示 */
   readonly siteName?: string
 }

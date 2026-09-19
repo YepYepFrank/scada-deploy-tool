@@ -170,6 +170,8 @@ const ctx: SldEditorContext = {
   },
 }
 provide(SLD_EDITOR_CTX, ctx)
+// 复用的 BindingRow / KeyPicker 以 inject('keyCn') 取测点中文名:宿主给了就在编辑器内再 provide 一次
+provide('keyCn', (key: string) => props.host?.keyCn?.(key) ?? '')
 
 const ext = discoverExtensions()
 const activePanel = ref(ext.panels[0]?.id ?? '')
