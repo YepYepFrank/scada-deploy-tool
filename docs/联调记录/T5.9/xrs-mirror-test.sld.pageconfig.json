@@ -1,0 +1,3125 @@
+{
+  "schemaVersion": 1,
+  "template": "monitor-3col",
+  "title": "接线图实测 · xrs-mirror-test",
+  "widgets": [
+    {
+      "id": "w_sld_main",
+      "slot": "main",
+      "type": "sld",
+      "props": {
+        "doc": {
+          "v": 1,
+          "canvas": {
+            "w": 1320,
+            "h": 980,
+            "grid": 10
+          },
+          "nodes": [
+            {
+              "id": "n1",
+              "symbol": "incoming-arrow",
+              "x": 650,
+              "y": 10,
+              "rot": 0,
+              "name": "10kV 进线",
+              "source": {
+                "kv": 10
+              }
+            },
+            {
+              "id": "n2",
+              "symbol": "breaker",
+              "x": 640,
+              "y": 50,
+              "rot": 0,
+              "name": "进线柜"
+            },
+            {
+              "id": "n3",
+              "symbol": "transformer-2w",
+              "x": 640,
+              "y": 120,
+              "rot": 0,
+              "name": "1#主变",
+              "portKv": {
+                "hv": 10,
+                "lv": 0.4
+              }
+            },
+            {
+              "id": "n10",
+              "symbol": "switch-simple",
+              "x": 70,
+              "y": 250,
+              "rot": 0
+            },
+            {
+              "id": "n14",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 310,
+              "rot": 90,
+              "name": "SSP1_GP1_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP1_IED1"
+              },
+              "state": {
+                "pt": "p15",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n17",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 310,
+              "rot": 270
+            },
+            {
+              "id": "n21",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 350,
+              "rot": 90,
+              "name": "SSP1_GP4_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP4_IED1"
+              },
+              "state": {
+                "pt": "p22",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n24",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 350,
+              "rot": 270
+            },
+            {
+              "id": "n28",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 390,
+              "rot": 90,
+              "name": "SSP1_GP5_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP5_IED1"
+              },
+              "state": {
+                "pt": "p29",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n31",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 390,
+              "rot": 270
+            },
+            {
+              "id": "n35",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 430,
+              "rot": 90,
+              "name": "SSP1_GP6_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP6_IED1"
+              },
+              "state": {
+                "pt": "p36",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n38",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 430,
+              "rot": 270
+            },
+            {
+              "id": "n42",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 470,
+              "rot": 90,
+              "name": "SSP1_GP7_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP7_IED1"
+              },
+              "state": {
+                "pt": "p43",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n45",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 470,
+              "rot": 270
+            },
+            {
+              "id": "n49",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 510,
+              "rot": 90,
+              "name": "SSP1_GP8_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP8_IED1"
+              },
+              "state": {
+                "pt": "p50",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n52",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 510,
+              "rot": 270
+            },
+            {
+              "id": "n56",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 550,
+              "rot": 90,
+              "name": "SSP1_GP9_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP9_IED1"
+              },
+              "state": {
+                "pt": "p57",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n59",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 550,
+              "rot": 270
+            },
+            {
+              "id": "n63",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 590,
+              "rot": 90,
+              "name": "SSP1_GP10_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP10_IED1"
+              },
+              "state": {
+                "pt": "p64",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n66",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 590,
+              "rot": 270
+            },
+            {
+              "id": "n70",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 630,
+              "rot": 90,
+              "name": "SSP1_GP11_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP11_IED1"
+              },
+              "state": {
+                "pt": "p71",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n73",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 630,
+              "rot": 270
+            },
+            {
+              "id": "n77",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 670,
+              "rot": 90,
+              "name": "SSP1_GP12_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP12_IED1"
+              },
+              "state": {
+                "pt": "p78",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n80",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 670,
+              "rot": 270
+            },
+            {
+              "id": "n84",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 710,
+              "rot": 90,
+              "name": "SSP1_GP13_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP13_IED1"
+              },
+              "state": {
+                "pt": "p85",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n87",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 710,
+              "rot": 270
+            },
+            {
+              "id": "n91",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 750,
+              "rot": 90,
+              "name": "SSP1_GP14_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP14_IED1"
+              },
+              "state": {
+                "pt": "p92",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n94",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 750,
+              "rot": 270
+            },
+            {
+              "id": "n98",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 790,
+              "rot": 90,
+              "name": "SSP1_GP15_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP15_IED1"
+              },
+              "state": {
+                "pt": "p99",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n101",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 790,
+              "rot": 270
+            },
+            {
+              "id": "n105",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 830,
+              "rot": 90,
+              "name": "SSP1_GP16_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP16_IED1"
+              },
+              "state": {
+                "pt": "p106",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n108",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 830,
+              "rot": 270
+            },
+            {
+              "id": "n112",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 870,
+              "rot": 90,
+              "name": "SSP1_GP19_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_GP19_IED1"
+              },
+              "state": {
+                "pt": "p113",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n115",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 870,
+              "rot": 270
+            },
+            {
+              "id": "n119",
+              "symbol": "switch-simple",
+              "x": 100,
+              "y": 910,
+              "rot": 90,
+              "name": "SSP1_DP1_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP1_DP1_IED1"
+              }
+            },
+            {
+              "id": "n121",
+              "symbol": "feeder-arrow",
+              "x": 180,
+              "y": 910,
+              "rot": 270
+            },
+            {
+              "id": "n126",
+              "symbol": "switch-simple",
+              "x": 470,
+              "y": 250,
+              "rot": 0
+            },
+            {
+              "id": "n130",
+              "symbol": "switch-simple",
+              "x": 500,
+              "y": 310,
+              "rot": 90,
+              "name": "SSP2_GP1_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP2_GP1_IED1"
+              },
+              "state": {
+                "pt": "p131",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n133",
+              "symbol": "feeder-arrow",
+              "x": 580,
+              "y": 310,
+              "rot": 270
+            },
+            {
+              "id": "n137",
+              "symbol": "switch-simple",
+              "x": 500,
+              "y": 350,
+              "rot": 90,
+              "name": "SSP2_GP4_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP2_GP4_IED1"
+              },
+              "state": {
+                "pt": "p138",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n140",
+              "symbol": "feeder-arrow",
+              "x": 580,
+              "y": 350,
+              "rot": 270
+            },
+            {
+              "id": "n144",
+              "symbol": "switch-simple",
+              "x": 500,
+              "y": 390,
+              "rot": 90,
+              "name": "SSP2_GP5_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP2_GP5_IED1"
+              },
+              "state": {
+                "pt": "p145",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n147",
+              "symbol": "feeder-arrow",
+              "x": 580,
+              "y": 390,
+              "rot": 270
+            },
+            {
+              "id": "n151",
+              "symbol": "switch-simple",
+              "x": 500,
+              "y": 430,
+              "rot": 90,
+              "name": "SSP2_GP6_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP2_GP6_IED1"
+              },
+              "state": {
+                "pt": "p152",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n154",
+              "symbol": "feeder-arrow",
+              "x": 580,
+              "y": 430,
+              "rot": 270
+            },
+            {
+              "id": "n158",
+              "symbol": "switch-simple",
+              "x": 500,
+              "y": 470,
+              "rot": 90,
+              "name": "SSP2_GP7_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP2_GP7_IED1"
+              },
+              "state": {
+                "pt": "p159",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n161",
+              "symbol": "feeder-arrow",
+              "x": 580,
+              "y": 470,
+              "rot": 270
+            },
+            {
+              "id": "n165",
+              "symbol": "switch-simple",
+              "x": 500,
+              "y": 510,
+              "rot": 90,
+              "name": "SSP2_GP8_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "SSP2_GP8_IED1"
+              },
+              "state": {
+                "pt": "p166",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n168",
+              "symbol": "feeder-arrow",
+              "x": 580,
+              "y": 510,
+              "rot": 270
+            },
+            {
+              "id": "n173",
+              "symbol": "switch-simple",
+              "x": 870,
+              "y": 250,
+              "rot": 0
+            },
+            {
+              "id": "n177",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 310,
+              "rot": 90,
+              "name": "PDR1_LP1_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR1_LP1_IED1"
+              },
+              "state": {
+                "pt": "p178",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n180",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 310,
+              "rot": 270
+            },
+            {
+              "id": "n184",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 350,
+              "rot": 90,
+              "name": "PDR1_LP9_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR1_LP9_IED1"
+              },
+              "state": {
+                "pt": "p185",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n187",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 350,
+              "rot": 270
+            },
+            {
+              "id": "n191",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 390,
+              "rot": 90,
+              "name": "PDR2_GP1_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR2_GP1_IED1"
+              },
+              "state": {
+                "pt": "p192",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n194",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 390,
+              "rot": 270
+            },
+            {
+              "id": "n198",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 430,
+              "rot": 90,
+              "name": "PDR2_GP3_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR2_GP3_IED1"
+              },
+              "state": {
+                "pt": "p199",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n201",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 430,
+              "rot": 270
+            },
+            {
+              "id": "n205",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 470,
+              "rot": 90,
+              "name": "PDR2_LP1_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR2_LP1_IED1"
+              },
+              "state": {
+                "pt": "p206",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n208",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 470,
+              "rot": 270
+            },
+            {
+              "id": "n212",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 510,
+              "rot": 90,
+              "name": "PDR3_GP1_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR3_GP1_IED1"
+              },
+              "state": {
+                "pt": "p213",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n215",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 510,
+              "rot": 270
+            },
+            {
+              "id": "n219",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 550,
+              "rot": 90,
+              "name": "PDR3_GP3_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR3_GP3_IED1"
+              },
+              "state": {
+                "pt": "p220",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n222",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 550,
+              "rot": 270
+            },
+            {
+              "id": "n226",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 590,
+              "rot": 90,
+              "name": "PDR3_LP1_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR3_LP1_IED1"
+              },
+              "state": {
+                "pt": "p227",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n229",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 590,
+              "rot": 270
+            },
+            {
+              "id": "n233",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 630,
+              "rot": 90,
+              "name": "PDR4_T3_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR4_T3_IED1"
+              },
+              "state": {
+                "pt": "p234",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n236",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 630,
+              "rot": 270
+            },
+            {
+              "id": "n240",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 670,
+              "rot": 90,
+              "name": "PDR4_LP1_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR4_LP1_IED1"
+              },
+              "state": {
+                "pt": "p241",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n243",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 670,
+              "rot": 270
+            },
+            {
+              "id": "n247",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 710,
+              "rot": 90,
+              "name": "PDR4_LP9_IED1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR4_LP9_IED1"
+              },
+              "state": {
+                "pt": "p248",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n250",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 710,
+              "rot": 270
+            },
+            {
+              "id": "n254",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 750,
+              "rot": 90,
+              "name": "PDR1_PGC1_METER1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR1_PGC1_METER1"
+              },
+              "state": {
+                "pt": "p255",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n257",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 750,
+              "rot": 270
+            },
+            {
+              "id": "n261",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 790,
+              "rot": 90,
+              "name": "PDR4_PGC1_METER1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR4_PGC1_METER1"
+              },
+              "state": {
+                "pt": "p262",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n264",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 790,
+              "rot": 270
+            },
+            {
+              "id": "n268",
+              "symbol": "switch-simple",
+              "x": 900,
+              "y": 830,
+              "rot": 90,
+              "name": "PDR4_LP1_ATS1",
+              "entity": {
+                "type": "DEVICE",
+                "name": "PDR4_LP1_ATS1"
+              },
+              "state": {
+                "pt": "p269",
+                "map": {
+                  "0": "open",
+                  "1": "closed"
+                }
+              }
+            },
+            {
+              "id": "n271",
+              "symbol": "feeder-arrow",
+              "x": 980,
+              "y": 830,
+              "rot": 270
+            }
+          ],
+          "buses": [
+            {
+              "id": "b6",
+              "x1": 60,
+              "y1": 240,
+              "x2": 1260,
+              "y2": 240,
+              "name": "0.4kV 母线",
+              "kv": 0.4
+            },
+            {
+              "id": "b12",
+              "x1": 80,
+              "y1": 300,
+              "x2": 80,
+              "y2": 940,
+              "kv": 0.4
+            },
+            {
+              "id": "b128",
+              "x1": 480,
+              "y1": 300,
+              "x2": 480,
+              "y2": 540,
+              "kv": 0.4
+            },
+            {
+              "id": "b175",
+              "x1": 880,
+              "y1": 300,
+              "x2": 880,
+              "y2": 860,
+              "kv": 0.4
+            }
+          ],
+          "wires": [
+            {
+              "id": "w4",
+              "from": {
+                "node": "n1",
+                "port": "a"
+              },
+              "to": {
+                "node": "n2",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w5",
+              "from": {
+                "node": "n2",
+                "port": "b"
+              },
+              "to": {
+                "node": "n3",
+                "port": "hv"
+              }
+            },
+            {
+              "id": "w7",
+              "from": {
+                "node": "n3",
+                "port": "lv"
+              },
+              "to": {
+                "bus": "b6",
+                "d": 600
+              }
+            },
+            {
+              "id": "w11",
+              "from": {
+                "bus": "b6",
+                "d": 20
+              },
+              "to": {
+                "node": "n10",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w13",
+              "from": {
+                "node": "n10",
+                "port": "b"
+              },
+              "to": {
+                "bus": "b12",
+                "d": 0
+              }
+            },
+            {
+              "id": "w16",
+              "from": {
+                "bus": "b12",
+                "d": 20
+              },
+              "to": {
+                "node": "n14",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w18",
+              "from": {
+                "node": "n14",
+                "port": "a"
+              },
+              "to": {
+                "node": "n17",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w23",
+              "from": {
+                "bus": "b12",
+                "d": 60
+              },
+              "to": {
+                "node": "n21",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w25",
+              "from": {
+                "node": "n21",
+                "port": "a"
+              },
+              "to": {
+                "node": "n24",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w30",
+              "from": {
+                "bus": "b12",
+                "d": 100
+              },
+              "to": {
+                "node": "n28",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w32",
+              "from": {
+                "node": "n28",
+                "port": "a"
+              },
+              "to": {
+                "node": "n31",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w37",
+              "from": {
+                "bus": "b12",
+                "d": 140
+              },
+              "to": {
+                "node": "n35",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w39",
+              "from": {
+                "node": "n35",
+                "port": "a"
+              },
+              "to": {
+                "node": "n38",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w44",
+              "from": {
+                "bus": "b12",
+                "d": 180
+              },
+              "to": {
+                "node": "n42",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w46",
+              "from": {
+                "node": "n42",
+                "port": "a"
+              },
+              "to": {
+                "node": "n45",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w51",
+              "from": {
+                "bus": "b12",
+                "d": 220
+              },
+              "to": {
+                "node": "n49",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w53",
+              "from": {
+                "node": "n49",
+                "port": "a"
+              },
+              "to": {
+                "node": "n52",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w58",
+              "from": {
+                "bus": "b12",
+                "d": 260
+              },
+              "to": {
+                "node": "n56",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w60",
+              "from": {
+                "node": "n56",
+                "port": "a"
+              },
+              "to": {
+                "node": "n59",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w65",
+              "from": {
+                "bus": "b12",
+                "d": 300
+              },
+              "to": {
+                "node": "n63",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w67",
+              "from": {
+                "node": "n63",
+                "port": "a"
+              },
+              "to": {
+                "node": "n66",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w72",
+              "from": {
+                "bus": "b12",
+                "d": 340
+              },
+              "to": {
+                "node": "n70",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w74",
+              "from": {
+                "node": "n70",
+                "port": "a"
+              },
+              "to": {
+                "node": "n73",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w79",
+              "from": {
+                "bus": "b12",
+                "d": 380
+              },
+              "to": {
+                "node": "n77",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w81",
+              "from": {
+                "node": "n77",
+                "port": "a"
+              },
+              "to": {
+                "node": "n80",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w86",
+              "from": {
+                "bus": "b12",
+                "d": 420
+              },
+              "to": {
+                "node": "n84",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w88",
+              "from": {
+                "node": "n84",
+                "port": "a"
+              },
+              "to": {
+                "node": "n87",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w93",
+              "from": {
+                "bus": "b12",
+                "d": 460
+              },
+              "to": {
+                "node": "n91",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w95",
+              "from": {
+                "node": "n91",
+                "port": "a"
+              },
+              "to": {
+                "node": "n94",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w100",
+              "from": {
+                "bus": "b12",
+                "d": 500
+              },
+              "to": {
+                "node": "n98",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w102",
+              "from": {
+                "node": "n98",
+                "port": "a"
+              },
+              "to": {
+                "node": "n101",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w107",
+              "from": {
+                "bus": "b12",
+                "d": 540
+              },
+              "to": {
+                "node": "n105",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w109",
+              "from": {
+                "node": "n105",
+                "port": "a"
+              },
+              "to": {
+                "node": "n108",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w114",
+              "from": {
+                "bus": "b12",
+                "d": 580
+              },
+              "to": {
+                "node": "n112",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w116",
+              "from": {
+                "node": "n112",
+                "port": "a"
+              },
+              "to": {
+                "node": "n115",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w120",
+              "from": {
+                "bus": "b12",
+                "d": 620
+              },
+              "to": {
+                "node": "n119",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w122",
+              "from": {
+                "node": "n119",
+                "port": "a"
+              },
+              "to": {
+                "node": "n121",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w127",
+              "from": {
+                "bus": "b6",
+                "d": 420
+              },
+              "to": {
+                "node": "n126",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w129",
+              "from": {
+                "node": "n126",
+                "port": "b"
+              },
+              "to": {
+                "bus": "b128",
+                "d": 0
+              }
+            },
+            {
+              "id": "w132",
+              "from": {
+                "bus": "b128",
+                "d": 20
+              },
+              "to": {
+                "node": "n130",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w134",
+              "from": {
+                "node": "n130",
+                "port": "a"
+              },
+              "to": {
+                "node": "n133",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w139",
+              "from": {
+                "bus": "b128",
+                "d": 60
+              },
+              "to": {
+                "node": "n137",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w141",
+              "from": {
+                "node": "n137",
+                "port": "a"
+              },
+              "to": {
+                "node": "n140",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w146",
+              "from": {
+                "bus": "b128",
+                "d": 100
+              },
+              "to": {
+                "node": "n144",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w148",
+              "from": {
+                "node": "n144",
+                "port": "a"
+              },
+              "to": {
+                "node": "n147",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w153",
+              "from": {
+                "bus": "b128",
+                "d": 140
+              },
+              "to": {
+                "node": "n151",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w155",
+              "from": {
+                "node": "n151",
+                "port": "a"
+              },
+              "to": {
+                "node": "n154",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w160",
+              "from": {
+                "bus": "b128",
+                "d": 180
+              },
+              "to": {
+                "node": "n158",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w162",
+              "from": {
+                "node": "n158",
+                "port": "a"
+              },
+              "to": {
+                "node": "n161",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w167",
+              "from": {
+                "bus": "b128",
+                "d": 220
+              },
+              "to": {
+                "node": "n165",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w169",
+              "from": {
+                "node": "n165",
+                "port": "a"
+              },
+              "to": {
+                "node": "n168",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w174",
+              "from": {
+                "bus": "b6",
+                "d": 820
+              },
+              "to": {
+                "node": "n173",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w176",
+              "from": {
+                "node": "n173",
+                "port": "b"
+              },
+              "to": {
+                "bus": "b175",
+                "d": 0
+              }
+            },
+            {
+              "id": "w179",
+              "from": {
+                "bus": "b175",
+                "d": 20
+              },
+              "to": {
+                "node": "n177",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w181",
+              "from": {
+                "node": "n177",
+                "port": "a"
+              },
+              "to": {
+                "node": "n180",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w186",
+              "from": {
+                "bus": "b175",
+                "d": 60
+              },
+              "to": {
+                "node": "n184",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w188",
+              "from": {
+                "node": "n184",
+                "port": "a"
+              },
+              "to": {
+                "node": "n187",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w193",
+              "from": {
+                "bus": "b175",
+                "d": 100
+              },
+              "to": {
+                "node": "n191",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w195",
+              "from": {
+                "node": "n191",
+                "port": "a"
+              },
+              "to": {
+                "node": "n194",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w200",
+              "from": {
+                "bus": "b175",
+                "d": 140
+              },
+              "to": {
+                "node": "n198",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w202",
+              "from": {
+                "node": "n198",
+                "port": "a"
+              },
+              "to": {
+                "node": "n201",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w207",
+              "from": {
+                "bus": "b175",
+                "d": 180
+              },
+              "to": {
+                "node": "n205",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w209",
+              "from": {
+                "node": "n205",
+                "port": "a"
+              },
+              "to": {
+                "node": "n208",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w214",
+              "from": {
+                "bus": "b175",
+                "d": 220
+              },
+              "to": {
+                "node": "n212",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w216",
+              "from": {
+                "node": "n212",
+                "port": "a"
+              },
+              "to": {
+                "node": "n215",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w221",
+              "from": {
+                "bus": "b175",
+                "d": 260
+              },
+              "to": {
+                "node": "n219",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w223",
+              "from": {
+                "node": "n219",
+                "port": "a"
+              },
+              "to": {
+                "node": "n222",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w228",
+              "from": {
+                "bus": "b175",
+                "d": 300
+              },
+              "to": {
+                "node": "n226",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w230",
+              "from": {
+                "node": "n226",
+                "port": "a"
+              },
+              "to": {
+                "node": "n229",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w235",
+              "from": {
+                "bus": "b175",
+                "d": 340
+              },
+              "to": {
+                "node": "n233",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w237",
+              "from": {
+                "node": "n233",
+                "port": "a"
+              },
+              "to": {
+                "node": "n236",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w242",
+              "from": {
+                "bus": "b175",
+                "d": 380
+              },
+              "to": {
+                "node": "n240",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w244",
+              "from": {
+                "node": "n240",
+                "port": "a"
+              },
+              "to": {
+                "node": "n243",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w249",
+              "from": {
+                "bus": "b175",
+                "d": 420
+              },
+              "to": {
+                "node": "n247",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w251",
+              "from": {
+                "node": "n247",
+                "port": "a"
+              },
+              "to": {
+                "node": "n250",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w256",
+              "from": {
+                "bus": "b175",
+                "d": 460
+              },
+              "to": {
+                "node": "n254",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w258",
+              "from": {
+                "node": "n254",
+                "port": "a"
+              },
+              "to": {
+                "node": "n257",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w263",
+              "from": {
+                "bus": "b175",
+                "d": 500
+              },
+              "to": {
+                "node": "n261",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w265",
+              "from": {
+                "node": "n261",
+                "port": "a"
+              },
+              "to": {
+                "node": "n264",
+                "port": "a"
+              }
+            },
+            {
+              "id": "w270",
+              "from": {
+                "bus": "b175",
+                "d": 540
+              },
+              "to": {
+                "node": "n268",
+                "port": "b"
+              }
+            },
+            {
+              "id": "w272",
+              "from": {
+                "node": "n268",
+                "port": "a"
+              },
+              "to": {
+                "node": "n271",
+                "port": "a"
+              }
+            }
+          ],
+          "labels": [
+            {
+              "id": "l8",
+              "x": 60,
+              "y": 224,
+              "kind": "text",
+              "text": "0.4kV I 段",
+              "size": 12
+            },
+            {
+              "id": "l20",
+              "x": 230,
+              "y": 320,
+              "attach": "n14",
+              "kind": "value",
+              "pt": "p19",
+              "title": "GP1",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l27",
+              "x": 230,
+              "y": 360,
+              "attach": "n21",
+              "kind": "value",
+              "pt": "p26",
+              "title": "GP4",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l34",
+              "x": 230,
+              "y": 400,
+              "attach": "n28",
+              "kind": "value",
+              "pt": "p33",
+              "title": "GP5",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l41",
+              "x": 230,
+              "y": 440,
+              "attach": "n35",
+              "kind": "value",
+              "pt": "p40",
+              "title": "GP6",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l48",
+              "x": 230,
+              "y": 480,
+              "attach": "n42",
+              "kind": "value",
+              "pt": "p47",
+              "title": "GP7",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l55",
+              "x": 230,
+              "y": 520,
+              "attach": "n49",
+              "kind": "value",
+              "pt": "p54",
+              "title": "GP8",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l62",
+              "x": 230,
+              "y": 560,
+              "attach": "n56",
+              "kind": "value",
+              "pt": "p61",
+              "title": "GP9",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l69",
+              "x": 230,
+              "y": 600,
+              "attach": "n63",
+              "kind": "value",
+              "pt": "p68",
+              "title": "GP10",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l76",
+              "x": 230,
+              "y": 640,
+              "attach": "n70",
+              "kind": "value",
+              "pt": "p75",
+              "title": "GP11",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l83",
+              "x": 230,
+              "y": 680,
+              "attach": "n77",
+              "kind": "value",
+              "pt": "p82",
+              "title": "GP12",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l90",
+              "x": 230,
+              "y": 720,
+              "attach": "n84",
+              "kind": "value",
+              "pt": "p89",
+              "title": "GP13",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l97",
+              "x": 230,
+              "y": 760,
+              "attach": "n91",
+              "kind": "value",
+              "pt": "p96",
+              "title": "GP14",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l104",
+              "x": 230,
+              "y": 800,
+              "attach": "n98",
+              "kind": "value",
+              "pt": "p103",
+              "title": "GP15",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l111",
+              "x": 230,
+              "y": 840,
+              "attach": "n105",
+              "kind": "value",
+              "pt": "p110",
+              "title": "GP16",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l118",
+              "x": 230,
+              "y": 880,
+              "attach": "n112",
+              "kind": "value",
+              "pt": "p117",
+              "title": "GP19",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l124",
+              "x": 230,
+              "y": 920,
+              "attach": "n119",
+              "kind": "value",
+              "pt": "p123",
+              "title": "DP1",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l136",
+              "x": 630,
+              "y": 320,
+              "attach": "n130",
+              "kind": "value",
+              "pt": "p135",
+              "title": "GP1",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l143",
+              "x": 630,
+              "y": 360,
+              "attach": "n137",
+              "kind": "value",
+              "pt": "p142",
+              "title": "GP4",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l150",
+              "x": 630,
+              "y": 400,
+              "attach": "n144",
+              "kind": "value",
+              "pt": "p149",
+              "title": "GP5",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l157",
+              "x": 630,
+              "y": 440,
+              "attach": "n151",
+              "kind": "value",
+              "pt": "p156",
+              "title": "GP6",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l164",
+              "x": 630,
+              "y": 480,
+              "attach": "n158",
+              "kind": "value",
+              "pt": "p163",
+              "title": "GP7",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l171",
+              "x": 630,
+              "y": 520,
+              "attach": "n165",
+              "kind": "value",
+              "pt": "p170",
+              "title": "GP8",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l183",
+              "x": 1030,
+              "y": 320,
+              "attach": "n177",
+              "kind": "value",
+              "pt": "p182",
+              "title": "PDR1_LP1",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l190",
+              "x": 1030,
+              "y": 360,
+              "attach": "n184",
+              "kind": "value",
+              "pt": "p189",
+              "title": "PDR1_LP9",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l197",
+              "x": 1030,
+              "y": 400,
+              "attach": "n191",
+              "kind": "value",
+              "pt": "p196",
+              "title": "PDR2_GP1",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l204",
+              "x": 1030,
+              "y": 440,
+              "attach": "n198",
+              "kind": "value",
+              "pt": "p203",
+              "title": "PDR2_GP3",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l211",
+              "x": 1030,
+              "y": 480,
+              "attach": "n205",
+              "kind": "value",
+              "pt": "p210",
+              "title": "PDR2_LP1",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l218",
+              "x": 1030,
+              "y": 520,
+              "attach": "n212",
+              "kind": "value",
+              "pt": "p217",
+              "title": "PDR3_GP1",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l225",
+              "x": 1030,
+              "y": 560,
+              "attach": "n219",
+              "kind": "value",
+              "pt": "p224",
+              "title": "PDR3_GP3",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l232",
+              "x": 1030,
+              "y": 600,
+              "attach": "n226",
+              "kind": "value",
+              "pt": "p231",
+              "title": "PDR3_LP1",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l239",
+              "x": 1030,
+              "y": 640,
+              "attach": "n233",
+              "kind": "value",
+              "pt": "p238",
+              "title": "PDR4_T3",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l246",
+              "x": 1030,
+              "y": 680,
+              "attach": "n240",
+              "kind": "value",
+              "pt": "p245",
+              "title": "PDR4_LP1",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l253",
+              "x": 1030,
+              "y": 720,
+              "attach": "n247",
+              "kind": "value",
+              "pt": "p252",
+              "title": "PDR4_LP9",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l260",
+              "x": 1030,
+              "y": 760,
+              "attach": "n254",
+              "kind": "value",
+              "pt": "p259",
+              "title": "PDR1_PGC1_METER1",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l267",
+              "x": 1030,
+              "y": 800,
+              "attach": "n261",
+              "kind": "value",
+              "pt": "p266",
+              "title": "PDR4_PGC1_METER1",
+              "format": {
+                "digits": 1,
+                "unit": "kW"
+              },
+              "size": 12
+            },
+            {
+              "id": "l274",
+              "x": 1030,
+              "y": 840,
+              "attach": "n268",
+              "kind": "value",
+              "pt": "p273",
+              "title": "PDR4_LP1_ATS1",
+              "format": {
+                "digits": 1
+              },
+              "size": 12
+            }
+          ],
+          "frames": [
+            {
+              "id": "f9",
+              "x": 50,
+              "y": 260,
+              "w": 380,
+              "h": 710,
+              "title": "SSP1"
+            },
+            {
+              "id": "f125",
+              "x": 450,
+              "y": 260,
+              "w": 380,
+              "h": 310,
+              "title": "SSP2"
+            },
+            {
+              "id": "f172",
+              "x": 850,
+              "y": 260,
+              "w": 380,
+              "h": 630,
+              "title": "PDR"
+            }
+          ]
+        },
+        "staleSeconds": 600,
+        "showNames": false
+      },
+      "bindings": {
+        "pt.p15": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP1_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p19": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP1_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p22": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP4_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p26": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP4_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p29": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP5_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p33": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP5_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p36": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP6_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p40": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP6_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p43": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP7_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p47": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP7_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p50": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP8_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p54": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP8_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p57": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP9_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p61": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP9_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p64": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP10_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p68": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP10_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p71": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP11_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p75": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP11_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p78": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP12_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p82": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP12_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p85": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP13_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p89": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP13_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p92": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP14_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p96": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP14_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p99": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP15_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p103": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP15_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p106": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP16_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p110": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP16_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p113": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP19_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p117": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_GP19_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p123": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP1_DP1_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p131": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP1_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p135": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP1_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p138": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP4_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p142": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP4_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p145": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP5_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p149": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP5_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p152": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP6_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p156": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP6_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p159": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP7_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p163": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP7_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p166": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP8_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p170": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "SSP2_GP8_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p178": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR1_LP1_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p182": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR1_LP1_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p185": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR1_LP9_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p189": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR1_LP9_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p192": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR2_GP1_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p196": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR2_GP1_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p199": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR2_GP3_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p203": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR2_GP3_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p206": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR2_LP1_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p210": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR2_LP1_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p213": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR3_GP1_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p217": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR3_GP1_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p220": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR3_GP3_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p224": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR3_GP3_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p227": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR3_LP1_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p231": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR3_LP1_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p234": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR4_T3_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p238": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR4_T3_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p241": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR4_LP1_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p245": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR4_LP1_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p248": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR4_LP9_IED1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p252": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR4_LP9_IED1"
+          },
+          "key": "P"
+        },
+        "pt.p255": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR1_PGC1_METER1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p259": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR1_PGC1_METER1"
+          },
+          "key": "P"
+        },
+        "pt.p262": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR4_PGC1_METER1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p266": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR4_PGC1_METER1"
+          },
+          "key": "P"
+        },
+        "pt.p269": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR4_LP1_ATS1"
+          },
+          "key": "switch_state"
+        },
+        "pt.p273": {
+          "mode": "ts",
+          "entity": {
+            "type": "DEVICE",
+            "id": "",
+            "name": "PDR4_LP1_ATS1"
+          },
+          "key": "switch_state"
+        },
+        "alarms": [
+          {
+            "mode": "alarm",
+            "entity": {
+              "type": "ASSET",
+              "id": "",
+              "name": "xrs-mirror-test"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
