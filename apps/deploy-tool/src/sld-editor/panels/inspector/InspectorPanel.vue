@@ -7,6 +7,7 @@
 import { computed, inject } from 'vue'
 import { busLength, getSldSymbol } from '@grid/scada-renderer'
 import { SLD_EDITOR_CTX } from '../../ext'
+import { parseKv, setBusKv, setNodeSource, setPortKv } from './ops'
 
 const ctx = inject(SLD_EDITOR_CTX)
 if (!ctx) throw new Error('InspectorPanel 必须放在 <SldEditor> 里')
@@ -27,6 +28,9 @@ const bus = computed(() => (single.value ? doc.value.buses.find(b => b.id === se
 const wire = computed(() => (single.value ? doc.value.wires.find(w => w.id === sel.value.wires[0]) : undefined))
 const label = computed(() => (single.value ? doc.value.labels.find(l => l.id === sel.value.labels[0]) : undefined))
 const frame = computed(() => (single.value ? doc.value.frames?.find(f => f.id === sel.value.frames?.[0]) : undefined))
+const symbolDef = computed(() => (node.value ? getSldSymbol(node.value.symbol) : undefined))
+/** 变压器各侧端口(portKv 按端口 id 存,如 hv / lv) */
+const trPorts = computed(() => (symbolDef.value?.conduct === 'transformer' ? symbolDef.value.ports.map(p => p.id) : []))
 const symbolName = computed(() => (node.value ? (getSldSymbol(node.value.symbol)?.name ?? '未知图元') : ''))
 
 const valueOf = (e: Event): string => (e.target as HTMLInputElement).value
@@ -72,6 +76,31 @@ function setFrameTitle(e: Event): void {
     else delete f.title
   }, '改分组框标题')
 }
+// ---- 电气参数(带电着色按 kv 取色,ADR-005 D11)----
+const kvOf = (e: Event) => parseKv(valueOf(e))
+function toggleSource(e: Event): void {
+  const id = node.value!.id
+  const on = (e.target as HTMLInputElement).checked
+  ctx!.apply(
+    d => (setNodeSource(d.doc, id, on, node.value?.source?.kv) ? undefined : false),
+    on ? '设为电源点' : '取消电源点'
+  )
+}
+function setSourceKv(e: Event): void {
+  const id = node.value!.id
+  const kv = kvOf(e)
+  ctx!.apply(d => (setNodeSource(d.doc, id, true, kv) ? undefined : false), '改电源电压等级')
+}
+function setTrKv(port: string, e: Event): void {
+  const id = node.value!.id
+  const kv = kvOf(e)
+  ctx!.apply(d => (setPortKv(d.doc, id, port, kv) ? undefined : false), '改变压器电压等级')
+}
+function setBusKvInput(e: Event): void {
+  const id = bus.value!.id
+  const kv = kvOf(e)
+  ctx!.apply(d => (setBusKv(d.doc, id, kv) ? undefined : false), '改母线电压等级')
+}
 const endText = (e: { node: string; port: string } | { bus: string; d: number }): string =>
   'bus' in e ? `母线 ${e.bus} @ ${e.d}` : `${e.node} . ${e.port}`
 </script>
@@ -113,6 +142,36 @@ const endText = (e: { node: string; port: string } | { bus: string; d: number })
       <div v-if="node.state" class="sld-insp-row">
         <span>状态测点</span><code>pt.{{ node.state.pt }}</code>
       </div>
+      <label class="sld-insp-row">
+        <span>电源点</span>
+        <input
+          type="checkbox"
+          data-field="source"
+          :checked="!!node.source"
+          :disabled="ctx.readonly.value"
+          @change="toggleSource"
+        />
+      </label>
+      <label v-if="node.source" class="sld-insp-row">
+        <span>电压 kV</span>
+        <input
+          data-field="source-kv"
+          :value="node.source.kv ?? ''"
+          :disabled="ctx.readonly.value"
+          placeholder="如 10、0.4"
+          @change="setSourceKv"
+        />
+      </label>
+      <label v-for="p in trPorts" :key="p" class="sld-insp-row">
+        <span>{{ p }} 侧 kV</span>
+        <input
+          :data-field="`port-kv-${p}`"
+          :value="node.portKv?.[p] ?? ''"
+          :disabled="ctx.readonly.value"
+          placeholder="如 10、0.4"
+          @change="setTrKv(p, $event)"
+        />
+      </label>
     </template>
 
     <template v-else-if="bus">
@@ -122,6 +181,16 @@ const endText = (e: { node: string; port: string } | { bus: string; d: number })
       <label class="sld-insp-row">
         <span>名称</span>
         <input :value="bus.name ?? ''" :disabled="ctx.readonly.value" @change="setBusName" />
+      </label>
+      <label class="sld-insp-row">
+        <span>电压 kV</span>
+        <input
+          data-field="bus-kv"
+          :value="bus.kv ?? ''"
+          :disabled="ctx.readonly.value"
+          placeholder="不填则随上游"
+          @change="setBusKvInput"
+        />
       </label>
       <div class="sld-insp-row">
         <span>长度</span><b>{{ busLength(bus) }}</b>
