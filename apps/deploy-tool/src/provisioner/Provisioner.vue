@@ -2487,7 +2487,8 @@ async function publishPagesAfterRules() {
       ? {
           label,
           ...(kind ? { kind } : {}),
-          config: st.config,
+          // 发到 TB 的剥掉接线图描摹底图(ADR-005 D10);草稿 / 项目文件仍用 st.config
+          config: st.publishConfig ?? st.config,
           pageName: st.currentPageName,
           errorCount: st.errorCount,
           published: st.published[st.currentPageName],
