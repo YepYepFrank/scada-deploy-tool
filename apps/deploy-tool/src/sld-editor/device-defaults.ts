@@ -101,7 +101,10 @@ export const VALUE_RULES: SldValueRule[] = [
   },
   {
     id: 'ULL',
-    items: phase3(['Uab', 'Ubc', 'Uca'], [/^(uab|u_ab|ab线电压)$/i, /^(ubc|u_bc|bc线电压)$/i, /^(uca|u_ca|ca线电压)$/i]),
+    items: phase3(
+      ['Uab', 'Ubc', 'Uca'],
+      [/^(uab|u_ab|ab线电压)$/i, /^(ubc|u_bc|bc线电压)$/i, /^(uca|u_ca|ca线电压)$/i]
+    ),
     unit: 'V',
     digits: 1,
   },
@@ -112,7 +115,12 @@ export const VALUE_RULES: SldValueRule[] = [
     digits: 1,
   },
   { id: 'SOC', items: [{ title: 'SOC', pattern: /^(soc|bms_?soc|荷电状态)$/i }], unit: '%', digits: 1 },
-  { id: 'U', items: [{ title: 'U', pattern: /^(u|udc|u_?dc|v|voltage|总电压|直流电压|电压)$/i }], unit: 'V', digits: 1 },
+  {
+    id: 'U',
+    items: [{ title: 'U', pattern: /^(u|udc|u_?dc|v|voltage|总电压|直流电压|电压)$/i }],
+    unit: 'V',
+    digits: 1,
+  },
   { id: 'I', items: [{ title: 'I', pattern: /^(i|idc|i_?dc|current|总电流|直流电流|电流)$/i }], unit: 'A', digits: 1 },
   { id: 'F', items: [{ title: 'F', pattern: /^(f|freq|frequency|频率)$/i }], unit: 'Hz', digits: 2 },
   { id: 'PF', items: [{ title: 'PF', pattern: /^(pf|cos|cosphi|power_?factor|功率因数)$/i }], digits: 2 },
