@@ -31,6 +31,7 @@ import {
 } from './ext'
 import { discoverExtensions } from './discover'
 import { buildKeymap, comboOfEvent, dispatchDrop, findDrop, groupTools, isTypingTarget } from './extensions'
+import HelpOverlay from './HelpOverlay.vue'
 import { createSldStore, selectionSize } from './store'
 import {
   addNode,
@@ -256,6 +257,10 @@ function redo(): void {
   if (!isReadonly.value) store.redo()
 }
 function escape(): void {
+  if (helpOpen.value) {
+    helpOpen.value = false
+    return
+  }
   if (mode.value !== 'select') setMode('select')
   else store.select({})
 }
@@ -265,6 +270,8 @@ interface BuiltinTool extends SldToolExt {
   keys?: string[]
   hint?: () => string | undefined
 }
+/** 按键说明浮层;内容从 toolbar 的同一份按键表生成(shortcuts.ts) */
+const helpOpen = ref(false)
 const editable = (): boolean => !isReadonly.value
 const builtinTools: BuiltinTool[] = [
   {
@@ -365,6 +372,15 @@ const builtinTools: BuiltinTool[] = [
   { id: 'zoom-out', title: '缩小', group: 'view', order: 10, keys: ['ctrl+-'], run: () => ctx.view.zoomBy(1 / 1.2) },
   { id: 'zoom-reset', title: '100%', group: 'view', order: 11, run: () => ctx.view.resetZoom() },
   { id: 'zoom-in', title: '放大', group: 'view', order: 12, keys: ['ctrl+='], run: () => ctx.view.zoomBy(1.2) },
+  {
+    id: 'help',
+    title: '? 按键说明',
+    group: 'view',
+    order: 30,
+    keys: ['f1'],
+    active: () => helpOpen.value,
+    run: () => void (helpOpen.value = !helpOpen.value),
+  },
 ]
 const toolbar = groupTools<BuiltinTool>([...builtinTools, ...ext.tools])
 
@@ -791,6 +807,7 @@ defineExpose({ ctx, store })
     </aside>
 
     <component :is="TeleportContainer" v-if="TeleportContainer" />
+    <HelpOverlay v-if="helpOpen" :tools="[...builtinTools, ...ext.tools]" @close="helpOpen = false" />
   </div>
 </template>
 
@@ -803,6 +820,8 @@ defineExpose({ ctx, store })
   --sld-accent: var(--ed-accent, #19b7ff);
   display: grid;
   grid-template: 'bar bar bar' auto 'pal stage side' minmax(0, 1fr) / 168px minmax(0, 1fr) 300px;
+  /* 按键说明浮层 inset: 0 铺在整个编辑器上 */
+  position: relative;
   width: 100%;
   height: 100%;
   min-height: 360px;
