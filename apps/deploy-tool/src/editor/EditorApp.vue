@@ -290,9 +290,13 @@ const widgetProps = computed<Record<string, unknown>>({
   },
 })
 
+/**
+ * 点示意图上的格子:**空格**直接弹组件选择(省一步),**已有组件的只选中** —— 右栏当场显示它的绑定与属性,
+ * 要换 / 删组件点右栏的「更换 / 移除组件」(2026-09-19 YY:配好的格子不该每次点都被选择弹窗挡住)。
+ */
 function onSelect(slot: string) {
   selected.value = slot
-  pickerOpen.value = true
+  pickerOpen.value = !ed.widgetAt(slot)
 }
 function onPick(def: WidgetDefinition) {
   if (!selectedSlot.value) return
@@ -925,7 +929,8 @@ defineExpose({
             </template>
             <template v-else>
               <div class="ed-status">
-                点击槽位选择组件 · {{ template.name }} · {{ ed.config.value.widgets.length }} 个组件
+                点空槽位选组件,点已配好的格子在右栏改 · {{ template.name }} ·
+                {{ ed.config.value.widgets.length }} 个组件
               </div>
               <SlotBoard :config="ed.config.value" :template="template" :selected="selected" @select="onSelect" />
             </template>
