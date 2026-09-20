@@ -16,7 +16,12 @@ import { computeScale, rootStyle, slotStyle, wrapperStyle } from './layout/templ
 import { DATA_SOURCE_KEY } from './provide'
 import WidgetExpand from './WidgetExpand.vue'
 
-const props = withDefaults(defineProps<ScadaPageProps>(), { showStatus: false, design: false, expandable: true })
+const props = withDefaults(defineProps<ScadaPageProps>(), {
+  showStatus: false,
+  design: false,
+  expandable: true,
+  decor: true,
+})
 const emit = defineEmits<{
   (e: 'invalid', issues: { path: string; message: string }[]): void
   (e: 'status', status: ConnectionStatus): void
@@ -213,7 +218,16 @@ defineExpose({ issues, status, values, bindErrors })
 </script>
 
 <template>
-  <div class="sr-page" :class="[`sr-theme-${theme ?? config.theme ?? 'default'}`, { 'sr-design': design }]">
+  <div
+    class="sr-page"
+    :class="[
+      `sr-theme-${theme ?? config.theme ?? 'default'}`,
+      { 'sr-design': design, 'sr-decor': decor, 'sr-page-scaled': tpl?.kind === 'scaled' },
+    ]"
+  >
+    <!-- 装饰层(0.5.0):底色渐变 + 光晕 + 细网格 + 暗角。纯观感,不接收指针事件,:decor="false" 时不渲染 -->
+    <div v-if="decor" class="sr-bg" aria-hidden="true"></div>
+
     <div v-if="fatal" class="sr-fatal">
       <div class="sr-fatal-title">页面无法渲染</div>
       <div class="sr-fatal-msg">{{ fatal }}</div>
@@ -221,6 +235,8 @@ defineExpose({ issues, status, values, bindErrors })
 
     <template v-else-if="tpl">
       <div ref="wrapper" class="sr-wrapper" :style="wrapperStyle(tpl, scale)">
+        <!-- 舞台四角角标:只给固定设计稿的大屏模板画,grid 模板(后台页)不画 -->
+        <div v-if="decor && tpl.kind === 'scaled'" class="sr-corners" aria-hidden="true"></div>
         <div class="sr-root" :data-template="tpl.id" :style="rootStyle(tpl, scale)">
           <div
             v-for="p in placed"
@@ -299,8 +315,83 @@ defineExpose({ issues, status, values, bindErrors })
   color: var(--sr-ink-0);
   font-family: var(--sr-font-body);
 }
+.sr-page.sr-decor {
+  background: var(--sr-page-bg);
+}
+
+/* ── 装饰层(0.5.0)────────────────────────────────────────────────
+   一层元素画光晕 + 网格,::after 画暗角。整层 pointer-events: none,盖在内容之下(z-index: 0),
+   页面内容统一提到 z-index: 1;组件自己没有背景的地方能透出这层,所以卡片给了不透明的渐变底。 */
+.sr-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background-image:
+    radial-gradient(1100px 520px at 10% -10%, var(--sr-glow-1), transparent 62%),
+    radial-gradient(900px 440px at 92% 4%, var(--sr-glow-2), transparent 60%),
+    linear-gradient(var(--sr-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--sr-grid-line) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    var(--sr-grid-size) var(--sr-grid-size),
+    var(--sr-grid-size) var(--sr-grid-size);
+}
+.sr-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(130% 95% at 50% 42%, transparent 52%, var(--sr-vignette));
+}
+.sr-page.sr-decor > .sr-wrapper,
+.sr-page.sr-decor > .sr-fatal,
+.sr-page.sr-decor > .sr-status,
+.sr-page.sr-decor > .sr-issues {
+  position: relative;
+  z-index: 1;
+}
+
+/* 舞台四角角标:八条线段拼四个 L,一个伪元素画完,不加 DOM */
+.sr-corners {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(var(--sr-corner), var(--sr-corner)), linear-gradient(var(--sr-corner), var(--sr-corner)),
+    linear-gradient(var(--sr-corner), var(--sr-corner)), linear-gradient(var(--sr-corner), var(--sr-corner)),
+    linear-gradient(var(--sr-corner), var(--sr-corner)), linear-gradient(var(--sr-corner), var(--sr-corner)),
+    linear-gradient(var(--sr-corner), var(--sr-corner)), linear-gradient(var(--sr-corner), var(--sr-corner));
+  background-size:
+    var(--sr-corner-len) 2px,
+    2px var(--sr-corner-len),
+    var(--sr-corner-len) 2px,
+    2px var(--sr-corner-len),
+    var(--sr-corner-len) 2px,
+    2px var(--sr-corner-len),
+    var(--sr-corner-len) 2px,
+    2px var(--sr-corner-len);
+  background-position:
+    left top,
+    left top,
+    right top,
+    right top,
+    left bottom,
+    left bottom,
+    right bottom,
+    right bottom;
+}
 .sr-wrapper {
   margin: 0 auto;
+}
+/* 固定设计稿的大屏:舞台按比例缩放后在容器里**居中**(0.5.0;此前只水平居中,容器比设计稿高时下方空一大条) */
+.sr-page-scaled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .sr-slot {
   box-sizing: border-box;

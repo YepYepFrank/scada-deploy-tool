@@ -1,6 +1,6 @@
 {
   "name": "@grid/scada-renderer",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "组态渲染器 + 页面配置契约(schema 子路径导出)",
   "type": "module",
   "types": "./src/index.ts",
@@ -15,6 +15,7 @@
     },
     "./schema/page-config.schema.json": "./src/schema/page-config.schema.json",
     "./style.css": "./src/theme/default.css",
+    "./fonts.css": "./src/theme/fonts.css",
     "./build-info.json": "./build-info.json"
   },
   "files": [
@@ -62,6 +63,7 @@
       },
       "./schema/page-config.schema.json": "./dist/schema/page-config.schema.json",
       "./style.css": "./dist/style.css",
+      "./fonts.css": "./dist/fonts.css",
       "./build-info.json": "./build-info.json"
     }
   },

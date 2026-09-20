@@ -1,6 +1,6 @@
 // @grid/scada-renderer 库构建(T1.2 起,替代 tsup):ESM + .d.ts,vue / @grid/tb-client 外置。
 import { resolve } from 'node:path'
-import { copyFileSync, mkdirSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readdirSync } from 'node:fs'
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import dts from 'vite-plugin-dts'
@@ -17,11 +17,27 @@ const emitSchemaJson: Plugin = {
   },
 }
 
+/**
+ * 可选字体包(0.5.0):`@grid/scada-renderer/fonts.css` 不被 index.ts 引用,不会进主 bundle,
+ * 所以原样拷进 dist(css 里的 url 是相对的 ./fonts/*.woff2,连同字体一起拷就能用)。
+ * 宿主不 import 这个文件就一个字节都不加载。
+ */
+const emitFonts: Plugin = {
+  name: 'emit-optional-fonts',
+  writeBundle() {
+    mkdirSync(resolve(__dirname, 'dist/fonts'), { recursive: true })
+    copyFileSync(resolve(__dirname, 'src/theme/fonts.css'), resolve(__dirname, 'dist/fonts.css'))
+    for (const f of readdirSync(resolve(__dirname, 'src/theme/fonts')))
+      copyFileSync(resolve(__dirname, 'src/theme/fonts', f), resolve(__dirname, 'dist/fonts', f))
+  },
+}
+
 export default defineConfig({
   plugins: [
     vue(),
     dts({ tsconfigPath: './tsconfig.build.json', entryRoot: 'src', outDir: 'dist', copyDtsFiles: true }),
     emitSchemaJson,
+    emitFonts,
   ],
   build: {
     lib: {

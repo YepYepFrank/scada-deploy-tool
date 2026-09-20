@@ -370,7 +370,11 @@ onMounted(async () => {
     <!-- 登录 -->
     <div v-if="stage === 'login'" class="sa-login">
       <form class="sa-card" @submit.prevent="login">
-        <div class="sa-brand">GRID·OPS <small>站点大屏</small></div>
+        <div class="sa-brand">
+          <img class="sa-logo" src="../assets/img/company-logo.png" alt="国网电瑞" />
+          <span class="sa-mark">GRID·OPS</span>
+          <small>站点大屏</small>
+        </div>
         <label>ThingsBoard 地址 <input v-model="form.base" placeholder="留空 = 同源 /api;或 http://host:8080" /></label>
         <label>账号 <input v-model="form.user" autocomplete="username" required data-role="user" /></label>
         <label
@@ -385,9 +389,16 @@ onMounted(async () => {
     <!-- 列表 -->
     <div v-else-if="stage === 'list'" class="sa-list">
       <header class="sa-bar">
-        <span class="sa-brand">GRID·OPS <small>站点大屏</small></span>
+        <span class="sa-brand">
+          <img class="sa-logo" src="../assets/img/company-logo.png" alt="国网电瑞" />
+          <span class="sa-mark">GRID·OPS</span>
+          <small>站点大屏</small>
+        </span>
         <span class="sa-dim">{{ session?.user }} · {{ session?.authority }}</span>
-        <span class="sa-clock">{{ dateStr }} {{ clock }}</span>
+        <span class="sa-clock"
+          ><span class="sa-date">{{ dateStr }}</span
+          >{{ clock }}</span
+        >
         <button type="button" class="sa-mini" @click="logout()">退出</button>
       </header>
       <main>
@@ -411,11 +422,18 @@ onMounted(async () => {
     <!-- 卡片库检视(2026-09-17):左栏实时渲染的卡,右栏前端引用与数据源 -->
     <div v-else-if="stage === 'cards'" class="sa-view" data-role="cards-view">
       <header class="sa-bar">
-        <span class="sa-brand">{{ current?.label ?? '卡片库' }} <small>卡片库检视</small></span>
+        <span class="sa-brand">
+          <img class="sa-logo" src="../assets/img/company-logo.png" alt="国网电瑞" />
+          <span class="sa-mark">GRID·OPS</span>
+        </span>
+        <span class="sa-page-title">{{ current?.label ?? '卡片库' }}<small>卡片库检视</small></span>
         <span class="sa-status" :data-status="status">{{
           status === 'live' ? '● 实时' : status === 'offline' ? '○ 离线 · 重连中' : '… 连接中'
         }}</span>
-        <span class="sa-clock">{{ dateStr }} {{ clock }}</span>
+        <span class="sa-clock"
+          ><span class="sa-date">{{ dateStr }}</span
+          >{{ clock }}</span
+        >
         <button type="button" class="sa-mini" @click="stage = 'list'">页面</button>
         <button type="button" class="sa-mini" @click="logout()">退出</button>
       </header>
@@ -434,7 +452,13 @@ onMounted(async () => {
     <!-- 页面 -->
     <div v-else class="sa-view">
       <header class="sa-bar">
-        <span class="sa-brand">{{ title }}</span>
+        <span class="sa-brand">
+          <img class="sa-logo" src="../assets/img/company-logo.png" alt="国网电瑞" />
+          <span class="sa-mark">GRID·OPS</span>
+        </span>
+        <span class="sa-page-title"
+          >{{ title }}<small v-if="current?.site">{{ current.site }}</small></span
+        >
         <nav v-if="pages.length > 1" class="sa-menu">
           <button
             v-for="p in pages"
@@ -451,7 +475,10 @@ onMounted(async () => {
           status === 'live' ? '● 实时' : status === 'offline' ? '○ 离线 · 重连中' : '… 连接中'
         }}</span>
         <span v-if="deniedCount" class="sa-denied" data-role="denied">{{ deniedCount }} 个绑定在当前账号下不可见</span>
-        <span class="sa-clock">{{ dateStr }} {{ clock }}</span>
+        <span class="sa-clock"
+          ><span class="sa-date">{{ dateStr }}</span
+          >{{ clock }}</span
+        >
         <button type="button" class="sa-mini" @click="stage = 'list'">页面</button>
         <button type="button" class="sa-mini" @click="logout()">退出</button>
       </header>

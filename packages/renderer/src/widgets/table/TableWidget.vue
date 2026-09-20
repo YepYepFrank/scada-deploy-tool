@@ -157,10 +157,14 @@ const empty = computed(() => !series.value.length || (props.mode === 'timeline' 
   border-bottom: 1px solid var(--sr-line-0);
   white-space: nowrap;
 }
+.sr-table tbody tr:nth-child(even) {
+  background: rgba(83, 196, 255, 0.035);
+}
 .sr-table th {
   position: sticky;
   top: 0;
-  background: var(--sr-bg-1);
+  background: linear-gradient(180deg, var(--sr-bg-2), var(--sr-bg-1));
+  box-shadow: inset 0 -1px 0 var(--sr-line-1);
   color: var(--sr-ink-2);
   font-weight: 400;
   letter-spacing: 0.08em;

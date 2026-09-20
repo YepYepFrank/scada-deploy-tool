@@ -70,6 +70,15 @@ watch(display, () => {
   border-top: 2px solid var(--sr-accent-local, var(--sr-accent));
   justify-content: space-between;
 }
+/* 顶部色条向下洇一层同色微光,卡片不再是「一条边 + 一片平底」 */
+.sr-card.sr-number-card::before {
+  height: 34px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--sr-accent-local, var(--sr-accent)) 16%, transparent),
+    transparent
+  );
+}
 .sr-number-card .sr-card-title {
   display: flex;
   justify-content: space-between;
@@ -88,6 +97,7 @@ watch(display, () => {
   display: flex;
   align-items: baseline;
   gap: 6px;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--sr-accent-local, var(--sr-accent)) 22%, transparent);
   transition: text-shadow 0.3s;
 }
 .sr-number.sr-flash {

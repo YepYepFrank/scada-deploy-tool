@@ -336,6 +336,7 @@ function onDblClick() {
 </template>
 
 <style>
+/* 接线图也是一块面板:此前它没有底、直接浮在页面上,页面有了装饰层之后显得「没放稳」(2026-09-20) */
 .sr-sld {
   position: relative;
   width: 100%;
@@ -344,7 +345,22 @@ function onDblClick() {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid var(--sr-panel-edge, transparent);
+  border-radius: var(--sr-radius, 6px);
+  background: linear-gradient(180deg, var(--sr-panel-top, transparent), var(--sr-panel-bot, transparent));
+  box-shadow: var(--sr-panel-shadow, none);
   color: var(--sr-accent, #19b7ff);
+}
+.sr-sld::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 6%, var(--sr-panel-hairline, transparent), transparent 94%);
 }
 .sr-sld-svg {
   display: block;

@@ -1,4 +1,6 @@
-/* 独立大屏薄壳(T3.8):只管登录 / 列表 / 标头,页面本体由渲染器主题负责 */
+/* 独立大屏薄壳(T3.8):只管登录 / 列表 / 标头,页面本体由渲染器主题负责。
+   2026-09-20:这层是客户真正看到的「成品页面」,按向导同款视觉做了一遍品牌化——
+   深海蓝背景 + 地平网格、企业 logo 与渐变字标、标题条、状态胶囊、Barlow 时钟。 */
 html,
 body,
 #app {
@@ -6,30 +8,106 @@ body,
   margin: 0;
 }
 body {
-  background: #061127;
+  background: #020817;
   color: #e6f1ff;
   font:
-    14px/1.5 'IBM Plex Sans',
+    14px/1.5 'Microsoft YaHei',
     'PingFang SC',
-    'Microsoft YaHei',
     system-ui,
     sans-serif;
 }
+/* 字体包由 main.ts 引入(@grid/scada-renderer/fonts.css);引不到时整套回退微软雅黑 */
+:root {
+  --sa-title: 'YouShe BiaoTiHei', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --sa-num: 'Barlow SemiBold', 'Microsoft YaHei', sans-serif;
+  --sa-line: rgba(83, 196, 255, 0.22);
+  --sa-line-lit: rgba(83, 215, 255, 0.55);
+}
 .sa {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
 }
+/* 背景:两团光晕 + 深蓝渐变(固定层,不随内容滚动) */
+.sa::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at top left, rgba(39, 110, 214, 0.3), transparent 34%),
+    radial-gradient(circle at right, rgba(32, 173, 255, 0.16), transparent 26%),
+    linear-gradient(135deg, #020817 0%, #07224a 52%, #031124 100%);
+}
+/* 背景:地平网格(向导 .fx-grid 同款,静态不动画——挂墙大屏不折腾 GPU) */
+.sa::after {
+  content: '';
+  position: fixed;
+  left: -18vw;
+  right: -18vw;
+  bottom: -8vh;
+  height: 42vh;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(83, 196, 255, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(83, 196, 255, 0.18) 1px, transparent 1px);
+  background-size: 48px 48px;
+  transform: perspective(640px) rotateX(58deg);
+  transform-origin: 50% 0;
+  -webkit-mask-image: linear-gradient(180deg, transparent 2%, rgba(0, 0, 0, 0.5) 42%, transparent);
+  mask-image: linear-gradient(180deg, transparent 2%, rgba(0, 0, 0, 0.5) 42%, transparent);
+  opacity: 0.35;
+}
+
+/* ── 品牌 ───────────────────────────────────────────── */
 .sa-brand {
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.sa-logo {
+  height: 30px;
+  width: auto;
+  display: block;
+  filter: drop-shadow(0 0 10px rgba(72, 214, 255, 0.3));
+}
+.sa-mark {
+  font-family: var(--sa-title);
+  font-size: 24px;
+  letter-spacing: 0.08em;
+  background: linear-gradient(180deg, #aee8ff 0%, #4fd0ff 55%, #1287dd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .sa-brand small {
-  font-weight: 400;
   font-size: 12px;
   opacity: 0.6;
-  margin-left: 6px;
+}
+/* 标头里的页面名:与字标之间一道竖线隔开 */
+.sa-page-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-left: 14px;
+  border-left: 1px solid var(--sa-line);
+  font-family: var(--sa-title);
+  font-size: 19px;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 14px rgba(90, 198, 255, 0.22);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sa-page-title small {
+  font-size: 12px;
+  font-family: inherit;
+  color: #8fbce8;
+  letter-spacing: 0.08em;
 }
 .sa-dim {
   opacity: 0.6;
@@ -41,22 +119,48 @@ body {
   font-size: 13px;
 }
 
-/* 登录 */
+/* ── 登录 ───────────────────────────────────────────── */
 .sa-login {
+  position: relative;
   flex: 1;
   display: grid;
   place-items: center;
-  background: radial-gradient(1200px 600px at 50% -10%, rgba(25, 183, 255, 0.18), transparent 60%), #061127;
+  overflow: hidden;
+}
+.sa-login::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../assets/img/login-bg.png') center / cover no-repeat;
+  opacity: 0.32;
+  pointer-events: none;
+}
+.sa-login::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(4, 18, 45, 0.3), rgba(3, 14, 36, 0.86) 76%);
+  pointer-events: none;
 }
 .sa-card {
-  width: min(380px, 92vw);
+  position: relative;
+  z-index: 1;
+  width: min(390px, 92vw);
   display: grid;
   gap: 12px;
-  padding: 26px 28px;
-  border: 1px solid rgba(83, 196, 255, 0.25);
+  padding: 26px 28px 24px;
+  border: 1px solid rgba(136, 203, 255, 0.22);
   border-radius: 12px;
-  background: rgba(11, 26, 51, 0.9);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  background:
+    linear-gradient(90deg, transparent 6%, var(--sa-line-lit), transparent 94%) top / 100% 1px no-repeat,
+    radial-gradient(120% 60% at 50% 0%, rgba(25, 183, 255, 0.1), transparent 60%),
+    linear-gradient(180deg, rgba(8, 28, 62, 0.92), rgba(4, 18, 42, 0.95));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+}
+.sa-card .sa-brand {
+  justify-content: center;
+  margin-bottom: 2px;
 }
 .sa-card label {
   display: grid;
@@ -64,41 +168,59 @@ body {
   font-size: 13px;
 }
 .sa-card input {
-  background: #0b1a33;
-  border: 1px solid rgba(83, 196, 255, 0.25);
+  background: rgba(4, 22, 58, 0.76);
+  border: 1px solid rgba(83, 196, 255, 0.28);
+  box-shadow: inset 0 0 16px rgba(25, 183, 255, 0.08);
   border-radius: 6px;
   padding: 8px 10px;
   color: inherit;
   font: inherit;
 }
+.sa-card input:focus {
+  outline: none;
+  border-color: rgba(83, 215, 255, 0.72);
+  box-shadow:
+    inset 0 0 18px rgba(25, 183, 255, 0.12),
+    0 0 14px rgba(25, 183, 255, 0.16);
+}
 .sa-card button {
-  background: #1f6feb;
-  border: 0;
+  border: 1px solid rgba(98, 224, 255, 0.86);
+  background: linear-gradient(180deg, #19b7ff, #0874d6 72%, #0852b6);
   border-radius: 6px;
   padding: 9px;
   color: #fff;
   font: inherit;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   cursor: pointer;
+}
+.sa-card button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #55d8ff, #118ce4 72%, #0b62c8);
+  box-shadow: 0 0 16px rgba(25, 183, 255, 0.32);
 }
 .sa-card button:disabled {
   opacity: 0.5;
 }
 
-/* 标头 */
+/* ── 标头 ───────────────────────────────────────────── */
 .sa-bar {
   display: flex;
   align-items: center;
   gap: 14px;
-  height: 52px;
-  padding: 0 16px;
-  border-bottom: 1px solid rgba(83, 196, 255, 0.2);
-  background: rgba(6, 17, 39, 0.95);
+  height: 58px;
+  padding: 0 18px;
+  background:
+    linear-gradient(90deg, transparent 2%, var(--sa-line-lit), transparent 98%) bottom / 100% 1px no-repeat,
+    linear-gradient(180deg, rgba(8, 30, 66, 0.92), rgba(3, 14, 36, 0.72));
   flex: none;
+  position: relative;
+  z-index: 1;
 }
 .sa-menu {
   display: flex;
   gap: 4px;
   overflow: auto;
+  scrollbar-width: thin;
 }
 .sa-menu button,
 .sa-mini {
@@ -110,10 +232,19 @@ body {
   font: inherit;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
+}
+.sa-menu button:hover,
+.sa-mini:hover {
+  border-color: rgba(83, 196, 255, 0.45);
 }
 .sa-menu button.on {
-  border-color: rgba(83, 196, 255, 0.4);
-  background: rgba(25, 183, 255, 0.12);
+  border-color: rgba(83, 196, 255, 0.45);
+  background: linear-gradient(180deg, rgba(25, 183, 255, 0.22), rgba(25, 183, 255, 0.08));
+  box-shadow: 0 0 14px rgba(25, 183, 255, 0.18);
 }
 .sa-mini {
   border-color: rgba(83, 196, 255, 0.25);
@@ -121,27 +252,61 @@ body {
 }
 .sa-clock {
   margin-left: auto;
+  font-family: var(--sa-num);
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
-  opacity: 0.85;
+  letter-spacing: 0.04em;
+  color: #cdeeff;
   white-space: nowrap;
 }
+.sa-clock .sa-date {
+  font-size: 12px;
+  color: #8fbce8;
+  margin-right: 8px;
+}
+/* 连接状态:胶囊 + 呼吸点 */
 .sa-status {
   font-size: 12px;
+  letter-spacing: 0.06em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(83, 196, 255, 0.28);
+  background: rgba(4, 22, 58, 0.6);
+  white-space: nowrap;
 }
 .sa-status[data-status='live'] {
   color: #6fe3a0;
+  border-color: rgba(47, 240, 187, 0.4);
 }
 .sa-status[data-status='offline'] {
   color: #ff8a8a;
+  border-color: rgba(255, 95, 122, 0.45);
 }
 .sa-denied {
   font-size: 12px;
   color: #ffd27a;
 }
 
-/* 列表 */
+/* ── 列表 ───────────────────────────────────────────── */
 .sa-list main {
-  padding: 20px 24px;
+  position: relative;
+  z-index: 1;
+  padding: 24px 28px;
+  overflow: auto;
+}
+.sa-list h2 {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 14px;
+  padding: 5px 30px 5px 12px;
+  font-family: var(--sa-title);
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  /* 向导里的标题条(3.png)的纯 CSS 版:左端一道亮边 + 向右淡出的蓝洗底,右上角斜切 */
+  background: linear-gradient(90deg, rgba(25, 183, 255, 0.34), rgba(25, 183, 255, 0.02) 88%);
+  border-left: 3px solid #4fd0ff;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 100%, 0 100%);
 }
 .sa-pages {
   display: grid;
@@ -149,22 +314,40 @@ body {
   gap: 12px;
 }
 .sa-page {
+  position: relative;
   display: grid;
   gap: 4px;
   text-align: left;
-  padding: 14px 16px;
-  border: 1px solid rgba(83, 196, 255, 0.25);
+  padding: 15px 16px;
+  border: 1px solid rgba(136, 203, 255, 0.2);
   border-radius: 10px;
-  background: #0b1a33;
+  background:
+    linear-gradient(90deg, transparent 8%, rgba(83, 215, 255, 0.4), transparent 92%) top / 100% 1px no-repeat,
+    linear-gradient(180deg, rgba(8, 28, 62, 0.88), rgba(4, 18, 42, 0.92));
   color: inherit;
   font: inherit;
   cursor: pointer;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    transform 0.2s;
+}
+.sa-page b {
+  font-family: var(--sa-title);
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
 }
 .sa-page:hover {
-  border-color: rgba(83, 196, 255, 0.6);
+  border-color: rgba(83, 215, 255, 0.6);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  transform: translateY(-1px);
+}
+.sa-cards-link {
+  margin: 0 0 12px;
 }
 
-/* 页面 */
+/* ── 页面 ───────────────────────────────────────────── */
 .sa-view {
   height: 100%;
   display: flex;
@@ -174,6 +357,7 @@ body {
   flex: 1;
   min-height: 0;
   position: relative;
+  z-index: 1;
 }
 .sa-stage > .sr-page {
   height: 100%;
@@ -190,4 +374,12 @@ body {
   display: grid;
   place-items: center;
   height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sa-page,
+  .sa-menu button,
+  .sa-mini {
+    transition: none;
+  }
 }

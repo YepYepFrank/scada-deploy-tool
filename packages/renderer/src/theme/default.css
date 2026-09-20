@@ -1,5 +1,6 @@
 /* @grid/scada-renderer 默认主题令牌——从 apps/deploy-tool/src/siteview/theme-microgrid-site.css 抽出(微电网深蓝)。
-   宿主可在 .sr-page 或任意祖先上覆盖这些变量;组件只用变量,不写死颜色。 */
+   宿主可在 .sr-page 或任意祖先上覆盖这些变量;组件只用变量,不写死颜色。
+   标题 / 数字字体见可选字体包:`import '@grid/scada-renderer/fonts.css'`(不引则回退微软雅黑)。 */
 .sr-page,
 .sr-theme-default {
   color-scheme: dark;
@@ -24,4 +25,28 @@
   --sr-gap: 12px;
   /* 缩放模板下小字号的屏幕下限(组件里 font-size: max(Npx, calc(var(--sr-min-text) / var(--sr-scale, 1)))) */
   --sr-min-text: 10px;
+
+  /* ── 观感令牌(0.5.0):页面装饰层与面板质感。想要 0.4.0 的素面观感传 :decor="false" ──
+     这些只影响「好不好看」,不影响布局与取数;宿主嫌哪层碍事就把对应变量改成 transparent / none。 */
+  /* 页面底色:深海蓝三段渐变(装饰层关掉时不画) */
+  --sr-page-bg: linear-gradient(160deg, #04122c 0%, #061d42 46%, #030f24 100%);
+  /* 顶部两团光晕 */
+  --sr-glow-1: rgba(25, 183, 255, 0.16);
+  --sr-glow-2: rgba(39, 110, 214, 0.15);
+  /* 背景网格(生产大屏的地平网格转成平铺细网格) */
+  --sr-grid-line: rgba(83, 196, 255, 0.055);
+  --sr-grid-size: 48px;
+  /* 四周暗角,把视线收到中间 */
+  --sr-vignette: rgba(1, 8, 22, 0.5);
+  /* 舞台四角的 L 形角标(仅 scaled 模板) */
+  --sr-corner: rgba(83, 215, 255, 0.7);
+  --sr-corner-len: 26px;
+  /* 面板:上下渐变 + 描边 + 投影 + 顶部发丝高光 */
+  --sr-panel-top: rgba(8, 30, 66, 0.9);
+  --sr-panel-bot: rgba(4, 18, 42, 0.94);
+  --sr-panel-edge: rgba(136, 203, 255, 0.18);
+  --sr-panel-shadow: 0 12px 34px rgba(1, 10, 26, 0.34);
+  --sr-panel-hairline: rgba(83, 215, 255, 0.55);
+  /* 卡头标题条(复刻生产端 dashboard-title 的渐变斜切条,纯 CSS,不带图) */
+  --sr-title-wash: rgba(25, 183, 255, 0.16);
 }

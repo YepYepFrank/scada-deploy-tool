@@ -1,0 +1,18 @@
+/* 可选字体包(0.5.0):`import '@grid/scada-renderer/fonts.css'`。
+   默认主题的 --sr-font-title / --sr-font-num 指名这两款;不引这个文件就回退到微软雅黑,页面照样能看,
+   只是标题与数字少了大屏该有的字形。两款都可商用(优设标题黑免费商用、Barlow 为 OFL),已转成 woff2
+   (优设标题黑 1.4 MB → 616 KB、Barlow 154 KB → 49 KB),按需加载,不引就不会进你的包。 */
+@font-face {
+  font-family: 'YouShe BiaoTiHei';
+  src: url('./fonts/YouSheBiaoTiHei.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Barlow SemiBold';
+  src: url('./fonts/Barlow-SemiBold.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}

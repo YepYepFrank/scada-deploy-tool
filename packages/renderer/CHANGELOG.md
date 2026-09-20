@@ -2,6 +2,24 @@
 
 版本按 SemVer;0.x 期间次版本号可含破坏性变更,会在条目里标「破坏」。契约(`schemaVersion`)的变更走 ADR,不随包版本隐式变化。
 
+## 0.5.0 — 2026-09-20
+
+**交付级观感**。纯视觉,零契约变更:页面配置、组件 props、事件、数据链路一个字都没动,升级后现有页面自动变样。
+YY 的原话是「配出来的页面太像 demo,不像最终交付的页面」——所以这版补的全是「点缀 / 背景 / 品牌」。
+
+- **页面装饰层**:`<ScadaPage>` 画深海蓝渐变底 + 两团光晕 + 细网格 + 四周暗角;固定设计稿的大屏模板(`overview-a` / `monitor-3col`)另加舞台四角 L 形角标。整层 `pointer-events: none`,不挡任何交互。
+  - 新 prop **`decor`(默认 `true`)**。宿主自己有整套背景、或不想要这层:`<ScadaPage :decor="false">`,观感回到 0.4.0。
+  - 各层都有令牌可调:`--sr-page-bg`、`--sr-glow-1/2`、`--sr-grid-line`、`--sr-grid-size`、`--sr-vignette`、`--sr-corner`、`--sr-corner-len`。
+- **固定设计稿的大屏在容器里居中**(此前只水平居中,容器比设计稿「高」时下方空一条)。
+- **面板质感**:卡片改上下渐变底 + 顶边发丝高光 + 外投影;卡头加一道向右淡出的蓝色洗底,标题前加渐变小竖条。令牌:`--sr-panel-top/bot/edge/shadow/hairline`、`--sr-title-wash`。
+- **组件细节**:数字卡顶部色条向下洇一层同色微光、数字带弱辉光;状态灯圆点双层光晕;表格斑马行 + 表头渐变;告警横幅用面板同款底(没有告警时也「有东西」);**接线图 `sld` 从「浮在页面上」改成一块面板**(此前它没有底)。
+- **可选字体包 `@grid/scada-renderer/fonts.css`**:标题用优设标题黑、数字用 Barlow SemiBold —— 主题里 `--sr-font-title` / `--sr-font-num` 一直指名这两款,但包里没带字体,不装就一路回退到微软雅黑(大屏「像 demo」的一半原因在这)。两款都可商用,已转 woff2(616 KB + 49 KB)。**不 import 就一个字节都不加载**,主包体积不变。
+
+  ```ts
+  import '@grid/scada-renderer/style.css'
+  import '@grid/scada-renderer/fonts.css' // 新增这一行就够
+  ```
+
 ## 0.4.0 — 2026-09-19
 
 一次接线图(ADR-005)。全部是纯新增,现有页面与宿主接入代码不用改;契约 JSON Schema 不变。

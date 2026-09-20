@@ -36,22 +36,40 @@ withDefaults(
 </template>
 
 <style>
+/* 面板质感(0.5.0):上下渐变底 + 顶部一道发丝高光 + 外投影,对齐部署工具向导里的 .panel。
+   底色仍是不透明的,页面装饰层不会从卡片里透出来。想回到素面:把 --sr-panel-* 改掉即可。 */
 .sr-card {
+  position: relative;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  border: 1px solid var(--sr-line-0);
+  border: 1px solid var(--sr-panel-edge, var(--sr-line-0));
   border-radius: var(--sr-radius);
-  background: var(--sr-bg-1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 40%),
+    linear-gradient(180deg, var(--sr-panel-top, var(--sr-bg-1)), var(--sr-panel-bot, var(--sr-bg-1)));
+  box-shadow: var(--sr-panel-shadow, none);
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
+/* 顶边发丝高光:两端淡出,像生产端面板那条亮线 */
+.sr-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 6%, var(--sr-panel-hairline, transparent), transparent 94%);
+}
 .sr-frame.sr-alarming {
   border-color: var(--sr-bad);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--sr-bad) 40%, transparent) inset;
 }
+/* 卡头:左侧一道渐变洗底(复刻生产端 dashboard-title 的标题条,不用图片)+ 下边线 */
 .sr-card-head {
   display: flex;
   align-items: center;
@@ -59,6 +77,7 @@ withDefaults(
   gap: 12px;
   padding: 10px 14px 6px;
   border-bottom: 1px solid var(--sr-line-0);
+  background: linear-gradient(90deg, var(--sr-title-wash, transparent), transparent 58%);
 }
 .sr-card-title {
   font-family: var(--sr-font-title);
@@ -68,6 +87,23 @@ withDefaults(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 0 12px rgba(90, 198, 255, 0.18);
+}
+/* 标题前的小竖条:所有卡片共用的一点识别度。
+   数字卡 / 状态灯的 .sr-card-title 自己是 space-between 的 flex 容器(左标题右英文副标),
+   竖条挂在容器上会被当成第三个 flex 项把两端撑开,所以那两处改挂在第一个 span 上。 */
+.sr-card-head .sr-card-title::before,
+.sr-number-card .sr-card-title > span:first-child::before,
+.sr-sl-title > span:first-child::before {
+  content: '';
+  display: inline-block;
+  vertical-align: -1px;
+  width: 3px;
+  height: 0.92em;
+  margin-right: 8px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, #9fe6ff, var(--sr-accent));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--sr-accent) 55%, transparent);
 }
 .sr-card-en {
   margin-left: 8px;

@@ -27,6 +27,12 @@ export interface ScadaPageProps {
    * Esc / ✕ 关闭。**默认 true**;design 态下不显示。宿主不想要就传 false。
    */
   expandable?: boolean
+  /**
+   * 页面装饰层(0.5.0):背景渐变 + 光晕 + 细网格 + 暗角,scaled 模板另加舞台四角角标。
+   * **默认 true**——交付出去的页面不该是一块素底加几个方块。宿主自己有整套背景 / 不想要这层时传 false,
+   * 观感回到 0.4.0(卡片质感不受影响,那部分只是主题令牌,想调改 --sr-panel-* 即可)。
+   */
+  decor?: boolean
 }
 
 /** 组件内 `emit('widget-event', { name, detail? })` 的载荷(组件自己定义 name,如接线图的 node-click) */

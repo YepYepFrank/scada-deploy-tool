@@ -72,7 +72,13 @@ const color = computed(() =>
         <span class="sr-sl-label sr-sl-err" :title="errors.state">数据不可用</span>
       </template>
       <template v-else>
-        <span class="sr-sl-dot" :style="{ background: color, boxShadow: `0 0 12px ${color}` }"></span>
+        <span
+          class="sr-sl-dot"
+          :style="{
+            background: color,
+            boxShadow: `0 0 0 4px color-mix(in srgb, ${color} 16%, transparent), 0 0 16px ${color}`,
+          }"
+        ></span>
         <span class="sr-sl-label" :style="{ color }">{{ label }}</span>
       </template>
     </div>

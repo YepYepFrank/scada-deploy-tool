@@ -139,6 +139,7 @@ const sev = (a: AlarmInfo) => a.severity.toLowerCase()
   font-size: max(11px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
   white-space: nowrap;
 }
+/* 告警横幅在大屏最上面一条,没有告警时也该「有东西」:面板同款渐变 + 顶部发丝线 */
 .sr-alarm-banner {
   height: 100%;
   box-sizing: border-box;
@@ -146,9 +147,14 @@ const sev = (a: AlarmInfo) => a.severity.toLowerCase()
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  border: 1px solid var(--sr-line-0);
+  border: 1px solid var(--sr-panel-edge, var(--sr-line-0));
   border-radius: var(--sr-radius);
-  background: var(--sr-bg-1);
+  background:
+    linear-gradient(90deg, transparent 4%, var(--sr-panel-hairline, transparent), transparent 96%) top / 100% 1px
+      no-repeat,
+    linear-gradient(90deg, var(--sr-title-wash, transparent), transparent 42%),
+    linear-gradient(180deg, var(--sr-panel-top, var(--sr-bg-1)), var(--sr-panel-bot, var(--sr-bg-1)));
+  box-shadow: var(--sr-panel-shadow, none);
   font-size: max(13px, calc(var(--sr-min-text, 10px) / var(--sr-scale, 1)));
   color: var(--sr-ink-1);
 }
