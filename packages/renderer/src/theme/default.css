@@ -52,6 +52,14 @@
   /* 大屏抬头(0.6.0):底色、分隔亮线、主标题的渐变字 */
   --sr-header-bg: rgba(10, 38, 82, 0.55);
   --sr-header-line: rgba(83, 215, 255, 0.5);
-  --sr-header-title-fill: linear-gradient(180deg, #ecf9ff 0%, #a9e2ff 52%, #4fb9f5 100%);
+  --sr-header-title-fill: linear-gradient(180deg, #ffffff 0%, #d6f2ff 40%, #63c8ff 78%, #2a8fe0 100%);
   --sr-header-title-ink: transparent;
+  /* 主标题的三层效果:描边把字从底色里抠出来、外发光、向下一格的实影(厚度感) */
+  --sr-header-title-stroke: rgba(3, 26, 58, 0.85);
+  --sr-header-title-glow: rgba(64, 176, 255, 0.5);
+  --sr-header-title-drop: rgba(2, 16, 40, 0.55);
+  /* 每 7 秒扫过标题的那道高光;不想要就 --sr-header-shine-anim: none */
+  --sr-header-shine: rgba(255, 255, 255, 0.75);
+  /* 标题两侧的翼饰(线 + 菱形) */
+  --sr-header-wing: rgba(83, 215, 255, 0.72);
 }

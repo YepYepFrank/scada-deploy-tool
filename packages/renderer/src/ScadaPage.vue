@@ -269,7 +269,7 @@ defineExpose({ issues, status, values, bindErrors })
           <span v-if="hdr.org" class="sr-header-org">{{ hdr.org }}</span>
         </div>
         <div class="sr-header-mid">
-          <div class="sr-header-title">{{ hdr.title }}</div>
+          <div class="sr-header-title" :data-text="hdr.title">{{ hdr.title }}</div>
           <div v-if="hdr.subtitle" class="sr-header-sub">{{ hdr.subtitle }}</div>
         </div>
         <div class="sr-header-side sr-header-side-r" aria-hidden="true"></div>
@@ -489,15 +489,24 @@ defineExpose({ issues, status, values, bindErrors })
   text-overflow: ellipsis;
 }
 .sr-header-mid {
+  position: relative;
   flex: none;
   max-width: 66%;
   text-align: center;
 }
+
+/* 主标题三层叠出来的(2026-09-20:光一层渐变字太素):
+   ①「描边层」——同一段字垫在底下只描粗边,把标题从背景里抠出来,远看有厚度;
+   ② 本体 —— 渐变填充 + 外发光;
+   ③「扫光层」—— 一道窄高光每 7 秒扫过一次,只在文字形状里可见。
+   ①③ 都用 content: attr(data-text) 复制同一段字,所以三层的字距 / 字号必须跟着本体走(继承即可)。 */
 .sr-header-title {
+  position: relative;
+  display: block;
   font-family: var(--sr-font-title);
   font-size: max(16px, calc(38px * var(--sr-scale, 1)));
   line-height: 1.16;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -505,7 +514,83 @@ defineExpose({ issues, status, values, bindErrors })
   -webkit-background-clip: text;
   background-clip: text;
   color: var(--sr-header-title-ink, var(--sr-ink-0));
-  filter: drop-shadow(0 0 calc(14px * var(--sr-scale, 1)) rgba(90, 198, 255, 0.28));
+  /* 发光 / 实影用 em:字号有 max(16px, …) 的下限,跟着 --sr-scale 算会在小预览里缩没 */
+  filter: drop-shadow(0 0 0.42em var(--sr-header-title-glow, transparent))
+    drop-shadow(0 0.05em 0 var(--sr-header-title-drop, transparent));
+}
+.sr-header-title::before,
+.sr-header-title::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+/* ① 描边层:z-index -1 落在抬头底色之上、本体之下(.sr-header 自己是个层叠上下文) */
+.sr-header-title::before {
+  z-index: -1;
+  color: transparent;
+  -webkit-text-stroke: 0.055em var(--sr-header-title-stroke, transparent);
+}
+/* ③ 扫光层:同一段字用高光色**实打实**再画一遍,再用一条移动的渐变遮罩只露出窄窄一道。
+   没走「渐变 + background-clip: text」那条路——Chromium 里把半透明渐变裁成文字之后画不出来(实测),
+   遮罩这条稳。不想要这道光:--sr-header-shine-anim: none(或系统开了「减少动态效果」时自动停)。 */
+.sr-header-title::after {
+  color: var(--sr-header-shine, transparent);
+  -webkit-text-fill-color: var(--sr-header-shine, transparent);
+  -webkit-mask-image: linear-gradient(100deg, transparent 38%, #000 50%, transparent 62%);
+  mask-image: linear-gradient(100deg, transparent 38%, #000 50%, transparent 62%);
+  -webkit-mask-size: 300% 100%;
+  mask-size: 300% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: 110% 0;
+  mask-position: 110% 0;
+  animation: var(--sr-header-shine-anim, sr-title-shine 7s ease-in-out infinite);
+}
+@keyframes sr-title-shine {
+  0%,
+  24% {
+    -webkit-mask-position: 110% 0;
+    mask-position: 110% 0;
+  }
+  60%,
+  100% {
+    -webkit-mask-position: -10% 0;
+    mask-position: -10% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sr-header-title::after {
+    animation: none;
+  }
+}
+
+/* 标题两侧的翼饰:一道向外淡出的细线 + 内端一颗小菱形;只有居中版式才画。
+   线和菱形是**同一个** clip-path 多边形(走完线的上沿 → 菱形一圈 → 线的下沿),
+   所以一个伪元素就够,右边那只镜像过去。 */
+.sr-header-center .sr-header-mid::before,
+.sr-header-center .sr-header-mid::after {
+  content: '';
+  position: absolute;
+  top: calc(50% - max(5px, 12px * var(--sr-scale, 1)) / 2);
+  width: max(46px, calc(104px * var(--sr-scale, 1)));
+  height: max(5px, calc(12px * var(--sr-scale, 1)));
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--sr-header-wing, transparent) 82%);
+  clip-path: polygon(0 46%, 86% 46%, 93% 0, 100% 50%, 93% 100%, 86% 54%, 0 54%);
+  filter: drop-shadow(0 0 3px var(--sr-header-wing, transparent));
+}
+.sr-header-center .sr-header-mid::before {
+  right: 100%;
+  margin-right: max(10px, calc(18px * var(--sr-scale, 1)));
+}
+.sr-header-center .sr-header-mid::after {
+  left: 100%;
+  margin-left: max(10px, calc(18px * var(--sr-scale, 1)));
+  transform: scaleX(-1);
 }
 .sr-header-sub {
   margin-top: calc(2px * var(--sr-scale, 1));
