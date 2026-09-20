@@ -131,7 +131,9 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: url('../assets/img/login-bg.png') center / cover no-repeat;
+  /* 用 webp(97 KB):原图 login-bg.png 2.2 MB,单文件大屏会把它 base64 内联进 site.html,
+     压到 4.7 MB 太离谱;这张在 0.32 不透明度 + 遮罩下面,压缩看不出来。原图留作素材。 */
+  background: url('../assets/img/login-bg.webp') center / cover no-repeat;
   opacity: 0.32;
   pointer-events: none;
 }
@@ -264,7 +266,7 @@ body {
   color: #8fbce8;
   margin-right: 8px;
 }
-/* 连接状态:胶囊 + 呼吸点 */
+/* 连接状态:胶囊 */
 .sa-status {
   font-size: 12px;
   letter-spacing: 0.06em;
