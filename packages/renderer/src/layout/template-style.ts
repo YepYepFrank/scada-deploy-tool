@@ -6,10 +6,22 @@
 import type { CSSProperties } from 'vue'
 import type { TemplateDefinition, TemplateSlotDefinition } from '../schema/registry'
 
-export function computeScale(design: { w: number; h: number }, container: { w: number; h: number }): number {
+/**
+ * 设计稿 → 容器的缩放比。
+ * `headerH` 是抬头在**设计稿坐标**里占的高度(0.6.0):抬头不在舞台里,但它和舞台一起竖着排,
+ * 所以要一起参与竖向的比例计算,否则加了抬头就会把页面挤出容器。
+ */
+export function computeScale(
+  design: { w: number; h: number },
+  container: { w: number; h: number },
+  headerH = 0
+): number {
   if (!container.w || !container.h) return 1
-  return Math.min(container.w / design.w, container.h / design.h)
+  return Math.min(container.w / design.w, container.h / (design.h + headerH))
 }
+
+/** 抬头在设计稿坐标里的高度;真实高度是它乘 scale(grid 模板的 scale 恒为 1) */
+export const HEADER_DESIGN_H = 84
 
 export function rootStyle(tpl: TemplateDefinition, scale: number): CSSProperties {
   if (tpl.kind === 'scaled') {

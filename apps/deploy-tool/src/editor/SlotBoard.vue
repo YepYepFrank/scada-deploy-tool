@@ -3,9 +3,10 @@
  * 槽位示意图:直接用渲染器 <ScadaPage design> 画当前配置(已配槽位 = 用 sampleData 渲染的真组件,空槽位 = 占位),
  * 在其上做事件委托:点到 .sr-slot 就选中该槽位。选中态通过给对应 DOM 加 class 表示。
  */
-import { nextTick, ref, watch } from 'vue'
-import { ScadaPage, type PageConfig, type TemplateDefinition } from '@grid/scada-renderer'
+import { computed, nextTick, ref, watch } from 'vue'
+import { HEADER_DESIGN_H, ScadaPage, type PageConfig, type TemplateDefinition } from '@grid/scada-renderer'
 import { aspectRatio } from './template-geometry'
+import { headerVisible } from './page-header'
 
 const props = defineProps<{
   config: PageConfig
@@ -15,6 +16,8 @@ const props = defineProps<{
 const emit = defineEmits<{ select: [slot: string] }>()
 
 const board = ref<HTMLElement | null>(null)
+/** 有抬头时示意图要连抬头一起按比例留位(渲染器就是按「抬头 + 舞台」算缩放的) */
+const extraH = computed(() => (headerVisible(props.config) ? HEADER_DESIGN_H : 0))
 
 function onClick(e: MouseEvent) {
   const el = (e.target as HTMLElement | null)?.closest<HTMLElement>('.sr-slot[data-slot]')
@@ -44,7 +47,7 @@ watch(
     ref="board"
     class="sb"
     :class="{ 'sb-grid': template.kind === 'grid' }"
-    :style="template.kind === 'scaled' ? { aspectRatio: String(aspectRatio(template)) } : {}"
+    :style="template.kind === 'scaled' ? { aspectRatio: String(aspectRatio(template, extraH)) } : {}"
     @click="onClick"
   >
     <ScadaPage :config="config" design />

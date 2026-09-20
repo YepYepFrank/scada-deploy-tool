@@ -12,7 +12,7 @@ import type { ScadaPageProps, WidgetEventPayload } from './schema/scada-page'
 import type { TemplateDefinition, WidgetDefinition } from './schema/registry'
 import { getTemplate, getWidget, validateAgainstRegistry, type RegistryIssue } from './registry'
 import { toWidgetEvent, useBindingRuntime, widgetPropsOf } from './widget-runtime'
-import { computeScale, rootStyle, slotStyle, wrapperStyle } from './layout/template-style'
+import { computeScale, HEADER_DESIGN_H, rootStyle, slotStyle, wrapperStyle } from './layout/template-style'
 import { DATA_SOURCE_KEY } from './provide'
 import WidgetExpand from './WidgetExpand.vue'
 
@@ -21,6 +21,7 @@ const props = withDefaults(defineProps<ScadaPageProps>(), {
   design: false,
   expandable: true,
   decor: true,
+  header: true,
 })
 const emit = defineEmits<{
   (e: 'invalid', issues: { path: string; message: string }[]): void
@@ -33,6 +34,18 @@ const emit = defineEmits<{
   (e: 'widget-event', payload: WidgetEventPayload): void
 }>()
 const themeName = computed(() => props.theme ?? props.config.theme ?? 'default')
+
+/**
+ * 大屏抬头(0.6.0):`config.header` 填了主标题、`show` 不为 false、宿主没传 `:header="false"` 才画。
+ * 它不占模板槽位,和舞台一起竖排;高度按设计稿 84 px 乘当前缩放,字号同理——所以在编辑器的小预览里
+ * 和在 1080p 大屏上比例一致。
+ */
+const hdr = computed(() => {
+  if (!props.header) return null
+  const h = props.config.header
+  return h && h.show !== false && (h.title ?? '').trim() ? h : null
+})
+const headerH = computed(() => (hdr.value ? HEADER_DESIGN_H : 0))
 
 const injected = inject<DataSource | null>(DATA_SOURCE_KEY, null)
 const ds = computed<DataSource | null>(() => props.dataSource ?? injected)
@@ -169,7 +182,7 @@ function measure() {
     scale.value = 1
     return
   }
-  scale.value = computeScale(t.design!, { w: el.clientWidth, h: el.clientHeight })
+  scale.value = computeScale(t.design!, { w: el.clientWidth, h: el.clientHeight }, headerH.value)
 }
 
 // 校验在 setup 阶段同步执行:首次渲染即带模板,onMounted 时 wrapper 已在 DOM 中可量尺寸
@@ -208,6 +221,11 @@ watch(ds, () => {
   watchStatus()
 })
 watch(() => props.design, setup)
+// 抬头出现 / 消失会改变舞台的可用高度,得重新量
+watch(headerH, async () => {
+  await nextTick()
+  measure()
+})
 onBeforeUnmount(() => {
   teardown()
   offStatus?.()
@@ -222,8 +240,14 @@ defineExpose({ issues, status, values, bindErrors })
     class="sr-page"
     :class="[
       `sr-theme-${theme ?? config.theme ?? 'default'}`,
-      { 'sr-design': design, 'sr-decor': decor, 'sr-page-scaled': tpl?.kind === 'scaled' },
+      {
+        'sr-design': design,
+        'sr-decor': decor,
+        'sr-page-scaled': tpl?.kind === 'scaled',
+        'sr-has-header': !!hdr,
+      },
     ]"
+    :style="{ '--sr-scale': String(scale) }"
   >
     <!-- 装饰层(0.5.0):底色渐变 + 光晕 + 细网格 + 暗角。纯观感,不接收指针事件,:decor="false" 时不渲染 -->
     <div v-if="decor" class="sr-bg" aria-hidden="true"></div>
@@ -234,6 +258,22 @@ defineExpose({ issues, status, values, bindErrors })
     </div>
 
     <template v-else-if="tpl">
+      <header
+        v-if="hdr"
+        class="sr-header"
+        :class="`sr-header-${hdr.align ?? 'center'}`"
+        :style="tpl.kind === 'scaled' ? { width: `${tpl.design!.w * scale}px` } : undefined"
+      >
+        <div class="sr-header-side">
+          <img v-if="hdr.logo" class="sr-header-logo" :src="hdr.logo" alt="" />
+          <span v-if="hdr.org" class="sr-header-org">{{ hdr.org }}</span>
+        </div>
+        <div class="sr-header-mid">
+          <div class="sr-header-title">{{ hdr.title }}</div>
+          <div v-if="hdr.subtitle" class="sr-header-sub">{{ hdr.subtitle }}</div>
+        </div>
+        <div class="sr-header-side sr-header-side-r" aria-hidden="true"></div>
+      </header>
       <div ref="wrapper" class="sr-wrapper" :style="wrapperStyle(tpl, scale)">
         <!-- 舞台四角角标:只给固定设计稿的大屏模板画,grid 模板(后台页)不画 -->
         <div v-if="decor && tpl.kind === 'scaled'" class="sr-corners" aria-hidden="true"></div>
@@ -392,6 +432,99 @@ defineExpose({ issues, status, values, bindErrors })
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ── 大屏抬头(0.6.0)───────────────────────────────────────────────
+   抬头不在模板槽位里,它和舞台竖着排;所有尺寸乘 --sr-scale,所以编辑器里的小预览
+   和 1080p 大屏上的比例完全一致。grid 模板 scale 恒为 1,就是 84 px 的一条。 */
+.sr-page.sr-has-header {
+  display: flex;
+  flex-direction: column;
+}
+.sr-page.sr-has-header:not(.sr-page-scaled) > .sr-wrapper {
+  flex: 1;
+  min-height: 0;
+}
+.sr-header {
+  --h: calc(84px * var(--sr-scale, 1));
+  position: relative;
+  z-index: 1;
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--h);
+  display: flex;
+  align-items: center;
+  gap: calc(16px * var(--sr-scale, 1));
+  padding: 0 calc(28px * var(--sr-scale, 1));
+  color: var(--sr-ink-0);
+  /* 底色向下淡出 + 一条两端收尾的分隔亮线 */
+  background:
+    linear-gradient(90deg, transparent 4%, var(--sr-header-line, transparent), transparent 96%) bottom / 100% 1px
+      no-repeat,
+    linear-gradient(180deg, var(--sr-header-bg, transparent), transparent);
+}
+.sr-header-side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(12px * var(--sr-scale, 1));
+}
+.sr-header-side-r {
+  justify-content: flex-end;
+}
+.sr-header-logo {
+  height: calc(44px * var(--sr-scale, 1));
+  width: auto;
+  display: block;
+  filter: drop-shadow(0 0 calc(10px * var(--sr-scale, 1)) rgba(72, 214, 255, 0.3));
+}
+.sr-header-org {
+  font-size: max(12px, calc(17px * var(--sr-scale, 1)));
+  letter-spacing: 0.1em;
+  color: var(--sr-ink-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sr-header-mid {
+  flex: none;
+  max-width: 66%;
+  text-align: center;
+}
+.sr-header-title {
+  font-family: var(--sr-font-title);
+  font-size: max(16px, calc(38px * var(--sr-scale, 1)));
+  line-height: 1.16;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--sr-header-title-fill, none);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: var(--sr-header-title-ink, var(--sr-ink-0));
+  filter: drop-shadow(0 0 calc(14px * var(--sr-scale, 1)) rgba(90, 198, 255, 0.28));
+}
+.sr-header-sub {
+  margin-top: calc(2px * var(--sr-scale, 1));
+  font-family: var(--sr-font-num);
+  font-size: max(10px, calc(14px * var(--sr-scale, 1)));
+  letter-spacing: 0.28em;
+  color: var(--sr-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 靠左时:标题贴着 logo 走,右边留空 */
+.sr-header-left .sr-header-side {
+  flex: none;
+}
+.sr-header-left .sr-header-mid {
+  flex: 1 1 auto;
+  max-width: none;
+  text-align: left;
 }
 .sr-slot {
   box-sizing: border-box;

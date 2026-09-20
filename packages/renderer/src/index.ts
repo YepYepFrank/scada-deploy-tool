@@ -1,5 +1,5 @@
 // @grid/scada-renderer 公共入口。
-export const version = '0.5.0'
+export const version = '0.6.0'
 export * from './schema'
 export { default as ScadaPage } from './ScadaPage.vue'
 /** 单张卡片入口(0.3.0):把页面里的某张卡单独嵌进宿主自己的页面;配 pickWidget 按「页面 id + 组件 id」取卡 */
@@ -27,6 +27,8 @@ export {
   type StampedValue,
 } from './binding-resolver'
 export { DATA_SOURCE_KEY, provideDataSource, useDataSource } from './provide'
+/** 大屏抬头在设计稿坐标里占的高度(0.6.0);部署工具画槽位示意图时要一起留位 */
+export { HEADER_DESIGN_H } from './layout/template-style'
 export { PALETTE, colorAt } from './widgets/_shared/echarts'
 
 export { textWidget } from './widgets/text'

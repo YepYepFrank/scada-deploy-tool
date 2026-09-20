@@ -33,6 +33,11 @@ export interface ScadaPageProps {
    * 观感回到 0.4.0(卡片质感不受影响,那部分只是主题令牌,想调改 --sr-panel-* 即可)。
    */
   decor?: boolean
+  /**
+   * 是否画 `config.header` 里的大屏抬头(0.6.0)。**默认 true**;页面没配 header 时本来就不画。
+   * 宿主想用自己的标题栏就传 false。
+   */
+  header?: boolean
 }
 
 /** 组件内 `emit('widget-event', { name, detail? })` 的载荷(组件自己定义 name,如接线图的 node-click) */

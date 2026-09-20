@@ -202,10 +202,21 @@ const configs: Record<string, WidgetConfig[]> = {
     W.img('w-r3c3', 'r3c3'),
   ],
 }
+/** 大屏抬头(0.6.0):勾上就给演示配置加一份 header,看抬头 + 舞台一起缩放的效果 */
+const withHeader = ref(false)
 const config = computed<PageConfig>(() => ({
   schemaVersion: 1,
   template: template.value,
   title: '/dev 展示页',
+  ...(withHeader.value
+    ? {
+        header: {
+          title: '仙人山服务区智能微电网监控系统',
+          subtitle: 'XIANRENSHAN MICROGRID MONITORING',
+          org: '国网电瑞 · 仙人山二期',
+        },
+      }
+    : {}),
   widgets: configs[template.value] ?? [],
 }))
 /** 覆盖统计(T2.4 完成标准:10 组件 × 3 模板):当前模板用到的组件类型(含模板 fixed 槽位)与三模板合计 */
@@ -507,6 +518,7 @@ const soloStyle = computed(() => {
         >
         <label><input v-model="live" type="checkbox" :disabled="design" /> 随机数据(MockDataSource,2 秒一推)</label>
         <label><input v-model="showStatus" type="checkbox" /> 显示连接状态徽标</label>
+        <label><input v-model="withHeader" type="checkbox" /> 大屏抬头(config.header)</label>
         <button :disabled="!live" @click="toggleOffline">{{ offline ? '恢复连接' : '模拟断线' }}</button>
       </section>
       <section class="mirror">

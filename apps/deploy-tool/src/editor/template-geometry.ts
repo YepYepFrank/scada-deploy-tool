@@ -71,6 +71,10 @@ export function slotRects(tpl: TemplateDefinition): SlotRect[] {
 }
 
 /** 缩略图宽高比(scaled 用设计稿,grid 按 16:9) */
-export function aspectRatio(tpl: TemplateDefinition): number {
-  return tpl.kind === 'scaled' && tpl.design ? tpl.design.w / tpl.design.h : 16 / 9
+/**
+ * 设计稿宽高比。`extraH` 是舞台之外还要竖着占掉的设计像素——目前只有大屏抬头(0.6.0),
+ * 槽位示意图得把它算进去,否则示意图的框还是 16:9,渲染器却按「抬头 + 舞台」缩放,两边对不上、底下空一条。
+ */
+export function aspectRatio(tpl: TemplateDefinition, extraH = 0): number {
+  return tpl.kind === 'scaled' && tpl.design ? tpl.design.w / (tpl.design.h + extraH) : 16 / 9
 }

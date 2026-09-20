@@ -49,4 +49,9 @@
   --sr-panel-hairline: rgba(83, 215, 255, 0.55);
   /* 卡头标题条(复刻生产端 dashboard-title 的渐变斜切条,纯 CSS,不带图) */
   --sr-title-wash: rgba(25, 183, 255, 0.16);
+  /* 大屏抬头(0.6.0):底色、分隔亮线、主标题的渐变字 */
+  --sr-header-bg: rgba(10, 38, 82, 0.55);
+  --sr-header-line: rgba(83, 215, 255, 0.5);
+  --sr-header-title-fill: linear-gradient(180deg, #ecf9ff 0%, #a9e2ff 52%, #4fb9f5 100%);
+  --sr-header-title-ink: transparent;
 }

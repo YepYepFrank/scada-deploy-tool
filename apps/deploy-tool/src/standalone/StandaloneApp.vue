@@ -344,6 +344,14 @@ onBeforeUnmount(() => {
   disposeSource()
 })
 const title = computed(() => config.value?.title || current.value?.label || 'GRID·OPS')
+/**
+ * 页面自己画了大屏抬头(渲染器 0.6.0 的 config.header)时,标头里就别再把同一个名字写一遍——
+ * 顶栏只留品牌、页面切换、状态和时钟。
+ */
+const pageDrawsHeader = computed(() => {
+  const h = config.value?.header
+  return !!h && h.show !== false && !!h.title?.trim()
+})
 watch(title, t => (document.title = `${t} · 站点大屏`), { immediate: true })
 
 // ---------- 启动:恢复会话 ----------
@@ -456,7 +464,7 @@ onMounted(async () => {
           <img class="sa-logo" src="../assets/img/company-logo.png" alt="国网电瑞" />
           <span class="sa-mark">GRID·OPS</span>
         </span>
-        <span class="sa-page-title"
+        <span v-if="!pageDrawsHeader" class="sa-page-title"
           >{{ title }}<small v-if="current?.site">{{ current.site }}</small></span
         >
         <nav v-if="pages.length > 1" class="sa-menu">

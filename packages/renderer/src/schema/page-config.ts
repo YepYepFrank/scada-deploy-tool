@@ -16,7 +16,31 @@ export type { EntityRef, AttributeScope, Aggregation, ExtInterval }
 
 export const SCHEMA_VERSION = 1 as const
 
-/** 一整页的配置。页面标头 / 导航菜单 / 时钟不在此内,归宿主应用(架构 §6「三条补充约定」)。 */
+/**
+ * 大屏抬头(0.6.0):页面顶部那条标题带,**属于页面本身**(工程人员在部署工具里填,跟着页面一起发布)。
+ * 与架构 §6「页面标头 / 导航菜单 / 时钟归宿主」不冲突:那说的是宿主应用自己的框架——导航、时钟、
+ * 登录身份;这里是这张大屏印在最上面的名字,换一张页面就该换一个,只能由配页面的人决定。
+ * 不配 `header`(或 `title` 为空)就不画,行为与 0.5.0 一致;宿主想自己画可传 `<ScadaPage :header="false">`。
+ */
+export interface PageHeader {
+  /** 主标题,如「仙人山服务区智能微电网监控系统」。为空 = 不画抬头。 */
+  title?: string
+  /** 副标题,常放英文名或一句说明。 */
+  subtitle?: string
+  /** 左侧单位 / 项目名。 */
+  org?: string
+  /**
+   * 左侧图标:`http(s)://…` 或 `data:image/…;base64,…`(部署工具选图后转 data URI 存进来,限 200 KB)。
+   * @maxLength 300000
+   */
+  logo?: string
+  /** 主标题对齐:居中(缺省)或靠左。 */
+  align?: 'center' | 'left'
+  /** false = 配置留着但不画(编辑器里的「显示抬头」开关);缺省视为 true。 */
+  show?: boolean
+}
+
+/** 一整页的配置。导航菜单 / 时钟 / 登录身份不在此内,归宿主应用(架构 §6「三条补充约定」)。 */
 export interface PageConfig {
   schemaVersion: typeof SCHEMA_VERSION
   /**
@@ -26,8 +50,10 @@ export interface PageConfig {
   template: string
   /** 主题名;缺省用渲染器默认主题。 */
   theme?: string
-  /** 页面标题,供宿主 / 独立薄壳在标头显示;渲染器本身不画。 */
+  /** 页面标题,供宿主 / 独立薄壳在自己的标头 / 页面列表里显示;渲染器本身不画(要画在页面里的是 `header`)。 */
   title?: string
+  /** 大屏抬头(0.6.0);不填不画。 */
+  header?: PageHeader
   widgets: WidgetConfig[]
 }
 

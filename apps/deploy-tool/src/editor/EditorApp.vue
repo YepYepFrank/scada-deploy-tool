@@ -29,6 +29,7 @@ import { useProject } from '../project/useProject'
 import { ProjectParseError } from '../project/scadaproj'
 import { detectDrift, pageNameOf, readPageState, type DriftItem, type PublishedRecord } from '../publish/publishPage'
 import { useEditorState } from './useEditorState'
+import { readLogoDataUrl, setHeaderAlign, setHeaderShow, setHeaderText } from './page-header'
 import { useMeta, type EditorSession } from '../meta/useMeta'
 import { countEntities } from '../meta/MetaNode'
 import { applyEntityNames, pruneTree, type EntityScope } from '../meta/scope'
@@ -492,6 +493,39 @@ const title = computed({
   get: () => ed.config.value.title ?? '',
   set: v => ed.update(d => (d.title = v)),
 })
+
+// ---------- 大屏抬头(2026-09-20 YY:最后大屏要有能力编辑抬头 / 标题) ----------
+/** 每个字段都是「读 config、写 ed.update」;空串交给 page-header.ts 清掉,不给页面 JSON 留空壳 */
+const hdrField = (k: 'title' | 'subtitle' | 'org' | 'logo') =>
+  computed({
+    get: () => ed.config.value.header?.[k] ?? '',
+    set: (v: string) => ed.update(d => setHeaderText(d, k, v), { coalesce: `hdr-${k}` }),
+  })
+const hdrTitle = hdrField('title')
+const hdrSubtitle = hdrField('subtitle')
+const hdrOrg = hdrField('org')
+const hdrLogo = hdrField('logo')
+const hdrAlign = computed({
+  get: () => ed.config.value.header?.align ?? 'center',
+  set: (v: 'center' | 'left') => ed.update(d => setHeaderAlign(d, v)),
+})
+const hdrShow = computed({
+  get: () => ed.config.value.header?.show !== false,
+  set: (v: boolean) => ed.update(d => setHeaderShow(d, v)),
+})
+const hdrMsg = ref('')
+async function pickLogo(e: Event) {
+  const input = e.target as HTMLInputElement
+  const f = input.files?.[0]
+  input.value = '' // 选同一张图也要能再触发一次
+  if (!f) return
+  hdrMsg.value = ''
+  try {
+    hdrLogo.value = await readLogoDataUrl(f)
+  } catch (err) {
+    hdrMsg.value = err instanceof Error ? err.message : String(err)
+  }
+}
 const json = computed(() => JSON.stringify(ed.config.value, null, 2))
 const jsonDraft = ref('')
 const jsonMsg = ref('')
@@ -796,6 +830,42 @@ defineExpose({
             </button>
             <h1 v-if="!embedded">组态编辑器 <small>T3.2 · 模板与槽位</small></h1>
             <label class="ed-field">页面标题 <input v-model.lazy="title" /></label>
+            <template v-if="!isCards">
+              <h2>
+                大屏抬头
+                <label class="ed-hdr-show" title="关掉只是不画,填的字留着">
+                  <input v-model="hdrShow" type="checkbox" data-role="hdr-show" />
+                  显示
+                </label>
+              </h2>
+              <p class="dim ed-hdr-hint">印在页面最上方那条标题带,跟页面一起发布;大屏、前端、预览看到的是同一份。</p>
+              <label class="ed-field"
+                >主标题
+                <input v-model.lazy="hdrTitle" data-role="hdr-title" placeholder="如:仙人山服务区智能微电网监控系统"
+              /></label>
+              <label class="ed-field"
+                >副标题 <input v-model.lazy="hdrSubtitle" data-role="hdr-subtitle" placeholder="英文名 / 一句说明,可空"
+              /></label>
+              <label class="ed-field"
+                >单位名称 <input v-model.lazy="hdrOrg" data-role="hdr-org" placeholder="显示在左上角,可空"
+              /></label>
+              <div class="ed-field ed-hdr-logo">
+                <img v-if="hdrLogo" class="ed-hdr-logo-img" :src="hdrLogo" alt="抬头图标" />
+                <span v-else class="dim">无图标</span>
+                <label class="ed-mini ed-file"
+                  >选图片<input type="file" accept="image/*" data-role="hdr-logo" @change="pickLogo"
+                /></label>
+                <button v-if="hdrLogo" type="button" class="ed-mini" @click="hdrLogo = ''">清除</button>
+              </div>
+              <label class="ed-field"
+                >标题位置
+                <select v-model="hdrAlign" data-role="hdr-align">
+                  <option value="center">居中</option>
+                  <option value="left">靠左(紧跟图标)</option>
+                </select>
+              </label>
+              <p v-if="hdrMsg" class="ed-hdr-msg" data-role="hdr-msg">{{ hdrMsg }}</p>
+            </template>
             <template v-if="isCards">
               <h2>卡片库</h2>
               <p class="dim ed-cards-hint" data-role="cards-hint">
@@ -1520,6 +1590,47 @@ body {
 .ed-mini {
   padding: 1px 8px !important;
   font-size: 12px;
+}
+/* 大屏抬头(2026-09-20) */
+.ed-hdr-show {
+  float: right;
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.8;
+  cursor: pointer;
+}
+.ed-hdr-hint {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ed-hdr-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ed-hdr-logo-img {
+  height: 24px;
+  width: auto;
+  max-width: 96px;
+  object-fit: contain;
+  background: var(--ed-bg-1);
+  border-radius: 4px;
+}
+.ed-hdr-msg {
+  margin: -4px 0 10px;
+  font-size: 12px;
+  color: #ffd27a;
+}
+.ed-field select {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--ed-bg-1);
+  border: 1px solid var(--ed-line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: inherit;
+  font: inherit;
 }
 .ed-file {
   position: relative;
