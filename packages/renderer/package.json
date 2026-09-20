@@ -21,6 +21,7 @@
   "files": [
     "dist",
     "src",
+    "!src/theme/fonts",
     "build-info.json"
   ],
   "scripts": {
