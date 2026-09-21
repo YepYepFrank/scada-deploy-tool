@@ -38,7 +38,7 @@ const config: PageConfig = {
 }
 
 /** 假数据源:按「当前 token 是谁」决定哪些实体可见;不可见的订阅像 TB 一样回 onError 一次 */
-function fakeSource(getToken: () => string) {
+function fakeSource(getToken: () => string | Promise<string>) {
   const disposed = vi.fn()
   const canSee = (id: string) => getToken() === 'tenant-jwt' || id !== SECRET.id
   const deny = (onError?: (e: Error) => void) =>
@@ -152,5 +152,30 @@ describe('预览 + Customer 视角', () => {
     expect(w.find('[data-role="banner"]').exists()).toBe(false)
     expect(w.find('.sr-widget[data-widget="w-secret"] .sr-error').exists()).toBe(false)
     expect(made).toHaveLength(3)
+  })
+
+  it('token 续期(2026-09-21):租户 token 换了新的,数据源**不重建**,但它再来要 token 时拿到的是新的', async () => {
+    const made: Array<{ getToken: () => string | Promise<string> }> = []
+    let current = 'tenant-jwt'
+    const w = mount(PreviewPane, {
+      props: {
+        config,
+        base: '/tbm',
+        tenantToken: current,
+        getTenantToken: async () => current,
+        makeSource: (_b, getToken) => {
+          made.push({ getToken })
+          return fakeSource(() => 'tenant-jwt')
+        },
+      },
+    })
+    await flush()
+    expect(made).toHaveLength(1)
+    current = 'tenant-jwt-2' // 向导那边续期了
+    await w.setProps({ tenantToken: current })
+    await flush()
+    expect(made).toHaveLength(1) // 订阅没被拆掉重来
+    expect(await made[0]!.getToken()).toBe('tenant-jwt-2') // WS 重连 / REST 拿到的是新票,不是创建那一刻捕获的旧字符串
+    w.unmount()
   })
 })

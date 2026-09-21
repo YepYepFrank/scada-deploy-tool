@@ -10,10 +10,12 @@ import { computed, onBeforeUnmount, reactive, ref, shallowRef, watch } from 'vue
 import { ScadaPage, type PageConfig } from '@grid/scada-renderer'
 import CardsInspect from '../components/CardsInspect.vue'
 import { LegacyDataSource, type DataSource } from '@grid/tb-client'
+import { createTbSession } from '../api/tb-session'
 
 type Source = DataSource & { dispose?(): void }
 /** 缺省数据源工厂:LegacyDataSource(测试通过 makeSource 注入假实现) */
-const defaultMake = (base: string, getToken: () => string): Source => new LegacyDataSource({ baseUrl: base, getToken })
+const defaultMake = (base: string, getToken: () => string | Promise<string>): Source =>
+  new LegacyDataSource({ baseUrl: base, getToken })
 
 const props = withDefaults(
   defineProps<{
@@ -21,6 +23,11 @@ const props = withDefaults(
     /** TB 地址(与编辑器连接一致,如 /tbm) */
     base: string
     tenantToken: string
+    /**
+     * 要一个没过期的租户 token(2026-09-21)。数据源每次(重)连 WS、每次发 REST 都来问一次——
+     * TB 的 token 2.5 小时过期,以前这里把创建那一刻的字符串捕获进闭包,过期后 WS 一断就再也连不上。
+     */
+    getTenantToken?: () => Promise<string>
     tenantUser?: string
     /** Customer 账号预填(dev 用 VITE_TB_USER);密码不预填时由现场输入 */
     customerUser?: string
@@ -48,6 +55,19 @@ const cust = reactive({
   msg: '',
 })
 
+/** Customer 视角自己登录的会话(租户那一份归向导 / 编辑器管,经 getTenantToken 来要) */
+const custLogins = ref(0)
+const custSession = createTbSession({
+  onToken: token => {
+    cust.token = token
+  },
+  onExpired: reason => {
+    cust.token = ''
+    cust.msg = `${reason},请重新登录`
+  },
+  ...(props.fetchImpl ? { fetchImpl: props.fetchImpl } : {}),
+})
+
 const doFetch = (input: string, init?: Parameters<typeof fetch>[1]) => (props.fetchImpl ?? fetch)(input, init)
 async function loginCustomer() {
   cust.busy = true
@@ -60,10 +80,14 @@ async function loginCustomer() {
       body: JSON.stringify({ username: cust.user, password: cust.pass }),
     })
     if (!r.ok) throw new Error(`登录失败 HTTP ${r.status}`)
-    const token = ((await r.json()) as { token: string }).token
+    const login = (await r.json()) as { token: string; refreshToken?: string }
+    const token = login.token
     const me = await doFetch(`${props.base}/api/auth/user`, { headers: { 'X-Authorization': `Bearer ${token}` } })
     cust.authority = me.ok ? ((await me.json()) as { authority: string }).authority : '?'
     cust.token = token
+    // Customer 视角也要续期:refresh token 只在内存
+    custSession.set(login.refreshToken ? { base: props.base, token, refreshToken: login.refreshToken } : null)
+    custLogins.value++
     cust.msg =
       cust.authority === 'CUSTOMER_USER'
         ? `已登录 · CUSTOMER_USER`
@@ -92,22 +116,37 @@ const widgetLabel = (id: string) => {
 const whose = computed(() => (view.value === 'customer' ? `Customer「${cust.user}」` : `租户「${props.tenantUser}」`))
 
 // ---------- 数据源:视角或 token 变了就整个换掉(ScadaPage 用 key 重建,订阅全部重来) ----------
-const make = (base: string, getToken: () => string): Source => (props.makeSource ?? defaultMake)(base, getToken)
+const make = (base: string, getToken: () => string | Promise<string>): Source =>
+  (props.makeSource ?? defaultMake)(base, getToken)
 const source = shallowRef<Source | null>(null)
 const sourceKey = ref(0)
 const activeToken = computed(() => (view.value === 'tenant' ? props.tenantToken : cust.token))
+/**
+ * 数据源跟着「身份」换,不跟着 token 字符串换:token 续期(2.5 小时一次)只是换了张票,人还是那个人,
+ * 订阅不该全部拆掉重来。身份 = 视角 + 有没有登录 + 第几次 Customer 登录。
+ */
+const identity = computed(
+  () => `${view.value}:${activeToken.value ? 1 : 0}:${view.value === 'customer' ? custLogins.value : 0}`
+)
+const getToken = (): string | Promise<string> => {
+  if (view.value === 'customer') return custSession.has() ? custSession.freshToken() : cust.token
+  return props.getTenantToken ? props.getTenantToken() : props.tenantToken
+}
 watch(
-  activeToken,
-  token => {
+  identity,
+  () => {
     source.value?.dispose?.()
     errors.clear()
     status.value = 'connecting'
-    source.value = token ? make(props.base, () => token) : null
+    source.value = activeToken.value ? make(props.base, getToken) : null
     sourceKey.value++
   },
   { immediate: true }
 )
-onBeforeUnmount(() => source.value?.dispose?.())
+onBeforeUnmount(() => {
+  source.value?.dispose?.()
+  custSession.dispose()
+})
 </script>
 
 <template>

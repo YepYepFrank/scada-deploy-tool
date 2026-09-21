@@ -13,6 +13,7 @@ import {
   switchDirText,
   sevLabel,
 } from './templates.js'
+import { createTbSession } from '../api/tb-session'
 import EditorApp from '../editor/EditorApp.vue'
 import PublishPanel from '../editor/PublishPanel.vue'
 import { listSitePages, publishPage, readPageState } from '../publish/publishPage'
@@ -257,6 +258,7 @@ function switchEnv() {
   conn.password = curEnv.value.defPass
   conn.status = 'idle'
   conn.token = null
+  tbSession.set(null)
   devices.value = []
   sites.value = []
   customers.value = []
@@ -559,15 +561,36 @@ async function savePerms() {
   }
 }
 
-async function api(url, data, method) {
+/**
+ * 登录会话的续期(2026-09-21,见 api/tb-session.ts):TB 的 access token 2.5 小时过期,以前这里登录一次用到底,
+ * 编辑到一半去忙别的、回来就是满屏 401 / 实时数据全没。现在每次请求前先要一个没过期的 token,
+ * 收到 401 再强制换一次重试;续不下去(超过 7 天没续 / 被吊销)才回到未连接状态并说明原因。
+ */
+const tbSession = createTbSession({
+  onToken: token => {
+    conn.token = token
+  },
+  onExpired: reason => {
+    conn.token = null
+    conn.status = 'err'
+    conn.error = `${reason},请重新连接`
+  },
+})
+
+async function api(url, data, method, retried = false) {
+  const isLogin = url === '/api/auth/login'
+  const token = !isLogin && tbSession.has() ? await tbSession.freshToken() : conn.token
   const r = await fetch(curEnv.value.base + url, {
     method: method || (data ? 'POST' : 'GET'),
     headers: {
       'Content-Type': 'application/json',
-      ...(conn.token ? { 'X-Authorization': `Bearer ${conn.token}` } : {}),
+      ...(token && !isLogin ? { 'X-Authorization': `Bearer ${token}` } : {}),
     },
     body: data ? JSON.stringify(data) : undefined,
   })
+  // freshToken 已按 exp 提前换过,还 401 说明这张 TB 确实不认(时钟偏差 / 被吊销):强制换一次再试
+  if (r.status === 401 && !isLogin && !retried && tbSession.has() && (await tbSession.tryRefresh()))
+    return api(url, data, method, true)
   if (!r.ok) throw new Error(`${url} → HTTP ${r.status}`)
   const text = await r.text()
   return text ? JSON.parse(text) : null
@@ -577,7 +600,10 @@ async function connect() {
   conn.status = 'busy'
   conn.error = ''
   try {
-    conn.token = (await api('/api/auth/login', { username: conn.username, password: conn.password })).token
+    const login = await api('/api/auth/login', { username: conn.username, password: conn.password })
+    conn.token = login.token
+    // refresh token 交给会话保管(只在内存):之后的续期都靠它,不用留着密码反复登录
+    tbSession.set({ base: curEnv.value.base, token: login.token, refreshToken: login.refreshToken })
     persistLogin()
     // T3.8 起大屏不再用 Public 匿名身份:看什么由登录账号在 TB 里的分配决定
     // 分页拉取全部设备(生产库 200+ 台,不能只取一页)
@@ -2366,6 +2392,8 @@ const editorSession = computed(() =>
     ? {
         base: curEnv.value.base,
         token: conn.token,
+        // 编辑器 / 预览要 token 时来问这个,不要自己留着一份字符串用到过期
+        getToken: () => tbSession.freshToken(),
         user: conn.username,
         siteName: site.name,
         authority: 'TENANT_ADMIN',

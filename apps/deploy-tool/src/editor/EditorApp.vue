@@ -719,6 +719,7 @@ defineExpose({
         :config="ed.config.value"
         :base="meta.conn.base"
         :tenant-token="meta.conn.token"
+        :get-tenant-token="meta.getToken"
         :tenant-user="meta.conn.user"
         :customer-user="customerIdentity?.user"
         :customer-pass="customerIdentity?.pass"
