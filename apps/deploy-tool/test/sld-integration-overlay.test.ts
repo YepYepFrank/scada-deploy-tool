@@ -58,7 +58,7 @@ describe('SldEditorOverlay', () => {
     q('[data-role="stub-draw"]')!.click()
     await flushPromises()
     expect(q('[data-role="sld-stub"]')!.dataset.nodes).toBe('2')
-    expect(q('[data-role="sld-dirty"]')!.textContent).toContain('有未写回的修改')
+    expect(q('[data-role="sld-dirty"]')!.textContent).toContain('有未保存的修改')
     expect(w.emitted('done')).toBeUndefined()
     q('[data-role="sld-done"]')!.click()
     const done = w.emitted('done') as [SldEditorContent][]
@@ -106,5 +106,61 @@ describe('SldEditorOverlay', () => {
     window.dispatchEvent(ev2)
     expect(ev2.defaultPrevented).toBe(true)
     w.unmount()
+  })
+
+  it('保存(2026-09-21):点「保存」/ Ctrl+S 把当前内容交出去但不关闭;之后状态变成「已保存」', async () => {
+    const w = await mountOverlay()
+    q('[data-role="stub-draw"]')!.click()
+    await flushPromises()
+    q('[data-role="sld-save"]')!.click()
+    await flushPromises()
+    const saves = w.emitted('save') as [SldEditorContent][]
+    expect(saves).toHaveLength(1)
+    expect(saves[0]![0].doc.nodes).toHaveLength(1)
+    expect(w.emitted('done')).toBeUndefined()
+    expect(q('[data-role="sld-overlay"]')).not.toBeNull() // 还开着
+    expect(q('[data-role="sld-dirty"]')!.textContent).toContain('已保存到页面')
+    // 再改一笔,Ctrl+S
+    q('[data-role="stub-draw"]')!.click()
+    await flushPromises()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, cancelable: true }))
+    await flushPromises()
+    expect((w.emitted('save') as unknown[]).length).toBe(2)
+    w.unmount()
+  })
+
+  it('停手 2 秒自动保存;没改动不会空存', async () => {
+    vi.useFakeTimers()
+    const w = await mountOverlay()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(w.emitted('save')).toBeUndefined()
+    q('[data-role="stub-draw"]')!.click()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(w.emitted('save')).toBeUndefined()
+    await vi.advanceTimersByTimeAsync(1100)
+    expect((w.emitted('save') as unknown[]).length).toBe(1)
+    w.unmount()
+    vi.useRealTimers()
+  })
+
+  it('覆盖层没经「完成 / 放弃」就被卸载:没保存的修改兜底交出去,不丢', async () => {
+    const w = await mountOverlay()
+    q('[data-role="stub-draw"]')!.click()
+    await flushPromises()
+    w.unmount()
+    const saves = w.emitted('save') as [SldEditorContent][]
+    expect(saves).toHaveLength(1)
+    expect(saves[0]![0].doc.nodes).toHaveLength(1)
+  })
+
+  it('放弃修改:不会在卸载兜底里又把内容存回去', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const w = await mountOverlay()
+    q('[data-role="stub-draw"]')!.click()
+    await flushPromises()
+    q('[data-role="sld-discard"]')!.click()
+    expect(w.emitted('cancel')).toHaveLength(1)
+    w.unmount()
+    expect(w.emitted('save')).toBeUndefined()
   })
 })

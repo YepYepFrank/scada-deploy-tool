@@ -9,7 +9,7 @@
  * - 有改动时拦住浏览器刷新 / 关页(beforeunload;EditorApp 本身没有离开保护,这里只在覆盖层打开且有改动时挂)。
  * 层级 1100:盖过页面编辑器的全屏层(1000),低于 KeyPicker 浮层(1200)——接线图的绑定面板里也会弹 KeyPicker。
  */
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, shallowRef } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import type { SldEditorContent, SldEditorHost } from '../sld-editor/ext'
 import { sameSldContent } from './sld-integration'
 
@@ -26,6 +26,8 @@ const props = defineProps<{
   title?: string
 }>()
 const emit = defineEmits<{
+  /** 保存(不关闭):把当前内容写回页面。点「保存」、Ctrl+S、停手 2 秒自动保存、覆盖层被卸载前兜底,都发它 */
+  save: [content: SldEditorContent]
   /** 完成:最终内容(与 initial 相同时也照发,由调用方决定要不要 commit) */
   done: [content: SldEditorContent]
   /** 放弃修改 */
@@ -33,17 +35,44 @@ const emit = defineEmits<{
 }>()
 
 const draft = shallowRef<SldEditorContent>(props.initial)
-const dirty = computed(() => !sameSldContent(props.initial, draft.value))
+/** 上一次写回页面的内容;dirty = 还有没写回的修改 */
+const saved = shallowRef<SldEditorContent>(props.initial)
+const dirty = computed(() => !sameSldContent(saved.value, draft.value))
+/** 自打开以来有没有改过(「放弃修改」要不要二次确认看它——中途保存过的也算改过) */
+const changed = computed(() => !sameSldContent(props.initial, draft.value))
+const savedAt = ref('')
 
+/** 停手这么久就自动保存一次 */
+const AUTOSAVE_MS = 2000
+let timer: ReturnType<typeof setTimeout> | undefined
+function save(): void {
+  clearTimeout(timer)
+  if (!dirty.value) return
+  saved.value = draft.value
+  savedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  emit('save', draft.value)
+}
 function onUpdate(next: SldEditorContent) {
   draft.value = next
+  clearTimeout(timer)
+  timer = setTimeout(save, AUTOSAVE_MS)
 }
 function finish() {
+  clearTimeout(timer)
+  saved.value = draft.value
   emit('done', draft.value)
 }
 function discard() {
-  if (dirty.value && !confirm('放弃对接线图的全部修改?')) return
+  if (changed.value && !confirm('放弃这次打开以来对接线图的全部修改?(中途保存过的也会退回)')) return
+  clearTimeout(timer)
+  saved.value = draft.value // 不要在卸载兜底里又把它存回去
   emit('cancel')
+}
+function onKeyDown(e: KeyboardEvent): void {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault()
+    save()
+  }
 }
 
 function onBeforeUnload(e: BeforeUnloadEvent) {
@@ -51,10 +80,18 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
   e.preventDefault()
   e.returnValue = ''
 }
-onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
-onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
+onMounted(() => {
+  window.addEventListener('beforeunload', onBeforeUnload)
+  window.addEventListener('keydown', onKeyDown, true)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', onBeforeUnload)
+  window.removeEventListener('keydown', onKeyDown, true)
+  // 兜底:覆盖层不是经「完成 / 放弃」关掉的(外层把它卸载了),没写回的也别丢
+  save()
+})
 
-defineExpose({ draft, dirty })
+defineExpose({ draft, dirty, changed, save })
 </script>
 
 <template>
@@ -64,10 +101,13 @@ defineExpose({ draft, dirty })
         <b>编辑一次接线图</b>
         <span v-if="title" class="sldo-dim">{{ title }}</span>
         <span class="sldo-dim" data-role="sld-dirty">{{
-          dirty ? '有未写回的修改 · 点「完成」写回页面(页面编辑器里一步撤销)' : '未修改'
+          dirty ? '有未保存的修改 · 停手 2 秒自动保存' : savedAt ? `已保存到页面 ${savedAt}` : '未修改'
         }}</span>
         <span class="sldo-grow" />
         <button type="button" class="sldo-btn" data-role="sld-discard" @click="discard">放弃修改</button>
+        <button type="button" class="sldo-btn" data-role="sld-save" :disabled="!dirty" title="Ctrl+S" @click="save">
+          保存
+        </button>
         <button type="button" class="sldo-btn sldo-primary" data-role="sld-done" @click="finish">完成</button>
       </header>
       <div class="sldo-body">

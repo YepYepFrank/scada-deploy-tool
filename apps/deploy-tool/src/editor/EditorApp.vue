@@ -193,12 +193,15 @@ const templateId = computed({
   set: id => {
     const t = getTemplate(id)
     if (!t || t.id === ed.config.value.template) return
-    const dropped = ed.setTemplate(t)
-    toast(
-      dropped.length
-        ? `已切换到「${t.name}」,${dropped.length} 个组件因槽位不匹配被移除:${dropped.join(', ')}`
-        : `已切换到「${t.name}」`
-    )
+    const r = ed.setTemplate(t)
+    const notes = [
+      r.moved.length ? `${r.moved.length} 个组件换了位置(原槽位在新模板里没有)` : '',
+      r.restored.length ? `${r.restored.length} 个之前放不下的组件已放回` : '',
+      r.parked.length
+        ? `${r.parked.length} 个组件在这个模板里放不下,先收起来了——换回放得下的模板会自动放回,也可以撤销`
+        : '',
+    ].filter(Boolean)
+    toast(`已切换到「${t.name}」${notes.length ? ':' + notes.join(';') : ''}`)
     selected.value = null
     // 全屏里选好模板就把左栏收起,空间让给右边的属性 / 绑定栏(2026-09-17)
     if (fullscreen.value) leftCollapsed.value = true
@@ -418,12 +421,31 @@ function openSld(key?: string) {
   if (!w || !k) return
   sldEdit.value = { widgetId: w.id, key: k, initial: sldContentOf(w, k) }
 }
-function onSldDone(content: SldEditorContent) {
+/**
+ * 把接线图写回页面。编辑过程中的「保存」/ 自动保存 / 「完成」都走这里;同一次打开里的多次写回合并成撤销栈里的一步。
+ * 2026-09-21:此前只有点「完成」才写回,编辑器中途被关掉(或人以为已经保存了)画的东西就没了。
+ */
+function writeSld(content: SldEditorContent): boolean {
   const s = sldEdit.value
+  if (!s) return false
+  const w = ed.config.value.widgets.find(x => x.id === s.widgetId)
+  if (!w || sameSldContent(sldContentOf(w, s.key), content)) return false
+  ed.patchWidget(s.widgetId, x => applySldContent(x, s.key, content), { coalesce: `sld:${s.widgetId}` })
+  return true
+}
+function onSldSave(content: SldEditorContent) {
+  writeSld(content)
+}
+function onSldDone(content: SldEditorContent) {
+  const changed = writeSld(content) || (!!sldEdit.value && !sameSldContent(sldEdit.value.initial, content))
   sldEdit.value = null
-  if (!s || sameSldContent(s.initial, content)) return
-  ed.patchWidget(s.widgetId, w => applySldContent(w, s.key, content))
-  toast('接线图已写回页面(撤销一步可退回)')
+  if (changed) toast('接线图已写回页面(撤销一步可退回)')
+}
+/** 放弃修改:中途保存过的也要退回到打开时的样子 */
+function onSldCancel() {
+  const s = sldEdit.value
+  if (s) writeSld(s.initial)
+  sldEdit.value = null
 }
 
 // ---------- 校验(T3.5 四层:同步层随配置即时算;绑定存在性层连上 TB 后防抖异步跑) ----------
@@ -1169,8 +1191,9 @@ defineExpose({
     :initial="sldEdit.initial"
     :host="sldHost"
     :title="`组件 ${sldEdit.widgetId} · ${sldEdit.key}`"
+    @save="onSldSave"
     @done="onSldDone"
-    @cancel="sldEdit = null"
+    @cancel="onSldCancel"
   />
 </template>
 

@@ -13,6 +13,13 @@ export interface EditorStateOptions {
   depth?: number
 }
 
+/** 换模板的结果:挪了槽位的、从「收起来」里放回的、这次放不下被收起来的(都是组件 id) */
+export interface TemplateSwitchResult {
+  moved: Array<{ id: string; from: string; to: string }>
+  restored: string[]
+  parked: string[]
+}
+
 export function useEditorState(initial: PageConfig, opts: EditorStateOptions = {}) {
   const depth = opts.depth ?? 50
   const past: PageConfig[] = []
@@ -83,22 +90,64 @@ export function useEditorState(initial: PageConfig, opts: EditorStateOptions = {
   // ---------- 面向槽位的便捷操作 ----------
 
   /**
-   * 换模板:槽位名相同且 accepts 允许的组件原位保留,其余丢弃;返回被丢弃的组件 id。
+   * 换模板时放不进新模板的组件先收在这里(只在内存,不进页面 JSON、不发布);之后再换到放得下的模板会自动放回。
+   * 2026-09-21:此前放不下的直接丢——画了半天的一次接线图,换个模板看一眼再换回来就没了,只能靠撤销救。
+   */
+  const parked: WidgetConfig[] = []
+
+  /**
+   * 换模板,**尽量不丢组件**:
+   * 1. 槽位名相同且新槽位收这种组件 → 原位保留;
+   * 2. 其余的(连同之前收起来的)挪到新模板里**空着、又收这种组件**的槽位:接线图优先、挑面积最大的槽位,
+   *    其他组件按模板里的槽位顺序;固定槽位只放它指定的类型;
+   * 3. 实在放不下的收进 parked(见上),下次换模板再试。
    * 模板从注册表取,调用方传 TemplateDefinition(编辑器不 import 注册表以便测试)。
    */
-  function setTemplate(tpl: TemplateDefinition): string[] {
-    const dropped: string[] = []
+  function setTemplate(tpl: TemplateDefinition): TemplateSwitchResult {
+    const result: TemplateSwitchResult = { moved: [], restored: [], parked: [] }
+    const fits = (w: WidgetConfig, slot: TemplateDefinition['slots'][number]): boolean =>
+      slot.fixed ? slot.fixed.type === w.type : !slot.accepts || slot.accepts.includes(w.type)
+    const areaOf = (slot: TemplateDefinition['slots'][number]): number =>
+      typeof slot.area === 'string' ? 0 : slot.area.w * slot.area.h
     update(d => {
       d.template = tpl.id
-      d.widgets = d.widgets.filter(w => {
+      const present = new Set(d.widgets.map(w => w.id))
+      const fromPark = parked.filter(w => !present.has(w.id)).map(w => clone(w))
+      const parkedIds = new Set(fromPark.map(w => w.id))
+      const taken = new Map<string, WidgetConfig>()
+      const rest: WidgetConfig[] = []
+      // ① 原位保留(页面上现有的优先于收起来的)
+      for (const w of [...d.widgets, ...fromPark]) {
         const slot = tpl.slots.find(s => s.name === w.slot)
-        const ok =
-          !!slot && (!slot.accepts || slot.accepts.includes(w.type)) && (!slot.fixed || slot.fixed.type === w.type)
-        if (!ok) dropped.push(w.id)
-        return ok
-      })
+        if (slot && fits(w, slot) && !taken.has(slot.name)) taken.set(slot.name, w)
+        else rest.push(w)
+      }
+      // ② 挪到空着的兼容槽位:接线图先挑、挑最大的
+      rest.sort((a, b) => Number(b.type === 'sld') - Number(a.type === 'sld'))
+      const left: WidgetConfig[] = []
+      for (const w of rest) {
+        const free = tpl.slots.filter(s => !taken.has(s.name) && fits(w, s))
+        const slot = w.type === 'sld' ? [...free].sort((a, b) => areaOf(b) - areaOf(a))[0] : free[0]
+        if (!slot) {
+          left.push(w)
+          continue
+        }
+        if (slot.name !== w.slot) result.moved.push({ id: w.id, from: w.slot, to: slot.name })
+        w.slot = slot.name
+        taken.set(slot.name, w)
+      }
+      for (const w of taken.values()) if (parkedIds.has(w.id)) result.restored.push(w.id)
+      // 按模板的槽位顺序落盘,页面 JSON 稳定好 diff
+      d.widgets = tpl.slots.flatMap(s => (taken.has(s.name) ? [taken.get(s.name)!] : []))
+      // ③ 放不下的收起来
+      const placed = new Set(d.widgets.map(w => w.id))
+      for (let i = parked.length - 1; i >= 0; i--) if (placed.has(parked[i]!.id)) parked.splice(i, 1)
+      for (const w of left) {
+        result.parked.push(w.id)
+        if (!parked.some(p => p.id === w.id)) parked.push(clone(w))
+      }
     })
-    return dropped
+    return result
   }
 
   /**
