@@ -15,6 +15,7 @@ import {
   SldSymbolBox,
   listSldSymbols,
   lookupSldSymbol,
+  nodeBox,
   registerBuiltinSldSymbols,
   type SldPoint,
   type SldSelection,
@@ -162,7 +163,10 @@ const ctx: SldEditorContext = {
   },
   view: {
     zoom,
-    fit: () => graph()?.zoomToFit({ padding: 40, maxScale: 1 }),
+    fit: () => {
+      autoFit = true // 手动「适应窗口」= 把视图交还给自动适应,之后窗口再变大小还会跟着居中
+      fitPage()
+    },
     zoomBy: factor => {
       const g = graph()
       if (g) g.zoomTo(Math.min(4, Math.max(0.1, g.zoom() * factor)))
@@ -170,6 +174,52 @@ const ctx: SldEditorContext = {
     resetZoom: () => graph()?.zoomTo(1),
   },
 }
+/**
+ * 「适应窗口」:把**整张画布框**(doc.canvas;有东西画到框外就取并集)缩放到视口里并**居中**。
+ * 此前用 X6 的 zoomToFit:它只看已有内容的包围盒,缩完贴着左上角放——新图(没内容)根本不动,画布框就歪在
+ * 左上角;有内容时居中的也是内容而不是画布框(2026-09-21 YY:第 4 步进接线图编辑时主画布框没居中)。
+ * 包围盒直接从文档算(节点盒 / 母线 / 标签 / 分组框),不问 X6,免得掺进视口坐标。
+ */
+/** 视图还归「自动适应」管吗;用户自己缩放 / 平移 / 在画布上按下过之后置 false */
+let autoFit = true
+const stopAutoFit = (): void => {
+  autoFit = false
+}
+function fitPage(): void {
+  const g = graph()
+  const el = canvasEl.value?.parentElement
+  if (!g || !el || el.clientWidth < 50 || el.clientHeight < 50) return
+  const PAD = 40
+  const d = doc.value
+  let x1 = 0
+  let y1 = 0
+  let x2 = d.canvas.w
+  let y2 = d.canvas.h
+  const grow = (x: number, y: number, w = 0, h = 0): void => {
+    x1 = Math.min(x1, x)
+    y1 = Math.min(y1, y)
+    x2 = Math.max(x2, x + w)
+    y2 = Math.max(y2, y + h)
+  }
+  for (const n of d.nodes) {
+    const def = lookupSldSymbol(n.symbol)
+    const box = def ? nodeBox(n, def) : { x: n.x, y: n.y, w: 40, h: 40 }
+    grow(box.x, box.y, box.w, box.h)
+  }
+  for (const b of d.buses) {
+    grow(b.x1, b.y1)
+    grow(b.x2, b.y2)
+  }
+  for (const l of d.labels) grow(l.x, l.y)
+  for (const f of d.frames ?? []) grow(f.x, f.y, f.w, f.h)
+  const bw = Math.max(1, x2 - x1)
+  const bh = Math.max(1, y2 - y1)
+  const scale = Math.max(0.1, Math.min(1, (el.clientWidth - 2 * PAD) / bw, (el.clientHeight - 2 * PAD) / bh))
+  g.zoomTo(scale)
+  g.translate((el.clientWidth - bw * scale) / 2 - x1 * scale, (el.clientHeight - bh * scale) / 2 - y1 * scale)
+  refreshView()
+}
+
 provide(SLD_EDITOR_CTX, ctx)
 // 复用的 BindingRow / KeyPicker 以 inject('keyCn') 取测点中文名:宿主给了就在编辑器内再 provide 一次
 provide('keyCn', (key: string) => props.host?.keyCn?.(key) ?? '')
@@ -564,18 +614,18 @@ onMounted(async () => {
 
   syncGraph(g, doc.value)
   pushSelection()
-  // 首次「适应窗口」要等画布拿到真实尺寸(autoResize 的第一次回调);此前 X6 量到的可能是 0
-  let fitted = false
-  const fitOnce = (): void => {
+  // 「适应窗口」要等画布拿到真实尺寸(autoResize 的回调);此前 X6 量到的可能是 0。
+  // 只适应第一次是不够的:嵌在向导第 4 步的覆盖层里,第一次回调拿到的常常是过渡尺寸(侧栏还没排完、
+  // 覆盖层还在展开),随后舞台变大,画布框就留在了偏左上的位置。所以**在用户自己动视图之前**,
+  // 每次尺寸变化都重新适应;用户滚轮 / 拖动 / 点过画布之后就不再抢他的视图(点「适应窗口」会重新接管)。
+  const refit = (): void => {
     const el = canvasEl.value?.parentElement
-    if (fitted || !el || el.clientWidth < 50 || el.clientHeight < 50) return
-    fitted = true
+    if (!autoFit || !el || el.clientWidth < 50 || el.clientHeight < 50) return
     g.resize(el.clientWidth, el.clientHeight)
-    g.zoomToFit({ padding: 40, maxScale: 1 })
-    refreshView()
+    fitPage()
   }
-  g.on('resize', () => setTimeout(fitOnce, 0))
-  fitOnce()
+  g.on('resize', () => setTimeout(refit, 0))
+  refit()
   refreshView()
 
   document.addEventListener('pointerdown', onDocPointerDown, true)
@@ -761,7 +811,13 @@ defineExpose({ ctx, store })
       </p>
     </aside>
 
-    <main class="sld-ed-stage" @dragover="onDragOver" @drop="onDrop">
+    <main
+      class="sld-ed-stage"
+      @dragover="onDragOver"
+      @drop="onDrop"
+      @wheel.capture.passive="stopAutoFit"
+      @pointerdown.capture="stopAutoFit"
+    >
       <div class="sld-ed-layer sld-ed-layer-under" :style="layerStyle">
         <div class="sld-ed-page" />
         <component :is="l.component" v-for="l in underLayers" :key="l.id" />
