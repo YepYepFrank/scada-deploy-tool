@@ -55,7 +55,14 @@ export const BUS_THICK = 2 * SLD_GRID
 export const BUS_LINE = SLD_BUS_WIDTH
 export const PORT_GROUP = 'p'
 
-export const Z = { frame: 0, bus: 1, wire: 2, node: 3, label: 4 } as const
+/**
+ * X6 的 zIndex。与运行时同一套规则(SldBus.z 的说明):先比 z,再按「母线 < 连线 < 图元」——
+ * 所以每一级 z 占 1000,同级里母线 100 / 连线 200 / 图元 300;分组框恒在最底,标签恒在最上。
+ */
+export const Z = { frame: -1_000_000, bus: 100, wire: 200, node: 300, label: 1_000_000 } as const
+const Z_STEP = 1000
+export const stackZ = (base: number, z: number | undefined): number =>
+  base + (typeof z === 'number' && Number.isFinite(z) ? Math.round(z) : 0) * Z_STEP
 
 /* ───────────── cell 描述(plain JSON) ───────────── */
 
@@ -158,7 +165,7 @@ export function nodeToCell(node: SldNode, symbols: SldSymbolLookup = lookupSldSy
     y: node.y,
     width: box.w,
     height: box.h,
-    zIndex: Z.node,
+    zIndex: stackZ(Z.node, node.z),
     data: { kind: 'node', node: clone(node) },
     ports: { items },
   }
@@ -224,7 +231,7 @@ export function busToCell(bus: SldBus): SldBusCell {
     y: horizontal ? bus.y1 - half : Math.min(bus.y1, bus.y2),
     width: horizontal ? len : BUS_THICK,
     height: horizontal ? BUS_THICK : len,
-    zIndex: Z.bus,
+    zIndex: stackZ(Z.bus, bus.z),
     data: { kind: 'bus', bus: clone(bus), horizontal, reversed },
     attrs: busAttrs(horizontal, bus.name, bus.width, bus.color),
   }
@@ -621,6 +628,7 @@ function updateNode(cell: Node, desc: SldBoxCell): void {
   const { width, height } = cell.getSize()
   const resized = width !== desc.width || height !== desc.height
   if (resized) cell.resize(desc.width, desc.height, SYNC)
+  if (cell.getZIndex() !== desc.zIndex) cell.setZIndex(desc.zIndex, SYNC)
   const dataChanged = !same(cell.getData(), desc.data)
   if (dataChanged) cell.replaceData(clone(desc.data), SYNC)
   if (!dataChanged && !resized) return

@@ -11,6 +11,7 @@ import {
   setBusWidth,
   setLabelStyle,
   setNodeScale,
+  setStacking,
 } from '../src/sld-editor/panels/inspector/ops'
 import {
   ONLINE_ATTR_KEY,
@@ -20,7 +21,7 @@ import {
   setOnlineCorner,
   unboundRefs,
 } from '../src/sld-editor/panels/binding/ops'
-import { busAttrs, busToCell, labelToCell, LABEL_FILL, nodeToCell } from '../src/sld-editor/x6-adapter'
+import { busAttrs, busToCell, labelToCell, LABEL_FILL, nodeToCell, stackZ, Z } from '../src/sld-editor/x6-adapter'
 
 beforeAll(() => registerBuiltins())
 
@@ -205,5 +206,36 @@ describe('在线状态灯', () => {
     d.labels.push({ id: 's1', x: 0, y: 0, kind: 'status', pt: 'ps', title: '站点' })
     expect(bindingTarget(d, { nodes: [], buses: [], wires: [], labels: ['s1'] })).toEqual({ kind: 'status', id: 's1' })
     expect(labelToCell(d.labels[1]!).attrs.text!.text).toBe('● 站点 在线')
+  })
+})
+
+describe('叠放层次(2026-09-21)', () => {
+  it('置顶 = 比其余的都高一级;置底 = 比其余的都低一级;复位 = 删掉 z', () => {
+    const d = doc()
+    expect(setStacking(d, { nodes: ['n1'], buses: [] }, 'back')).toBe(true)
+    expect(d.nodes[0]!.z).toBe(-1)
+    expect(setStacking(d, { nodes: [], buses: ['b1'] }, 'front')).toBe(true)
+    expect(d.buses[0]!.z).toBe(1)
+    // 再把 n2 置顶:要压过已经在 1 级的母线
+    setStacking(d, { nodes: ['n2'], buses: [] }, 'front')
+    expect(d.nodes[1]!.z).toBe(2)
+    expect(setStacking(d, { nodes: ['n1', 'n2'], buses: ['b1'] }, 'reset')).toBe(true)
+    expect(d.nodes.some(n => 'z' in n) || d.buses.some(b => 'z' in b)).toBe(false)
+  })
+  it('没选中 / 已经在那一级 → 返回 false', () => {
+    const d = doc()
+    expect(setStacking(d, { nodes: [], buses: [] }, 'front')).toBe(false)
+    setStacking(d, { nodes: ['n1'], buses: [] }, 'front')
+    expect(setStacking(d, { nodes: ['n1'], buses: [] }, 'front')).toBe(false)
+    expect(setStacking(d, { nodes: ['n3'], buses: [] }, 'reset')).toBe(false)
+  })
+  it('画布的 zIndex 与运行时同一套规则:先比 z,再按 母线 < 连线 < 图元;标签恒在最上', () => {
+    const d = doc()
+    expect(nodeToCell(d.nodes[0]!).zIndex).toBeGreaterThan(busToCell(d.buses[0]!).zIndex) // 缺省:图元压母线
+    setStacking(d, { nodes: ['n1'], buses: [] }, 'back')
+    expect(nodeToCell(d.nodes[0]!).zIndex).toBeLessThan(busToCell(d.buses[0]!).zIndex) // 图元垫到母线底下
+    setStacking(d, { nodes: [], buses: ['b1'] }, 'front')
+    expect(busToCell(d.buses[0]!).zIndex).toBeGreaterThan(nodeToCell(d.nodes[1]!).zIndex) // 母线浮到别的图元上面
+    expect(labelToCell(d.labels[0]!).zIndex).toBeGreaterThan(stackZ(Z.node, 99))
   })
 })

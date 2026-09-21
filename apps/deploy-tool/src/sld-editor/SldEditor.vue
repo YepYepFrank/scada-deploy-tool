@@ -9,8 +9,9 @@
  * 扩展点(ext.ts):本组件实现 SldEditorContext 并 provide;面板 / 工具 / 拖放 / 图层由 discover.ts 自动发现。
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, shallowRef, watch } from 'vue'
+import type { Node as X6Node } from '@antv/x6'
 import { getTeleport } from '@antv/x6-vue-shape'
-import { resizeNodeByBox } from './panels/inspector/ops'
+import { resizeNodeByBox, setStacking, type StackMove } from './panels/inspector/ops'
 import {
   SLD_GRID,
   SldSymbolBox,
@@ -18,6 +19,8 @@ import {
   lookupSldSymbol,
   nodeBox,
   registerBuiltinSldSymbols,
+  symbolBoxSize,
+  type SldNode,
   type SldPoint,
   type SldSelection,
   type SldSymbolCategory,
@@ -62,6 +65,7 @@ import {
   selectionOfCells,
   syncGraph,
   type SldBusTap,
+  nodeToCell,
 } from './x6-adapter'
 import { createSldCanvas, kindOfCell, type SldCanvas } from './x6-graph'
 
@@ -235,6 +239,31 @@ const overLayers = ext.layers.filter(l => l.z === 'over')
 
 type Mode = 'select' | 'bus' | 'label' | 'status' | 'frame'
 const mode = ref<Mode>('select')
+/** 叠放层次:选中了图元或母线才可用 */
+const canStack = (): boolean =>
+  editable() && store.selection.value.nodes.length + store.selection.value.buses.length > 0
+function stack(move: StackMove): void {
+  const sel = store.selection.value
+  const label = move === 'front' ? '置顶' : move === 'back' ? '置底' : '恢复默认层次'
+  apply(d => (setStacking(d.doc, sel, move) ? undefined : false), label)
+}
+
+/**
+ * 图元被拖拉手柄的过程中:按当前盒子大小的**连续**倍数重算端口位置写回 cell,接在端口上的连线随之重走。
+ * 只动画布、不动文档(标 SYNC,不进撤销栈);松手后 resizeNodeByBox 再吸附到合法档。
+ */
+function followResize(cell: X6Node): void {
+  const data = cell.getData() as { node?: SldNode } | undefined
+  const def = data?.node && lookupSldSymbol(data.node.symbol)
+  if (!data?.node || !def) return
+  const base = symbolBoxSize(def, data.node.rot, 1)
+  const { width, height } = cell.getSize()
+  const k = Math.max(width / base.w, height / base.h)
+  const { x, y } = cell.getPosition()
+  const items = nodeToCell({ ...data.node, x, y, scale: k }).ports.items
+  cell.prop('ports/items', items, { sld: 'sync', rewrite: true })
+}
+
 const MODE_HINT: Record<Mode, string> = {
   select: '',
   bus: '画母线:按下拖出一条水平 / 垂直母线(Esc 取消)',
@@ -390,6 +419,24 @@ const builtinTools: BuiltinTool[] = [
     keys: ['f'],
     enabled: () => editable() && store.selection.value.nodes.length > 0,
     run: flipSelected,
+  },
+  {
+    id: 'stack-front',
+    title: '置顶',
+    group: 'arrange',
+    order: 3,
+    keys: [']'],
+    enabled: canStack,
+    run: () => stack('front'),
+  },
+  {
+    id: 'stack-back',
+    title: '置底',
+    group: 'arrange',
+    order: 4,
+    keys: ['['],
+    enabled: canStack,
+    run: () => stack('back'),
   },
   {
     id: 'mode-bus',
@@ -594,6 +641,8 @@ onMounted(async () => {
   })
   g.on('node:resizing', ({ node }) => {
     if (taps.length) repinBusTaps(g, node.id, taps)
+    // 图元拖拉过程中端口(和接在上面的连线)跟着走:按当前盒子的连续倍数重算端口位置,松手后再吸附到合法档
+    if (kindOfCell(node) === 'node') followResize(node)
   })
   g.on('node:resized', ({ node }) => {
     taps = []

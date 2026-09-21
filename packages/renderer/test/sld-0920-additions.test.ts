@@ -187,3 +187,40 @@ describe('母线与文字的样式(issue 2)', () => {
     expect((t.attributes('style') ?? '').replace(/\s/g, '')).toMatch(/fill:(#00ff00|rgb\(0,255,0\))/)
   })
 })
+
+describe('叠放层次 z(2026-09-21)', () => {
+  const ids = (w: ReturnType<typeof mount>, layer: string): string[] =>
+    w
+      .find(`.${layer}`)
+      .findAll('[data-id]')
+      .map(e => e.attributes('data-id')!)
+      .filter(id => ['n1', 'n2', 'b1', 'b2'].includes(id))
+  const base = (): SldDoc =>
+    doc({
+      nodes: [
+        { id: 'n1', symbol: 'meter', x: 100, y: 100, rot: 0 },
+        { id: 'n2', symbol: 'meter', x: 110, y: 100, rot: 0 },
+      ],
+      buses: [hbus('b1', 0, 400, 120), hbus('b2', 0, 400, 140)],
+    })
+  const render = (d: SldDoc) => mount(SldWidget, { props: { doc: d, values: {}, errors: {} } })
+
+  it('缺省:母线在「线」层、图元在「图元」层,各按数组顺序——和加 z 之前一样', () => {
+    const w = render(base())
+    expect(ids(w, 'sr-sld-layer-lines')).toEqual(['b1', 'b2'])
+    expect(ids(w, 'sr-sld-layer-nodes')).toEqual(['n1', 'n2'])
+  })
+  it('图元 z < 0 垫到母线底下;母线 z > 0 浮到图元上面;同层里 z 大的后画', () => {
+    const d = base()
+    d.nodes[0]!.z = -1
+    d.buses[1]!.z = 1
+    const w = render(d)
+    expect(ids(w, 'sr-sld-layer-lines')).toEqual(['n1', 'b1']) // n1 先画 = 在母线底下
+    expect(ids(w, 'sr-sld-layer-nodes')).toEqual(['n2', 'b2']) // b2 后画 = 压着 n2
+  })
+  it('两个图元重叠:把先画的那个置顶(z = 1)它就后画', () => {
+    const d = base()
+    d.nodes[0]!.z = 1
+    expect(ids(render(d), 'sr-sld-layer-nodes')).toEqual(['n2', 'n1'])
+  })
+})

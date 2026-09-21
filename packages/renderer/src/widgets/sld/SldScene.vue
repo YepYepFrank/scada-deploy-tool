@@ -11,11 +11,13 @@ import {
   wirePoints,
   type SldBus,
   type SldDoc,
+  type SldNode,
   type SldEnergizeResult,
   type SldEnergy,
   type SldSwitchState,
 } from '../../sld'
 import { entityKey, kvColor, type SldAlarmLevel, type SldKvColor } from './format'
+import SldBusView from './SldBusView.vue'
 import SldNodeView from './SldNodeView.vue'
 import SldLabelView from './SldLabelView.vue'
 
@@ -89,6 +91,32 @@ function busStyle(b: SldBus): Record<string, string> | undefined {
   return Object.keys(out).length ? out : undefined
 }
 
+/**
+ * 叠放层次(SldNode.z / SldBus.z):先比 z,再按「母线 < 连线 < 图元」,再按数组顺序。四个图层的结构不变——
+ * 「线」层 = 被压低的图元(z < 0)+ 没抬高的母线 + 全部连线;「图元」层 = 其余图元与被抬高的母线(z > 0)混排。
+ * 全是缺省值时,两层的内容和顺序与加 z 之前一模一样。
+ */
+const zOf = (x: { z?: number }): number => (typeof x.z === 'number' && Number.isFinite(x.z) ? x.z : 0)
+const byZ = <T extends { z?: number }>(list: readonly T[]): T[] =>
+  list
+    .map((item, i) => ({ item, i }))
+    .sort((a, b) => zOf(a.item) - zOf(b.item) || a.i - b.i)
+    .map(x => x.item)
+const sunkNodes = computed(() => byZ(props.doc.nodes.filter(n => zOf(n) < 0)))
+const baseBuses = computed(() => byZ(props.doc.buses.filter(b => zOf(b) <= 0)))
+type TopItem = { key: string; z: number; rank: number; node?: SldNode; bus?: SldBus }
+const topItems = computed<TopItem[]>(() =>
+  [
+    ...props.doc.buses.filter(b => zOf(b) > 0).map<TopItem>(bus => ({ key: `b:${bus.id}`, z: zOf(bus), rank: 0, bus })),
+    ...props.doc.nodes
+      .filter(n => zOf(n) >= 0)
+      .map<TopItem>(node => ({ key: `n:${node.id}`, z: zOf(node), rank: 1, node })),
+  ]
+    .map((item, i) => ({ item, i }))
+    .sort((a, b) => a.item.z - b.item.z || a.item.rank - b.item.rank || a.i - b.i)
+    .map(x => x.item)
+)
+
 const horizontal = (b: { x1: number; y1: number; x2: number; y2: number }): boolean =>
   Math.abs(b.x2 - b.x1) >= Math.abs(b.y2 - b.y1)
 </script>
@@ -102,17 +130,23 @@ const horizontal = (b: { x1: number; y1: number; x2: number; y2: number }): bool
       </g>
     </g>
     <g class="sr-sld-layer-lines">
-      <line
-        v-for="b in doc.buses"
+      <SldNodeView
+        v-for="n in sunkNodes"
+        :key="n.id"
+        :node="n"
+        :state="nodeStates[n.id]"
+        :color="nodePaint[n.id]?.color"
+        :energy-class="nodePaint[n.id]?.cls ?? ''"
+        :alarm="nodeAlarm[n.id] ?? ''"
+        :show-name="showNames"
+        :clickable="clickable && !!(n.entity || n.name)"
+      />
+      <SldBusView
+        v-for="b in baseBuses"
         :key="b.id"
-        class="sr-sld-bus"
-        :class="busPaint[b.id]?.cls"
-        :style="busStyle(b)"
-        :data-id="b.id"
-        :x1="b.x1"
-        :y1="b.y1"
-        :x2="b.x2"
-        :y2="b.y2"
+        :bus="b"
+        :paint-class="busPaint[b.id]?.cls"
+        :paint-style="busStyle(b)"
       />
       <polyline
         v-for="w in wirePaths"
@@ -139,17 +173,24 @@ const horizontal = (b: { x1: number; y1: number; x2: number; y2: number }): bool
       </template>
     </g>
     <g class="sr-sld-layer-nodes">
-      <SldNodeView
-        v-for="n in doc.nodes"
-        :key="n.id"
-        :node="n"
-        :state="nodeStates[n.id]"
-        :color="nodePaint[n.id]?.color"
-        :energy-class="nodePaint[n.id]?.cls ?? ''"
-        :alarm="nodeAlarm[n.id] ?? ''"
-        :show-name="showNames"
-        :clickable="clickable && !!(n.entity || n.name)"
-      />
+      <template v-for="it in topItems" :key="it.key">
+        <SldBusView
+          v-if="it.bus"
+          :bus="it.bus"
+          :paint-class="busPaint[it.bus.id]?.cls"
+          :paint-style="busStyle(it.bus)"
+        />
+        <SldNodeView
+          v-else-if="it.node"
+          :node="it.node"
+          :state="nodeStates[it.node.id]"
+          :color="nodePaint[it.node.id]?.color"
+          :energy-class="nodePaint[it.node.id]?.cls ?? ''"
+          :alarm="nodeAlarm[it.node.id] ?? ''"
+          :show-name="showNames"
+          :clickable="clickable && !!(it.node.entity || it.node.name)"
+        />
+      </template>
     </g>
     <g class="sr-sld-layer-labels">
       <SldLabelView v-for="l in doc.labels" :key="l.id" :label="l" />

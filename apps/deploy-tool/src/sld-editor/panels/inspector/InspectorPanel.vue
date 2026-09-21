@@ -21,6 +21,8 @@ import {
   setNodeScale,
   setNodeSource,
   setPortKv,
+  setStacking,
+  type StackMove,
   type LabelStylePatch,
 } from './ops'
 
@@ -146,6 +148,14 @@ function setLabelColorMode(e: Event): void {
   const v = valueOf(e)
   styleLabel({ color: v === 'custom' ? '#19b7ff' : v }, '改文字颜色')
 }
+/** 叠放层次:对当前选中的这一个图元 / 母线 */
+function stack(move: StackMove): void {
+  const pick = { nodes: node.value ? [node.value.id] : [], buses: bus.value ? [bus.value.id] : [] }
+  const what = move === 'front' ? '置顶' : move === 'back' ? '置底' : '恢复默认层次'
+  ctx!.apply(d => (setStacking(d.doc, pick, move) ? undefined : false), what)
+}
+const zText = (z: number | undefined): string => (!z ? '默认' : z > 0 ? `上移 ${z} 级` : `下移 ${-z} 级`)
+
 const LABEL_KIND_TEXT = { text: '文字', value: '数值', status: '状态(在线灯)' } as const
 
 const endText = (e: { node: string; port: string } | { bus: string; d: number }): string =>
@@ -189,6 +199,24 @@ const endText = (e: { node: string; port: string } | { bus: string; d: number })
           <option v-for="k in scales" :key="k" :value="k">{{ k }} 倍</option>
         </select>
       </label>
+      <div
+        class="sld-insp-row"
+        title="重叠时谁压着谁。默认:图元压连线、连线压母线。也可以用工具栏的「置顶 / 置底」(快捷键 ] 与 [)"
+      >
+        <span>层次</span>
+        <b data-field="z">{{ zText(node.z) }}</b>
+        <button type="button" class="sld-insp-mini" :disabled="ctx.readonly.value" @click="stack('front')">置顶</button>
+        <button type="button" class="sld-insp-mini" :disabled="ctx.readonly.value" @click="stack('back')">置底</button>
+        <button
+          v-if="node.z"
+          type="button"
+          class="sld-insp-mini"
+          :disabled="ctx.readonly.value"
+          @click="stack('reset')"
+        >
+          复位
+        </button>
+      </div>
       <div v-if="node.entity" class="sld-insp-row">
         <span>设备</span><b>{{ node.entity.name }}</b>
       </div>
@@ -276,6 +304,18 @@ const endText = (e: { node: string; port: string } | { bus: string; d: number })
           @click="setBusColorInput(undefined)"
         >
           恢复按电压等级
+        </button>
+      </div>
+      <div
+        class="sld-insp-row"
+        title="重叠时谁压着谁。默认:图元压连线、连线压母线。也可以用工具栏的「置顶 / 置底」(快捷键 ] 与 [)"
+      >
+        <span>层次</span>
+        <b data-field="z">{{ zText(bus.z) }}</b>
+        <button type="button" class="sld-insp-mini" :disabled="ctx.readonly.value" @click="stack('front')">置顶</button>
+        <button type="button" class="sld-insp-mini" :disabled="ctx.readonly.value" @click="stack('back')">置底</button>
+        <button v-if="bus.z" type="button" class="sld-insp-mini" :disabled="ctx.readonly.value" @click="stack('reset')">
+          复位
         </button>
       </div>
       <div class="sld-insp-row">

@@ -109,6 +109,37 @@ export function resizeNodeByBox(
   return true
 }
 
+/* ───────────── 叠放层次(2026-09-21) ───────────── */
+
+export type StackMove = 'front' | 'back' | 'reset'
+
+/**
+ * 改选中图元 / 母线的叠放层次。置顶 = 比**其余**图元、母线里最高的还高一级,置底 = 比最低的还低一级,
+ * 复位 = 删掉 z(回到缺省:图元压连线、连线压母线)。一起选中的拿到同一个 z,它们之间原来谁压谁不变。
+ * z 为 0 时不落进 JSON。什么都没变返回 false。
+ */
+export function setStacking(
+  doc: SldDoc,
+  sel: { nodes: readonly string[]; buses: readonly string[] },
+  move: StackMove
+): boolean {
+  const picked = [
+    ...doc.nodes.filter(n => sel.nodes.includes(n.id)),
+    ...doc.buses.filter(b => sel.buses.includes(b.id)),
+  ] as Array<{ z?: number }>
+  if (!picked.length) return false
+  const others = [...doc.nodes, ...doc.buses].filter(x => !picked.includes(x)).map(x => x.z ?? 0)
+  const target = move === 'reset' ? 0 : move === 'front' ? Math.max(0, ...others) + 1 : Math.min(0, ...others) - 1
+  let changed = false
+  for (const x of picked) {
+    if ((x.z ?? 0) === target) continue
+    if (target === 0) delete x.z
+    else x.z = target
+    changed = true
+  }
+  return changed
+}
+
 /** 母线线宽可选范围(像素) */
 export const BUS_WIDTH_MIN = 2
 export const BUS_WIDTH_MAX = 16
