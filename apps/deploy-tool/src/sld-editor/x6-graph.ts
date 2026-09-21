@@ -274,11 +274,24 @@ export function createSldCanvas(container: HTMLElement, minimap: HTMLElement, op
     .use(
       new Transform({
         resizing: {
-          enabled: node => editable() && (node.shape === SHAPE_BUS || node.shape === SHAPE_FRAME),
+          // 图元也能拖拉改大小(2026-09-21):锁定宽高比,松手后吸附到最近的合法倍数(见 ops.resizeNodeByBox)
+          enabled: node =>
+            editable() && (node.shape === SHAPE_BUS || node.shape === SHAPE_FRAME || node.shape === SHAPE_NODE),
           orthogonal: true,
-          minWidth: node => (node.shape === SHAPE_BUS && !isHorizontalBus(node) ? BUS_THICK : 2 * SLD_GRID),
+          preserveAspectRatio: node => node.shape === SHAPE_NODE,
+          minWidth: node =>
+            node.shape === SHAPE_NODE
+              ? SLD_GRID
+              : node.shape === SHAPE_BUS && !isHorizontalBus(node)
+                ? BUS_THICK
+                : 2 * SLD_GRID,
           maxWidth: node => (node.shape === SHAPE_BUS && !isHorizontalBus(node) ? BUS_THICK : Number.MAX_SAFE_INTEGER),
-          minHeight: node => (node.shape === SHAPE_BUS && isHorizontalBus(node) ? BUS_THICK : 2 * SLD_GRID),
+          minHeight: node =>
+            node.shape === SHAPE_NODE
+              ? SLD_GRID
+              : node.shape === SHAPE_BUS && isHorizontalBus(node)
+                ? BUS_THICK
+                : 2 * SLD_GRID,
           maxHeight: node => (node.shape === SHAPE_BUS && isHorizontalBus(node) ? BUS_THICK : Number.MAX_SAFE_INTEGER),
         },
         rotating: false,

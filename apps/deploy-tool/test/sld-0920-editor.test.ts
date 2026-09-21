@@ -5,7 +5,13 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { getSldSymbol, portPosition, registerBuiltins, sldPointSlot, type SldDoc } from '@grid/scada-renderer'
 import type { SldEditorContent } from '../src/sld-editor/ext'
-import { setBusColor, setBusWidth, setLabelStyle, setNodeScale } from '../src/sld-editor/panels/inspector/ops'
+import {
+  resizeNodeByBox,
+  setBusColor,
+  setBusWidth,
+  setLabelStyle,
+  setNodeScale,
+} from '../src/sld-editor/panels/inspector/ops'
 import {
   ONLINE_ATTR_KEY,
   bindingTarget,
@@ -66,6 +72,43 @@ describe('节点大小', () => {
       x: before.ports.items[1]!.args.x * 2,
       y: before.ports.items[1]!.args.y * 2,
     })
+  })
+})
+
+describe('拖拉手柄改图元大小(2026-09-21)', () => {
+  // breaker 在 (100,100),原始盒子 = def.w × def.h
+  const box = () => {
+    const def = getSldSymbol('breaker')!
+    return { w: def.w, h: def.h }
+  }
+  it('松手吸附到最近的合法倍数;拖右下角 → 左上角不动', () => {
+    const d = doc()
+    const { w, h } = box()
+    expect(resizeNodeByBox(d, 'n1', { x: 100, y: 100, width: w * 2.2, height: h * 2.2 }, getSldSymbol)).toBe(true)
+    expect(d.nodes[0]).toMatchObject({ scale: 2, x: 100, y: 100 })
+  })
+  it('拖左上角 → 右下角不动(位置跟着退回去,仍在栅格上)', () => {
+    const d = doc()
+    const { w, h } = box()
+    // 右下角原来在 (100 + w, 100 + h);往左上拖成 2 倍大
+    resizeNodeByBox(d, 'n1', { x: 100 - w, y: 100 - h, width: w * 2, height: h * 2 }, getSldSymbol)
+    expect(d.nodes[0]).toMatchObject({ scale: 2, x: 100 - w, y: 100 - h })
+    expect(d.nodes[0]!.x % 10).toBe(0)
+    expect(d.nodes[0]!.y % 10).toBe(0)
+  })
+  it('只拖了一点点、吸回原来那一档 → 返回 false(画布据此弹回去),文档不变', () => {
+    const d = doc()
+    const { w, h } = box()
+    expect(resizeNodeByBox(d, 'n1', { x: 100, y: 100, width: w * 1.1, height: h * 1.1 }, getSldSymbol)).toBe(false)
+    expect('scale' in d.nodes[0]!).toBe(false)
+  })
+  it('拖回 1 倍:scale 字段删掉', () => {
+    const d = doc()
+    const { w, h } = box()
+    setNodeScale(d, 'n1', 3, getSldSymbol)
+    const n = d.nodes[0]!
+    resizeNodeByBox(d, 'n1', { x: n.x, y: n.y, width: w * 1.05, height: h * 1.05 }, getSldSymbol)
+    expect('scale' in n).toBe(false)
   })
 })
 

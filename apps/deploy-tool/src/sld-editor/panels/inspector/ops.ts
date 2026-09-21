@@ -7,6 +7,7 @@ import {
   SLD_BUS_WIDTH,
   SLD_GRID,
   nodeBox,
+  symbolBoxSize,
   validNodeScales,
   type SldDoc,
   type SldSymbolLookup,
@@ -71,6 +72,40 @@ export function setNodeScale(doc: SldDoc, nodeId: string, scale: number, symbols
   const snap = (v: number): number => Math.round(v / grid) * grid
   n.x = snap(before.x + (before.w - after.w) / 2)
   n.y = snap(before.y + (before.h - after.h) / 2)
+  return true
+}
+
+/**
+ * 用鼠标拖拉手柄改图元大小(2026-09-21 YY:拖拉比选倍数顺手)。`dragged` 是松手时画布上那个盒子。
+ * - 倍数取离拖出来的大小**最近的合法档**(validNodeScales:放大后端口仍落栅格);拖的过程是连续的,松手才吸附。
+ * - **拖哪个角,对角就不动**:看拖完的盒子哪一侧还贴着原来的边,那一侧就是锚。原盒子在栅格上、
+ *   新尺寸是栅格整数倍,所以这样算出来的左上角一定还在栅格上。
+ * 没变(吸回了原来那一档)返回 false,调用方据此把画布弹回去。
+ */
+export function resizeNodeByBox(
+  doc: SldDoc,
+  nodeId: string,
+  dragged: { x: number; y: number; width: number; height: number },
+  symbols: SldSymbolLookup
+): boolean {
+  const n = doc.nodes.find(x => x.id === nodeId)
+  const def = n && symbols(n.symbol)
+  if (!n || !def) return false
+  const old = nodeBox(n, def)
+  const base = symbolBoxSize(def, n.rot, 1)
+  const raw = Math.max(dragged.width / base.w, dragged.height / base.h)
+  const scale = validNodeScales(def).reduce((best, k) => (Math.abs(k - raw) < Math.abs(best - raw) ? k : best), 1)
+  const w = base.w * scale
+  const h = base.h * scale
+  const leftFixed = Math.abs(dragged.x - old.x) <= Math.abs(dragged.x + dragged.width - (old.x + old.w))
+  const topFixed = Math.abs(dragged.y - old.y) <= Math.abs(dragged.y + dragged.height - (old.y + old.h))
+  const x = leftFixed ? old.x : old.x + old.w - w
+  const y = topFixed ? old.y : old.y + old.h - h
+  if ((n.scale ?? 1) === scale && n.x === x && n.y === y) return false
+  if (scale === 1) delete n.scale
+  else n.scale = scale
+  n.x = x
+  n.y = y
   return true
 }
 

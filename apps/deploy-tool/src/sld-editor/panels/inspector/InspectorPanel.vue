@@ -183,7 +183,7 @@ const endText = (e: { node: string; port: string } | { bus: string; d: number })
       <div class="sld-insp-row">
         <span>位置</span><b>{{ node.x }}, {{ node.y }}</b>
       </div>
-      <label class="sld-insp-row" title="只列出放大后端口仍落在栅格上的倍数,不同图元不一样">
+      <label class="sld-insp-row" title="直接拖图元四角的手柄就能改大小(松手吸附到最近一档);这里是要精确倍数时用的">
         <span>大小</span>
         <select data-field="scale" :value="node.scale ?? 1" :disabled="ctx.readonly.value" @change="setScale">
           <option v-for="k in scales" :key="k" :value="k">{{ k }} 倍</option>

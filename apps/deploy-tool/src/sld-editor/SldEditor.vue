@@ -10,6 +10,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, shallowRef, watch } from 'vue'
 import { getTeleport } from '@antv/x6-vue-shape'
+import { resizeNodeByBox } from './panels/inspector/ops'
 import {
   SLD_GRID,
   SldSymbolBox,
@@ -594,8 +595,15 @@ onMounted(async () => {
   g.on('node:resizing', ({ node }) => {
     if (taps.length) repinBusTaps(g, node.id, taps)
   })
-  g.on('node:resized', () => {
+  g.on('node:resized', ({ node }) => {
     taps = []
+    // 图元被拖拉改了大小:吸附到最近的合法倍数,拖的那个角的对角不动。没变(吸回原档)时 apply 返回 false,
+    // 画布随之按文档弹回去。排在 mouseup 后那次 commitGeometry 之前(那个是 setTimeout 0),到它比对时画布与文档已一致
+    if (kindOfCell(node) !== 'node') return
+    const id = node.id
+    const { x, y } = node.getPosition()
+    const { width, height } = node.getSize()
+    apply(d => (resizeNodeByBox(d.doc, id, { x, y, width, height }, lookupSldSymbol) ? undefined : false), '改图元大小')
   })
 
   // 选中连线 → 拐点 / 线段手柄(拐点吸附栅格由 X6 的 snapToGrid 保证;双击拐点删除是 vertices 工具自带的)

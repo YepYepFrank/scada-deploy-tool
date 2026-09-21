@@ -67,7 +67,7 @@ export function nodeScale(node: { scale?: number }): number {
 }
 
 /** 编辑器里供选的放大倍数 */
-export const SLD_NODE_SCALES: readonly number[] = [0.5, 1, 1.5, 2, 2.5, 3, 4]
+export const SLD_NODE_SCALES: readonly number[] = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6]
 
 /**
  * 这个图元能用哪些放大倍数:放大后包围盒与**全部端口**仍是栅格整数倍的才行——端口离了栅格,连线就对不齐了。
