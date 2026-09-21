@@ -10,6 +10,7 @@
  * 测点绑定缺 / 多归 template 层。
  * error 阻止发布,warning 只提示。每条问题都定位到 widget id(和槽位名)。
  */
+import { contextKeysOf, entitySourceOf, sampleBinding, sampleEntityOf, usesContext } from './context-binding'
 import {
   SLD_POINT_SLOT_PREFIX,
   collectPointRefs,
@@ -369,13 +370,26 @@ export function validateStatic(input: unknown): PageIssue[] {
     for (const { slot, index: i, b } of bindingsOf(w)) {
       if (b.mode !== 'ext') continue
       const base = `/widgets/${w.id}/bindings/${slot}${i === null ? '' : `/${i}`}`
-      for (const e of checkExt(b))
+      // 跟随上下文的实体 / 测点(渲染器 0.9.0)没有具体值:形状检查看「样例,没样例填占位」的版本
+      for (const e of checkExt(sampleBinding(b, { placeholder: true }) as Binding))
         issues.push({ level: e.level, layer: 'schema', path: base + e.sub, widgetId: w.id, slot, message: e.message })
     }
   }
 
   // 一次接线图:图 ↔ 测点绑定一致性
   for (const w of cfg.widgets) if (w.type === 'sld') issues.push(...validateSldWidget(w))
+
+  // 跟随页面上下文的绑定(渲染器 0.9.0):提醒一次——旧渲染器不认识这种写法,宿主还得喂上下文
+  const ctxKeys = contextKeysOf(cfg.widgets)
+  if (ctxKeys.length)
+    issues.push({
+      level: 'warning',
+      layer: 'binding',
+      path: '/widgets',
+      message:
+        `本页有绑定跟随页面上下文(${ctxKeys.join('、')}):宿主的渲染器要 ≥ 0.9.0(更早的版本会判这页配置无效),` +
+        `并由宿主提供这些上下文;独立大屏(site.html)里没有人提供上下文,这些卡会按「缺上下文时」的设置显示。`,
+    })
 
   // ③ template:模板必填槽位 + 组件必填绑定槽位
   const tpl = getTemplate(cfg.template)
@@ -639,10 +653,10 @@ export async function validateBindingsLayer(cfg: PageConfig, meta: MetaLookup): 
   }
 
   for (const w of cfg.widgets) {
-    for (const { slot, index: i, b } of bindingsOf(w)) {
-      if (b.mode === 'const') continue
+    for (const { slot, index: i, b: raw } of bindingsOf(w)) {
+      if (raw.mode === 'const') continue
       // 没填完的绑定由 schema 层报「未填完整」,这里不再重复报「实体(空)不存在」
-      if (!isComplete(b)) continue
+      if (!isComplete(raw)) continue
       const at = {
         path: `/widgets/${w.id}/bindings/${slot}${i === null ? '' : `/${i}`}`,
         widgetId: w.id,
@@ -650,10 +664,25 @@ export async function validateBindingsLayer(cfg: PageConfig, meta: MetaLookup): 
       }
       // ext(kz):kz 是 TB 同一份遥测的长期归档,实体与 key 都还是 TB 的,照样查得了存在性。
       // 形状本身在 validateStatic 的 checkExt 里管,这里只补存在性这一半。
+      // 跟随上下文的绑定:拿样例设备 / 样例测点去核对;没给样例就核对不了,提示一句、不拦
+      const b = sampleBinding(raw)
+      if (usesContext(raw)) {
+        const e = sampleEntityOf(entitySourceOf(raw))
+        if (!e?.id && !e?.name) {
+          issues.push({
+            level: 'warning',
+            layer: 'binding',
+            ...at,
+            message: '这条绑定跟随页面上下文、没给样例设备:无法核对测点是否存在,编辑器里也看不到预览',
+          })
+          continue
+        }
+      }
       if (b.mode === 'ext') {
-        await checkExtExistence(at, b, index, client, issues)
+        await checkExtExistence(at, b as Binding & { mode: 'ext' }, index, client, issues)
         continue
       }
+      if (b.mode === 'const') continue
       const r = resolveEntity(b.entity, index, at)
       if ('level' in r) {
         issues.push(r)

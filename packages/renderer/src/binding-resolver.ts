@@ -12,10 +12,21 @@
  * 槽位规格 stamped 为 true 时(接线图动态槽位,计划 D6 ①),单个标量绑定(ts / attr / const)的值改给 { v, ts }:
  *   ts 取数据点时间戳;attr 取 lastUpdateTs(数据源给不出则 Date.now());const 用 Date.now()。其余槽位不受影响。
  * 卸载时全部退订;退订次数 == 订阅次数由测试保证。
+ *
+ * 绑定上下文(0.9.0):每个组件先过 applyContext() 把「取自上下文」的实体 / 测点 / 时间范围换成具体值;
+ * 缺上下文的组件(empty / hide / error)不订阅,经 onState 告知。上下文变了怎么只重订受影响的组件,
+ * 归 widget-runtime 管——这里是一次性的「给定上下文 → 建订阅」。
+ * 时间范围是绝对区间 { from, to } 时只拉历史,不追加实时(区间是死的,往里追加新点没有意义)。
  */
 import type { DataSource, TsPoint, AlarmInfo, Unsubscribe, EntityRef } from '@grid/tb-client'
-import type { PageConfig, Binding, WidgetConfig } from './schema/page-config'
+import type { PageConfig, WidgetConfig } from './schema/page-config'
 import type { BindingSlotSpec, SlotValueType } from './schema/registry'
+import {
+  applyContext,
+  type BindingContext,
+  type ConcreteBinding as Binding,
+  type ContextResolution,
+} from './binding-context'
 
 export interface SeriesValue {
   /** 序列名:key(ts-history)或 ext 返回的序列名 */
@@ -50,6 +61,10 @@ export interface ResolverOptions {
   slotSpec?: (widget: WidgetConfig, slot: string) => BindingSlotSpec | undefined
   /** 历史点数上限,超出丢弃最早的(防内存增长) */
   maxPoints?: number
+  /** 绑定上下文(0.9.0);没有任何绑定引用上下文时可以不给 */
+  context?: BindingContext | null
+  /** 某个组件因为缺上下文 / 上下文不对而没有订阅(status ≠ 'ok');error 同时会走一次 onError(slot 为 '(context)') */
+  onState?: (widgetId: string, state: ContextResolution) => void
 }
 
 const lastValue = (points: TsPoint[]): TsPoint['value'] => (points.length ? points[points.length - 1]!.value : null)
@@ -109,9 +124,16 @@ export function resolveBindings(
     })
   }
 
-  for (const w of config.widgets) {
-    for (const [slot, b] of Object.entries(w.bindings)) {
-      const spec = opts.slotSpec?.(w, slot)
+  for (const raw of config.widgets) {
+    const res = applyContext(raw, opts.context)
+    if (res.status !== 'ok' || !res.widget) {
+      opts.onState?.(raw.id, res)
+      if (res.status === 'error') fail(raw.id, '(context)', new Error(res.message ?? '上下文错误'))
+      continue
+    }
+    const w = res.widget
+    for (const [slot, b] of Object.entries(res.widget.bindings)) {
+      const spec = opts.slotSpec?.(raw, slot)
       const list = Array.isArray(b) ? b : [b]
       const multiple = Array.isArray(b)
       if (multiple && spec?.valueType === 'alarms') {
@@ -256,7 +278,7 @@ export function resolveBindings(
 
   function bindSeries(
     one: Binding,
-    w: WidgetConfig,
+    w: { id: string },
     slot: string,
     _spec: BindingSlotSpec | undefined,
     emit: (pts: TsPoint[]) => void
@@ -273,7 +295,13 @@ export function resolveBindings(
         fail(w.id, slot, new Error('DataSource 未实现 ext()'))
         return
       }
-      ds.ext({ source: one.source, window: one.window, interval: one.interval, params: one.params })
+      ds.ext({
+        source: one.source,
+        window: one.window,
+        ...(one.range ? { range: one.range } : {}),
+        interval: one.interval,
+        params: one.params,
+      })
         .then(r => {
           if (disposed) return
           const first = Object.values(r.series)[0] ?? []
@@ -298,6 +326,8 @@ export function resolveBindings(
           if (disposed) return
           buf = (h[key] ?? []).slice()
           emit(buf.slice())
+          // 绝对区间:只看那一段,不追加实时
+          if (typeof one.window !== 'string') return
           // 历史拉完再订阅追加,避免乱序
           try {
             track(
@@ -393,12 +423,13 @@ export function resolveBindings(
 
 function seriesName(b: Binding, i: number): string {
   switch (b.mode) {
+    // 测点取自上下文且给了显示名({ key, label })时,图例 / 列名用显示名
     case 'ts':
-      return b.key
+      return b.label ?? b.key
     case 'ts-history':
-      return b.keys[0] ?? `series-${i}`
+      return b.label ?? b.keys[0] ?? `series-${i}`
     case 'attr':
-      return b.key
+      return b.label ?? b.key
     case 'ext': {
       // 图例名:业务统计用 metric(inc / cost / net);通用历史用第一个 key;都没有才退到 kz-<序号>
       const p = b.params as { metric?: unknown; keys?: unknown }

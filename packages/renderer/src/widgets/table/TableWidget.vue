@@ -14,6 +14,7 @@ interface ColumnProp {
   unit?: string
   decimals?: number
 }
+const emit = defineEmits<{ (e: 'widget-event', ev: { name: string; detail?: unknown }): void }>()
 const props = withDefaults(
   defineProps<{
     title?: string
@@ -77,6 +78,8 @@ const latestRows = computed(() =>
       unit: c.unit,
       ts: last?.ts ? fmtTs(last.ts) : '——',
       sub: s.entity?.name ?? '',
+      entity: s.entity,
+      key: s.name,
     }
   })
 )
@@ -113,7 +116,17 @@ const empty = computed(() => !series.value.length || (props.mode === 'timeline' 
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(r, i) in latestRows" :key="i">
+          <tr
+            v-for="(r, i) in latestRows"
+            :key="i"
+            data-role="row"
+            @click="
+              emit('widget-event', {
+                name: 'row-click',
+                detail: { index: i, label: r.label, key: r.key, ...(r.entity ? { entity: r.entity } : {}) },
+              })
+            "
+          >
             <td :title="r.sub">{{ r.label }}</td>
             <td class="num">{{ r.value }}</td>
             <td class="dim">{{ r.unit }}</td>

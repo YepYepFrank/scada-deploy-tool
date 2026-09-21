@@ -10,9 +10,9 @@
  * - ADR-004 若选「ext 过渡路线」:Binding 增加 `{ mode: 'ext'; source: string; params?: … }`。
  */
 
-import type { EntityRef, AttributeScope, Aggregation, ExtInterval } from '@grid/tb-client'
+import type { EntityRef, AttributeScope, Aggregation, ExtInterval, AbsoluteRange } from '@grid/tb-client'
 
-export type { EntityRef, AttributeScope, Aggregation, ExtInterval }
+export type { EntityRef, AttributeScope, Aggregation, ExtInterval, AbsoluteRange }
 
 export const SCHEMA_VERSION = 1 as const
 
@@ -89,25 +89,88 @@ export interface WidgetConfig {
   actions?: Record<string, Action>
 }
 
+// ───────── 绑定上下文(0.9.0,方案讨论-BindingContext-2026-09-21)─────────
+// 绑定里的实体 / 测点 / 时间范围除了写死,还可以写「取自页面上下文的某个键」。宿主只给上下文
+// (<ScadaPage :binding-context> / provideBindingContext()),渲染器解析成具体值再去订阅;上下文变了只重订受影响的组件。
+// **只有显式写了 source: 'context' 的地方才会被替换**,固定绑定永远不动。全部是可选新增,schemaVersion 仍为 1;
+// 但 0.8.0 及更早的渲染器不认识这种写法(会判该页配置无效)——宿主先升 0.9.0,再发布这类页面。
+
+/**
+ * 上下文键:标准键 `selectedSite` / `selectedDevice` / `selectedMeasurePoint` / `timeRange`,
+ * 其余业务键一律放在 `custom` 下(`custom.selectedTu`),避免顶层键名失控。`selectedAlarm` 为预留,一期绑定不可引用。
+ * @pattern ^(selectedSite|selectedDevice|selectedMeasurePoint|timeRange|custom\.[A-Za-z][A-Za-z0-9_]*)$
+ */
+export type ContextKey = string
+
+/**
+ * 上下文里没有这个键(或为 null)时这张卡怎么办:
+ * - `empty`(缺省):显示中性的「未选择设备」空态,不请求、不订阅、不算报错;
+ * - `hide`:整张卡不画;
+ * - `error`:显示错误态并抛 bindError(这一页必须有上下文才有意义时用);
+ * - `fallback`:用 `fallback` 去订阅(必须同时给 fallback;适合「默认先看 1# PCS」的页面)。
+ */
+export type WhenMissing = 'empty' | 'hide' | 'error' | 'fallback'
+
+/** 实体取自上下文 */
+export interface ContextEntityRef {
+  source: 'context'
+  key: ContextKey
+  /** 期望的实体类型;填了就校验,上下文给的类型不符 → 该卡显示配置错误而不是去订阅 */
+  type?: 'DEVICE' | 'ASSET'
+  /**
+   * 样例 / 兜底实体:编辑器靠它挑测点、出预览。**运行时只有 whenMissing 为 'fallback' 才用它**——
+   * 样例设备不该悄悄成为生产页面的默认值。
+   */
+  fallback?: EntityRef
+  whenMissing?: WhenMissing
+}
+
+/** 测点(key)取自上下文:历史数据页「选测点」用。上下文里的值是 key 字符串或 `{ key, label?, unit? }` */
+export interface ContextKeyRef {
+  source: 'context'
+  key: ContextKey
+  /** @minLength 1 */
+  fallback?: string
+  whenMissing?: WhenMissing
+}
+
+/**
+ * 时间窗口字面量:整数 + 单位(m / h / d),如 '15m' / '24h' / '7d'。
+ * @pattern ^\d+(m|h|d)$
+ */
+export type WindowLiteralString = string
+
+/** 时间范围取自上下文:上下文里的值是窗口字面量('24h')或绝对区间 `{ from, to }`(毫秒 / ISO 字符串 / Date) */
+export interface ContextWindowRef {
+  source: 'context'
+  key: ContextKey
+  fallback?: WindowLiteralString | AbsoluteRange
+  whenMissing?: WhenMissing
+}
+
+/** 固定实体,或取自上下文 */
+export type EntitySource = EntityRef | ContextEntityRef
+/** 固定测点,或取自上下文 */
+export type KeySource = string | ContextKeyRef
+/** 「最近 N」、绝对区间,或取自上下文。绝对区间只拉历史,不追加实时 */
+export type WindowSource = WindowLiteralString | AbsoluteRange | ContextWindowRef
+
 /** 实时遥测:订阅一个 key 的最新值与后续推送。 */
 export interface TsBinding {
   mode: 'ts'
-  entity: EntityRef
+  entity: EntitySource
   /** @minLength 1 */
-  key: string
+  key: KeySource
 }
 
 /** 历史 + 实时追加:先按窗口拉历史,再订阅同 key 追加。 */
 export interface TsHistoryBinding {
   mode: 'ts-history'
-  entity: EntityRef
+  entity: EntitySource
   /** @minItems 1 */
-  keys: string[]
-  /**
-   * 时间窗口:整数 + 单位(m / h / d),如 '15m' / '24h' / '7d'。
-   * @pattern ^\d+(m|h|d)$
-   */
-  window: string
+  keys: KeySource[]
+  /** 时间窗口:'15m' / '24h' / '7d',或绝对区间 { from, to },或取自上下文(0.9.0) */
+  window: WindowSource
   /** 缺省由数据层按窗口长度自适应。 */
   agg?: Aggregation
 }
@@ -115,16 +178,16 @@ export interface TsHistoryBinding {
 /** 属性:订阅 server / shared / client scope 的某个属性。 */
 export interface AttrBinding {
   mode: 'attr'
-  entity: EntityRef
+  entity: EntitySource
   scope: AttributeScope
   /** @minLength 1 */
-  key: string
+  key: KeySource
 }
 
 /** 告警:该实体当前活动告警;`types` 不填为全部,填了只看指定告警类型(状态卡 / 横幅按告警名过滤)。 */
 export interface AlarmBinding {
   mode: 'alarm'
-  entity: EntityRef
+  entity: EntitySource
   /** @minItems 1 */
   types?: string[]
 }
@@ -146,14 +209,14 @@ export interface ExtBinding {
    * @pattern ^[a-z][a-z0-9-]*$
    */
   source: string
-  /**
-   * 时间窗口:同 ts-history。
-   * @pattern ^\d+(m|h|d)$
-   */
-  window?: string
+  /** 时间窗口:同 ts-history(0.9.0 起同样可以是绝对区间或取自上下文)。 */
+  window?: WindowSource
   /** 聚合粒度,对齐 kz 支持的枚举。 */
   interval?: ExtInterval
-  /** 源特有参数(站点 / 业务 id、指标名等)。 */
+  /**
+   * 源特有参数(站点 / 业务 id、指标名等)。kz 通用历史查询的 `params.entity` 与 `params.keys[i]`
+   * 同样可以写成取自上下文的形式(`{ source: 'context', key: … }`),由渲染器在调用 ext() 前解析。
+   */
   params: Record<string, unknown>
 }
 

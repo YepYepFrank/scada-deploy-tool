@@ -30,6 +30,8 @@ export interface ExtQuery {
   source: string
   /** 时间窗口字面量(同 ts-history),缺省由实现决定 */
   window?: string
+  /** 绝对起止时间(2026-09-21);给了就以它为准,忽略 window。不认识它的实现会按 window 查,结果是「最近 N」 */
+  range?: AbsoluteRange
   /** 聚合粒度,对齐 kz 支持的枚举 */
   interval?: ExtInterval
   /** 源特有参数(站点 / 业务 id、指标名等),形状待冻结 */
@@ -89,6 +91,36 @@ export type Aggregation = 'AVG' | 'MIN' | 'MAX' | 'SUM' | 'COUNT' | 'NONE'
  */
 export type WindowLiteral = `${number}m` | `${number}h` | `${number}d`
 
+/**
+ * 绝对时间区间(2026-09-21,历史数据页「选起止日期」用):毫秒时间戳,`from < to`。
+ * 与窗口字面量并列——`getHistory` 的第三个参数两种都收,实现内部统一换成 startTs / endTs。
+ */
+export interface AbsoluteRange {
+  from: number
+  to: number
+}
+
+/** 「最近 N」或绝对区间 */
+export type TimeRange = WindowLiteral | string | AbsoluteRange
+
+export function isAbsoluteRange(x: unknown): x is AbsoluteRange {
+  return (
+    !!x &&
+    typeof x === 'object' &&
+    Number.isFinite((x as AbsoluteRange).from) &&
+    Number.isFinite((x as AbsoluteRange).to)
+  )
+}
+
+/** 统一换成 { startTs, endTs }:窗口字面量 = 到现在为止的最近 N;绝对区间原样(from ≥ to 抛错) */
+export function resolveTimeRange(range: TimeRange, now: number = Date.now()): { startTs: number; endTs: number } {
+  if (isAbsoluteRange(range)) {
+    if (range.from >= range.to) throw new Error(`invalid time range: from (${range.from}) must be < to (${range.to})`)
+    return { startTs: range.from, endTs: range.to }
+  }
+  return { startTs: now - parseWindow(range), endTs: now }
+}
+
 export type ConnectionStatus = 'connecting' | 'live' | 'offline'
 
 export type Unsubscribe = () => void
@@ -132,11 +164,13 @@ export interface DataSource {
   /**
    * 查历史。`agg` 缺省时由数据层按窗口长度自适应(≤2h 原始点;2h–24h AVG/5min;24h–7d AVG/1h;>7d AVG/1d),
    * 调用方显式传 `agg` 时仍由数据层决定桶宽。渲染器不关心粒度(架构 §7「长窗口」)。
+   * `window`(2026-09-21 起)也可以是绝对区间 `{ from, to }`(毫秒):实现用 `resolveTimeRange()` 统一换成
+   * startTs / endTs,桶宽按 `to - from` 选。渲染器只有在配置 / 上下文给了绝对区间时才会这样调。
    */
   getHistory(
     entity: EntityRef,
     keys: string[],
-    window: WindowLiteral | string,
+    window: TimeRange,
     agg?: Aggregation
   ): Promise<Record<string, TsPoint[]>>
 

@@ -11,10 +11,12 @@ import { SCHEMA_VERSION } from './schema/page-config'
 import type { ScadaPageProps, WidgetEventPayload } from './schema/scada-page'
 import type { TemplateDefinition, WidgetDefinition } from './schema/registry'
 import { getTemplate, getWidget, validateAgainstRegistry, type RegistryIssue } from './registry'
-import { toWidgetEvent, useBindingRuntime, widgetPropsOf } from './widget-runtime'
+import { clickEventOf, toWidgetEvent, useBindingRuntime, widgetPropsOf } from './widget-runtime'
+import { contextKeysOf, contextSignature, type BindingContext } from './binding-context'
 import { computeScale, HEADER_DESIGN_H, rootStyle, slotStyle, wrapperStyle } from './layout/template-style'
-import { DATA_SOURCE_KEY } from './provide'
+import { BINDING_CONTEXT_KEY, DATA_SOURCE_KEY } from './provide'
 import WidgetExpand from './WidgetExpand.vue'
+import ContextState from './ContextState.vue'
 
 const props = withDefaults(defineProps<ScadaPageProps>(), {
   showStatus: false,
@@ -49,6 +51,9 @@ const headerH = computed(() => (hdr.value ? HEADER_DESIGN_H : 0))
 
 const injected = inject<DataSource | null>(DATA_SOURCE_KEY, null)
 const ds = computed<DataSource | null>(() => props.dataSource ?? injected)
+// 绑定上下文(0.9.0):props 优先,其次注入;都没有 = null(引用了上下文的卡按 whenMissing 处理)
+const injectedCtx = inject<BindingContext | null>(BINDING_CONTEXT_KEY, null)
+const ctx = computed<BindingContext | null>(() => props.bindingContext ?? injectedCtx ?? null)
 
 // ---------- 校验 ----------
 const issues = ref<RegistryIssue[]>([])
@@ -108,8 +113,12 @@ const placed = computed<Placed[]>(() => {
   }))
 })
 
-/** 组件 props:defaults + 配置(先过组件的 migrateProps 把旧键名正规化) */
-const widgetProps = (w: Placed['widgets'][number]) => widgetPropsOf(w.cfg)
+/** 组件 props:defaults + 配置(先过组件的 migrateProps 把旧键名正规化);receivesBindings 的组件拿解析后的具体绑定 */
+const widgetProps = (w: Placed['widgets'][number]) => widgetPropsOf(w.cfg, rt.resolved[w.cfg.id])
+/** 整卡点击(0.9.0):设计态不抛 */
+function onWidgetClick(cfg: WidgetConfig) {
+  if (!props.design) emit('widget-event', clickEventOf(cfg, rt.resolved[cfg.id]))
+}
 
 /** 组件抛的 widget-event:补 widgetId / type 后向外抛;形状不对的忽略 */
 function onWidgetEvent(cfg: WidgetConfig, ev: unknown) {
@@ -137,6 +146,9 @@ watch(expandedW, w => {
 const rt = useBindingRuntime((wid, slot, message) => emit('bindError', wid, slot, message))
 const values = rt.values
 const bindErrors = rt.bindErrors
+const ctxStates = rt.ctxStates
+/** 这张页引用了哪些上下文键:宿主据此决定要不要显示设备 / 时间选择器 */
+const contextKeys = computed(() => contextKeysOf(props.config?.widgets ?? []))
 
 function teardown() {
   rt.teardown()
@@ -149,7 +161,8 @@ function setup() {
   rt.setup(
     props.config.widgets.filter(w => !widgetErrors.value.has(w.id)),
     ds.value,
-    props.design
+    props.design,
+    ctx.value
   )
 }
 
@@ -221,6 +234,8 @@ watch(ds, () => {
   watchStatus()
 })
 watch(() => props.design, setup)
+// 上下文里被引用的键变了 → 对账式重建:只有具体绑定变了的组件会重订(同一 tick 连改几个键只跑一次)
+watch(() => contextSignature(props.config?.widgets ?? [], ctx.value), setup)
 // 抬头出现 / 消失会改变舞台的可用高度,得重新量
 watch(headerH, async () => {
   await nextTick()
@@ -232,7 +247,7 @@ onBeforeUnmount(() => {
   ro?.disconnect()
 })
 
-defineExpose({ issues, status, values, bindErrors })
+defineExpose({ issues, status, values, bindErrors, ctxStates, contextKeys, stats: rt.stats })
 </script>
 
 <template>
@@ -289,13 +304,22 @@ defineExpose({ issues, status, values, bindErrors })
             <template v-if="p.widgets.length">
               <div
                 v-for="w in p.widgets"
+                v-show="ctxStates[w.cfg.id]?.status !== 'hide'"
                 :key="w.cfg.id"
                 class="sr-widget"
                 :data-widget="w.cfg.id"
                 :data-type="w.cfg.type"
+                :data-ctx-state="ctxStates[w.cfg.id]?.status"
+                @click="onWidgetClick(w.cfg)"
               >
+                <ContextState
+                  v-if="ctxStates[w.cfg.id]"
+                  :state="ctxStates[w.cfg.id]!"
+                  :title="String(widgetProps(w).title ?? '')"
+                />
                 <component
                   :is="w.def!.component"
+                  v-else
                   v-bind="widgetProps(w)"
                   :values="values[w.cfg.id] ?? {}"
                   :errors="bindErrors[w.cfg.id] ?? {}"
@@ -303,7 +327,7 @@ defineExpose({ issues, status, values, bindErrors })
                   @widget-event="onWidgetEvent(w.cfg, $event)"
                 />
                 <button
-                  v-if="expandable && !design"
+                  v-if="expandable && !design && !ctxStates[w.cfg.id]"
                   type="button"
                   class="sr-expand-btn"
                   title="放大这个组件"

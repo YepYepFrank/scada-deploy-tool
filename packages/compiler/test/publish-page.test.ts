@@ -367,6 +367,32 @@ describe('publishPage', () => {
   })
 })
 
+describe('取自上下文的实体(渲染器 0.9.0 BindingContext)', () => {
+  const ctxPage = (): PagePayload => {
+    const p = page()
+    ;(p.widgets[0]!.bindings.value as unknown as { entity: unknown }).entity = {
+      source: 'context',
+      key: 'selectedDevice',
+      type: 'DEVICE',
+      fallback: { type: 'DEVICE', id: '', name: 'SSP1_GP1_IED1' },
+    }
+    return p
+  }
+  it('resolvePageEntities:上下文引用本身不解析,它的 fallback 按名解析回填 id', async () => {
+    const tb = fakeTb()
+    const { resolved, unresolved } = await resolvePageEntities(tb.api, ctxPage())
+    expect(unresolved).toEqual([])
+    const e = (
+      resolved.widgets[0]!.bindings.value as unknown as { entity: { source: string; fallback: { id: string } } }
+    ).entity
+    expect(e.source).toBe('context')
+    expect(e.fallback.id).not.toBe('')
+  })
+  it('listPageWidgets:上下文实体显示成 @键名', () => {
+    expect(listPageWidgets(ctxPage())[0]!.bindings[0]).toContain('@selectedDevice.P')
+  })
+})
+
 describe('publishPage · 页面归属跟着站点走(审查 R2,2026-09-08)', () => {
   const OTHER = '00000000-0000-0000-0000-0000000000ff'
   const opts = (report?: ReturnType<typeof collect>['report']) => ({

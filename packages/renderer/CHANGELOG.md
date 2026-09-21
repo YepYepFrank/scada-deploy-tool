@@ -2,6 +2,31 @@
 
 版本按 SemVer;0.x 期间次版本号可含破坏性变更,会在条目里标「破坏」。契约(`schemaVersion`)的变更走 ADR,不随包版本隐式变化。
 
+## 0.9.0 — 2026-09-21
+
+**绑定上下文 BindingContext**(方案见 `docs/方案讨论-BindingContext-2026-09-21.md`,庄 09-21 答复后定稿)。全部是可选新增,
+`schemaVersion` 仍为 1、旧配置零改动;但 **0.8.0 及更早的渲染器不认识新写法,会判那一页配置无效——宿主先升 0.9.0,再发布这类页面**。
+
+- **契约**:绑定里的实体 / 测点 / 时间范围除了写死,还能写「取自页面上下文」:
+  - `entity: { source: 'context', key, type?, fallback?, whenMissing? }`(ts / ts-history / attr / alarm,以及 ext 的 `params.entity`);
+  - `key` / `keys[i]`:`{ source: 'context', key: 'selectedMeasurePoint', fallback?, whenMissing? }`(ext 的 `params.keys[i]` 同);
+  - `window`:`'24h'`、**绝对区间 `{ from, to }`(毫秒)**,或 `{ source: 'context', key: 'timeRange', … }`。
+  - 上下文键只收 `selectedSite` / `selectedDevice` / `selectedMeasurePoint` / `timeRange` 与 `custom.<名字>`(JSON Schema 的 pattern 管着);`selectedAlarm` 预留。
+  - `whenMissing`:`empty`(缺省,「未选择设备」空态,不订阅不报错)/ `hide` / `error` / `fallback`(必须同时给 `fallback`,注册表校验 `context-fallback-missing`)。
+    **`fallback` 只有 whenMissing 为 `fallback` 时才在运行时生效**——样例设备不会悄悄成为生产页面的默认值。
+- **宿主接口**:`<ScadaPage :binding-context>` / `<ScadaWidget :binding-context>`,或 `provideBindingContext(ctx)`(props 优先;provide 限定在组件树内,不是全局单例)。
+  渲染器只读不写。`defineExpose` 多了 `contextKeys`(这页 / 这张卡要喂哪些键)、`ctxStates`、`stats()`。
+  类型:`BindingContext`、`MeasurePoint`、`ContextTimeRange`;工具函数 `applyContext` / `contextKeysOf` / `contextSignature` / `lookupContext` / `isContextRef`。
+- **按组件粒度重订**:绑定运行时从「配置一变全部退订重建」改成对账式——只有「具体绑定」变了的组件才重订。
+  换设备时固定绑定的卡订阅不断、数值不闪;同一设备重复赋值(新对象、同 id)不重订;**只改 props(标题、单位)也不再重订**。
+- **绝对时间区间**:`DataSource.getHistory` 的第三个参数放宽为 `TimeRange = 窗口字面量 | { from, to }`;`ExtQuery` 多了可选的 `range`。
+  `@grid/tb-client` 0.0.3 导出 `AbsoluteRange` / `TimeRange` / `isAbsoluteRange` / `resolveTimeRange`,`LegacyDataSource` 已支持(kz 通用历史同)。
+  绝对区间只拉历史、不追加实时。**宿主自己的 tbClient 要跟着支持**,否则用到绝对区间的曲线会报错(只用「最近 N」的不受影响)。
+- **联动事件**(`widget-event`):整卡点击 `click`(任何组件;该卡只绑了一个实体时 `detail.entity` 给出,已是解析后的具体实体)、
+  表格 `row-click`(`{ index, label, key, entity? }`)、告警列表 `alarm-click`(`{ alarm, entity }`)。宿主收到后自己改上下文即可联动;design 态不抛。
+- 测点取自上下文且给了 `{ key, label }` 时,曲线图例 / 表格列名用 `label`。声明了 `receivesBindings` 的组件拿到的是解析后的具体绑定。
+- `/dev` 演示页加了一块「绑定上下文」:选设备 / 测点 / 时间范围看卡片换订阅,点表格行联动选中设备。
+
 ## 0.8.0 — 2026-09-21
 
 - **叠放层次**:`SldNode.z` / `SldBus.z`(可选,缺省 0)。图元与母线放在一起排:**先比 z,z 相同再按「母线 < 连线 < 图元」,再按数组顺序**,

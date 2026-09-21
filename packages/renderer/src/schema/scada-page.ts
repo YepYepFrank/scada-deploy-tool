@@ -3,6 +3,7 @@
  */
 import type { PageConfig } from './page-config'
 import type { DataSource } from '@grid/tb-client'
+import type { BindingContext } from '../binding-context'
 
 export interface ScadaPageProps {
   /** 页面配置(已通过 validatePageConfig 或由渲染器内部校验) */
@@ -34,6 +35,11 @@ export interface ScadaPageProps {
    */
   decor?: boolean
   /**
+   * 绑定上下文(0.9.0):当前站点 / 设备 / 测点 / 时间范围。绑定里写了 `source: 'context'` 的地方从这里取值;
+   * 值变了只重订受影响的组件。缺省用 provideBindingContext() 注入的;props 传了以 props 为准。渲染器只读不写。
+   */
+  bindingContext?: BindingContext | null
+  /**
    * 是否画 `config.header` 里的大屏抬头(0.6.0)。**默认 true**;页面没配 header 时本来就不画。
    * 宿主想用自己的标题栏就传 false。
    */
@@ -46,7 +52,11 @@ export interface WidgetEventInput {
   detail?: unknown
 }
 
-/** 渲染器向宿主抛出的 widget-event 载荷:在组件给的 name / detail 上补组件 id 与类型 */
+/**
+ * 渲染器向宿主抛出的 widget-event 载荷:在组件给的 name / detail 上补组件 id 与类型。
+ * 0.9.0 起约定的事件:整卡点击 `click`(任何组件,detail.entity 在该卡只绑了一个实体时给出)、
+ * 表格 `row-click`、告警列表 `alarm-click`、接线图 `node-click`。联动做法:宿主收到事件后改自己的上下文。
+ */
 export interface WidgetEventPayload {
   widgetId: string
   type: string

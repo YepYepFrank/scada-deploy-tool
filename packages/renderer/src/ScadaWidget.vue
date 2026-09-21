@@ -10,9 +10,11 @@ import type { DataSource } from '@grid/tb-client'
 import type { WidgetConfig } from './schema/page-config'
 import type { WidgetEventPayload } from './schema/scada-page'
 import { getWidget, validateWidgetAgainstRegistry } from './registry'
-import { toWidgetEvent, useBindingRuntime, widgetPropsOf } from './widget-runtime'
-import { DATA_SOURCE_KEY } from './provide'
+import { clickEventOf, toWidgetEvent, useBindingRuntime, widgetPropsOf } from './widget-runtime'
+import { contextKeysOf, contextSignature, type BindingContext } from './binding-context'
+import { BINDING_CONTEXT_KEY, DATA_SOURCE_KEY } from './provide'
 import WidgetExpand from './WidgetExpand.vue'
+import ContextState from './ContextState.vue'
 
 export interface ScadaWidgetProps {
   /** 一张卡的配置(通常是 pickWidget(pageConfig, widgetId) 取出来的);slot 字段可以没有,有也忽略 */
@@ -25,6 +27,8 @@ export interface ScadaWidgetProps {
   design?: boolean
   /** 右上角「放大」按钮(铺满视口再渲染一份,共用同一份值);默认 true,design 态不显示 */
   expandable?: boolean
+  /** 绑定上下文(0.9.0):同 <ScadaPage>;缺省用 provideBindingContext() 注入的,props 优先 */
+  bindingContext?: BindingContext | null
 }
 const props = withDefaults(defineProps<ScadaWidgetProps>(), { design: false, expandable: true })
 const emit = defineEmits<{
@@ -43,6 +47,8 @@ function expand(on: boolean) {
 
 const injected = inject<DataSource | null>(DATA_SOURCE_KEY, null)
 const ds = computed<DataSource | null>(() => props.dataSource ?? injected)
+const injectedCtx = inject<BindingContext | null>(BINDING_CONTEXT_KEY, null)
+const ctx = computed<BindingContext | null>(() => props.bindingContext ?? injectedCtx ?? null)
 const def = computed(() => getWidget(props.config.type))
 
 // 校验:结构问题阻断;design 下绑定缺失不算(与 ScadaPage 一致)
@@ -64,15 +70,23 @@ function setup() {
     rt.teardown()
     return
   }
-  rt.setup([props.config], ds.value, props.design)
+  rt.setup([props.config], ds.value, props.design, ctx.value)
 }
 onMounted(setup)
 watch(() => props.config, setup, { deep: true })
 watch(ds, setup)
 watch(() => props.design, setup)
+// 上下文里被引用的键变了才重订(换设备 / 换测点 / 换时间范围)
+watch(() => contextSignature([props.config], ctx.value), setup)
 onBeforeUnmount(rt.teardown)
 
-const widgetProps = computed(() => widgetPropsOf(props.config))
+const widgetProps = computed(() => widgetPropsOf(props.config, rt.resolved[props.config.id]))
+const ctxState = computed(() => rt.ctxStates[props.config.id])
+/** 这张卡要宿主喂哪些上下文键 */
+const contextKeys = computed(() => contextKeysOf([props.config]))
+function onClick() {
+  if (!props.design) emit('widget-event', clickEventOf(props.config, rt.resolved[props.config.id]))
+}
 /** 组件抛的 widget-event:补 widgetId / type 后向外抛;形状不对的忽略 */
 function onWidgetEvent(ev: unknown) {
   const payload = toWidgetEvent(props.config, ev)
@@ -80,18 +94,38 @@ function onWidgetEvent(ev: unknown) {
 }
 const themeClass = computed(() => `sr-theme-${props.theme ?? 'default'}`)
 
-defineExpose({ issues, values: rt.values, bindErrors: rt.bindErrors })
+defineExpose({
+  issues,
+  values: rt.values,
+  bindErrors: rt.bindErrors,
+  ctxStates: rt.ctxStates,
+  contextKeys,
+  stats: rt.stats,
+})
 </script>
 
 <template>
-  <div class="sr-page sr-widget-standalone" :class="[themeClass, { 'sr-design': design }]">
+  <div
+    v-show="ctxState?.status !== 'hide'"
+    class="sr-page sr-widget-standalone"
+    :class="[themeClass, { 'sr-design': design }]"
+  >
     <div v-if="!def || blocking.length" class="sr-fatal sr-widget-fatal">
       <div class="sr-fatal-title">卡片无法渲染</div>
       <div class="sr-fatal-msg">{{ blocking.map(i => i.message).join(';') || `未知组件类型 "${config.type}"` }}</div>
     </div>
-    <div v-else class="sr-widget" :data-widget="config.id" :data-type="config.type">
+    <div
+      v-else
+      class="sr-widget"
+      :data-widget="config.id"
+      :data-type="config.type"
+      :data-ctx-state="ctxState?.status"
+      @click="onClick"
+    >
+      <ContextState v-if="ctxState" :state="ctxState" :title="String(widgetProps.title ?? '')" />
       <component
         :is="def.component"
+        v-else
         v-bind="widgetProps"
         :values="rt.values[config.id] ?? {}"
         :errors="rt.bindErrors[config.id] ?? {}"
@@ -99,7 +133,7 @@ defineExpose({ issues, values: rt.values, bindErrors: rt.bindErrors })
         @widget-event="onWidgetEvent"
       />
       <button
-        v-if="expandable && !design"
+        v-if="expandable && !design && !ctxState"
         type="button"
         class="sr-expand-btn"
         title="放大这个组件"

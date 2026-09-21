@@ -21,11 +21,12 @@ import type {
   ExtInterval,
   ExtQuery,
   ExtResult,
+  TimeRange,
   TsPoint,
   TsUpdate,
   Unsubscribe,
 } from './data-source'
-import { parseWindow } from './data-source'
+import { parseWindow, resolveTimeRange } from './data-source'
 
 export interface LegacyDataSourceOptions {
   /** REST 根,如 '' (走 Vite 代理)或 'http://192.168.20.61:8080';结尾不带 / */
@@ -266,12 +267,12 @@ export class LegacyDataSource implements DataSource {
   async getHistory(
     entity: EntityRef,
     keys: string[],
-    window: string,
+    window: TimeRange,
     agg?: Aggregation
   ): Promise<Record<string, TsPoint[]>> {
-    const ms = parseWindow(window)
-    const endTs = Date.now()
-    const startTs = endTs - ms
+    // 「最近 N」与绝对区间 { from, to } 统一成 startTs / endTs;桶宽按区间长度选
+    const { startTs, endTs } = resolveTimeRange(window)
+    const ms = endTs - startTs
     const bucket = HISTORY_BUCKETS.find(b => ms <= b.maxWindowMs)!
     const effAgg: Aggregation = agg ?? (bucket.intervalMs ? 'AVG' : 'NONE')
     const q = new URLSearchParams({
@@ -344,9 +345,11 @@ export class LegacyDataSource implements DataSource {
     if (!entity?.type || !entity.id) throw new Error('ext(kz) 通用查询缺 params.entity { type, id }')
     const keys = p.keys.map(String).filter(Boolean)
     if (!keys.length) throw new Error('ext(kz) 通用查询 params.keys 为空')
-    const endTs = typeof p.endTs === 'number' ? p.endTs : Date.now()
+    // 起止时间的优先级:query.range(绝对区间,2026-09-21)> params.startTs / endTs(旧写法)> window(最近 N)
+    const endTs = query.range ? query.range.to : typeof p.endTs === 'number' ? p.endTs : Date.now()
     const windowMs = parseWindow(query.window ?? '30d')
-    const startTs = typeof p.startTs === 'number' ? p.startTs : endTs - windowMs
+    const startTs = query.range ? query.range.from : typeof p.startTs === 'number' ? p.startTs : endTs - windowMs
+    if (startTs >= endTs) throw new Error('ext(kz) 起始时间必须早于结束时间')
     const interval = query.interval ?? defaultKzInterval(endTs - startTs)
     const bucket = KZ_BUCKETS[interval]
     if (!bucket) throw new Error(`ext(kz) 不支持的粒度「${String(interval)}」`)

@@ -1,7 +1,12 @@
 # 方案讨论 · 绑定上下文 BindingContext(单卡 / 整页动态换设备)· 2026-09-21
 
 > 给谁看:YY(定)、庄艳芹(确认接口)、高潮(知会)。
-> 状态:**草案,待庄确认 §8 的 6 个问题后开工**。对应庄 09-21 的《PageConfig 大部分页面配置化改进建议》第四、五节;其余各节的回应在 §7。
+> 状态:**已确认并实现**(2026-09-21)。庄当天回了《PageConfig 动态上下文与设备类型方案答复》,五条结论全部采纳,渲染器 0.9.0 + 部署工具已落地;
+> **接入以 `给同事的-渲染器0.9.0交付-2026-09-21.md` 为准**,本文保留为方案与决策记录。与下文草案的出入(以实现为准):
+> ① prop 名是 `bindingContext`(不是 `context`);② 上下文键只收四个标准键 + `custom.<名字>`,`selectedAlarm` 预留;
+> ③ `selectedMeasurePoint`(动态测点)提前到这一期;④ `whenMissing` 四态 `empty / hide / error / fallback`,`fallback` 只有显式选了才在运行时生效;
+> ⑤ 绝对时间区间 `{ from, to }` 并进这一期(`DataSource.getHistory` 放宽,宿主 tbClient 要跟着改);⑥ 整卡点击事件 `click` 对所有组件生效;
+> ⑦ 不按设备类型拆卡片组;⑧ 地图按 YY 意见暂不做。
 > 涉及版本:渲染器 0.8.0 → **0.9.0**(契约 `schemaVersion` 仍为 1,全部是可选新增);`@grid/tb-client` 的 `DataSource` 接口**不变**。
 
 ---

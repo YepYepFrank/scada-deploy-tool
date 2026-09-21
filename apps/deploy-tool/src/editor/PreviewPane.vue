@@ -7,7 +7,10 @@
  *   (架构 §10「预览 ≠ 生产视角」)。
  */
 import { computed, onBeforeUnmount, reactive, ref, shallowRef, watch } from 'vue'
-import { ScadaPage, type PageConfig } from '@grid/scada-renderer'
+import { ScadaPage, contextKeysOf, type BindingContext, type PageConfig } from '@grid/scada-renderer'
+import ContextSimBar from './ContextSimBar.vue'
+import { sampleContext } from './context-binding'
+import type { MetaNode } from '../meta/MetaNode'
 import CardsInspect from '../components/CardsInspect.vue'
 import { LegacyDataSource, type DataSource } from '@grid/tb-client'
 import { createTbSession } from '../api/tb-session'
@@ -40,10 +43,16 @@ const props = withDefaults(
     cards?: boolean
     /** 卡片库页面资产 id(已发布才有),给检视列表的「复制引用」 */
     pageId?: string | null
+    /** 元数据树:给「上下文模拟」条的设备下拉用(页面没有跟随上下文的绑定时用不到) */
+    tree?: MetaNode | null
   }>(),
   { tenantUser: '', customerUser: '', customerPass: '' }
 )
 const emit = defineEmits<{ close: [] }>()
+
+// ---------- 上下文模拟(渲染器 0.9.0):页面有绑定跟随上下文时,预览扮演宿主给上下文 ----------
+const ctxKeys = computed(() => contextKeysOf(props.config.widgets))
+const simCtx = ref<BindingContext>(sampleContext(props.config.widgets))
 
 const view = ref<'tenant' | 'customer'>('tenant')
 const cust = reactive({
@@ -194,6 +203,8 @@ onBeforeUnmount(() => {
       </ul>
     </div>
 
+    <ContextSimBar v-if="ctxKeys.length" v-model="simCtx" :keys="ctxKeys" :tree="tree ?? null" :config="config" />
+
     <div class="pv-stage" :class="{ 'pv-cards': cards }">
       <CardsInspect
         v-if="source && cards"
@@ -201,12 +212,14 @@ onBeforeUnmount(() => {
         :config="config"
         :page-id="pageId ?? null"
         :data-source="source"
+        :binding-context="simCtx"
       />
       <ScadaPage
         v-else-if="source"
         :key="sourceKey"
         :config="config"
         :data-source="source"
+        :binding-context="simCtx"
         show-status
         @status="status = $event"
         @bind-error="onBindError"

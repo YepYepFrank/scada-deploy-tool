@@ -1,11 +1,18 @@
 // @grid/scada-renderer 公共入口。
-export const version = '0.8.0'
+export const version = '0.9.0'
 export * from './schema'
 export { default as ScadaPage } from './ScadaPage.vue'
 /** 单张卡片入口(0.3.0):把页面里的某张卡单独嵌进宿主自己的页面;配 pickWidget 按「页面 id + 组件 id」取卡 */
 export { default as ScadaWidget, type ScadaWidgetProps } from './ScadaWidget.vue'
 export { pickWidget, listWidgetRefs } from './pick'
-export { useBindingRuntime, widgetPropsOf, type BindingRuntime } from './widget-runtime'
+export {
+  useBindingRuntime,
+  widgetPropsOf,
+  clickEventOf,
+  soleEntityOf,
+  type BindingRuntime,
+  type WidgetContextState,
+} from './widget-runtime'
 export {
   registerWidget,
   registerTemplate,
@@ -26,7 +33,28 @@ export {
   type SlotValue,
   type StampedValue,
 } from './binding-resolver'
-export { DATA_SOURCE_KEY, provideDataSource, useDataSource } from './provide'
+export {
+  DATA_SOURCE_KEY,
+  provideDataSource,
+  useDataSource,
+  BINDING_CONTEXT_KEY,
+  provideBindingContext,
+  useBindingContext,
+} from './provide'
+export {
+  applyContext,
+  contextKeysOf,
+  contextSignature,
+  lookupContext,
+  isContextRef,
+  type BindingContext,
+  type MeasurePoint,
+  type ContextTimeRange,
+  type ContextResolution,
+  type ContextStatus,
+  type ConcreteBinding,
+  type ConcreteWidget,
+} from './binding-context'
 /** 大屏抬头在设计稿坐标里占的高度(0.6.0);部署工具画槽位示意图时要一起留位 */
 export { HEADER_DESIGN_H } from './layout/template-style'
 export { PALETTE, colorAt } from './widgets/_shared/echarts'

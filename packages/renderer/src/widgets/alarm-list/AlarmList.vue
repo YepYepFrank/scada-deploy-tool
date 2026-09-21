@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import type { AlarmInfo } from '@grid/tb-client'
 import CardFrame from '../_shared/CardFrame.vue'
 
+const emit = defineEmits<{ (e: 'widget-event', ev: { name: string; detail?: unknown }): void }>()
 const props = withDefaults(
   defineProps<{
     title?: string
@@ -75,7 +76,14 @@ const sev = (a: AlarmInfo) => a.severity.toLowerCase()
   >
     <div class="sr-alarm-list">
       <div v-if="!alarms.length" class="sr-empty-hint">✓ 当前无活动告警</div>
-      <div v-for="a in alarms" :key="a.id" class="sr-al-row" :class="sev(a)">
+      <div
+        v-for="a in alarms"
+        :key="a.id"
+        class="sr-al-row"
+        :class="sev(a)"
+        data-role="alarm-row"
+        @click="emit('widget-event', { name: 'alarm-click', detail: { alarm: a, entity: a.originator } })"
+      >
         <span class="sr-al-dot"></span>
         <span class="sr-al-type">{{ a.type }}</span>
         <span class="sr-al-dev">{{ a.originatorName ?? a.originator.id.slice(0, 8) }}</span>

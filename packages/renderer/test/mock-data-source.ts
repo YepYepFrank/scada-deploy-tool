@@ -16,7 +16,7 @@ export interface Call {
   keys?: string[]
   scope?: string
   types?: string[] | undefined
-  window?: string
+  window?: string | { from: number; to: number }
   agg?: string
   query?: ExtQuery
 }

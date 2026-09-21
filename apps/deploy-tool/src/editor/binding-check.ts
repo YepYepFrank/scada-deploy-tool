@@ -2,10 +2,11 @@
  * 绑定的编辑期检查(T3.4):必填未绑标红;valueType: number 选了非数值 key 标黄。
  * 纯函数,key 的最近值类型由调用方从元数据(MetaClient.tsKeys)查出后传入。
  */
-import type { Binding, BindingMode, BindingSlotSpec } from '@grid/scada-renderer'
+import type { Binding, BindingMode, BindingSlotSpec, ConcreteBinding } from '@grid/scada-renderer'
 import type { EntityRef } from '@grid/tb-client'
 import type { ValueKind } from '../meta/MetaNode'
 import { emptyExtParams, extComplete } from './ext-params'
+import { contextProblems, sampleBinding } from './context-binding'
 
 /** 某 mode 的最小合法形状(实体可选保留);新建绑定与换 mode 都用它 */
 export function emptyBinding(mode: BindingMode, entity?: EntityRef): Binding {
@@ -36,8 +37,11 @@ export interface BindingFlag {
 }
 
 /** 绑定形状是否填完整(实体 / key / keys 非空) */
-export function isComplete(b: Binding | null | undefined): boolean {
-  if (!b) return false
+export function isComplete(raw: Binding | null | undefined): boolean {
+  if (!raw) return false
+  // 跟随上下文的部分(渲染器 0.9.0):键名合法就算填了,样例不是必填;其余部分仍按老规则
+  if (contextProblems(raw).length) return false
+  const b = sampleBinding(raw, { placeholder: true })
   switch (b.mode) {
     case 'ts':
     case 'attr':
@@ -49,7 +53,7 @@ export function isComplete(b: Binding | null | undefined): boolean {
     case 'const':
       return b.value !== undefined
     case 'ext':
-      return extComplete(b)
+      return extComplete(b as Binding)
   }
   return false
 }
@@ -61,12 +65,14 @@ export function isComplete(b: Binding | null | undefined): boolean {
 export function checkSlot(
   spec: BindingSlotSpec,
   bound: Binding | Binding[] | undefined,
-  keyKindOf: (b: Binding) => ValueKind | undefined
+  keyKindOf: (b: ConcreteBinding) => ValueKind | undefined
 ): BindingFlag | null {
   const list = bound === undefined ? [] : Array.isArray(bound) ? bound : [bound]
   if (!list.length) return spec.required ? { level: 'error', message: '必填槽位未绑定' } : null
-  for (const b of list) {
-    if (!isComplete(b)) return { level: 'error', message: `${b.mode} 绑定未填完整` }
+  for (const raw of list) {
+    if (!isComplete(raw)) return { level: 'error', message: contextProblems(raw)[0] ?? `${raw.mode} 绑定未填完整` }
+    // 类型核对看样例(跟随上下文的绑定没有具体测点,用样例设备 / 样例测点的最近值类型)
+    const b = sampleBinding(raw)
     if (spec.valueType === 'number' && (b.mode === 'ts' || b.mode === 'attr')) {
       const k = keyKindOf(b)
       if (k && k !== 'number')

@@ -9,6 +9,8 @@ export type {
   AlarmInfo,
   Aggregation,
   WindowLiteral,
+  AbsoluteRange,
+  TimeRange,
   ConnectionStatus,
   Unsubscribe,
   DataSource,
@@ -16,7 +18,7 @@ export type {
   ExtInterval,
   ExtResult,
 } from './data-source'
-export { parseWindow } from './data-source'
+export { parseWindow, isAbsoluteRange, resolveTimeRange } from './data-source'
 export {
   LegacyDataSource,
   normalizeValue,

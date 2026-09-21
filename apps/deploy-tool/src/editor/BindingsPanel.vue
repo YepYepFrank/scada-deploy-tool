@@ -3,6 +3,8 @@
  * 一个组件的全部绑定槽位(T3.4):按 bindingSlots 逐个出 BindingRow;multiple 槽位是可增删的列表;
  * 必填未绑标红、valueType 不匹配标黄(最近值类型来自元数据缓存)。
  */
+import { sampleBinding } from './context-binding'
+import type { ConcreteBinding } from '@grid/scada-renderer'
 import { computed, ref, watch } from 'vue'
 import type { Binding, WidgetConfig, WidgetDefinition } from '@grid/scada-renderer'
 import BindingRow from './BindingRow.vue'
@@ -90,14 +92,16 @@ function move(slot: string, i: number, dir: -1 | 1) {
 
 // ---------- 最近值类型缓存 → 标黄 ----------
 const kinds = ref<Record<string, ValueKind | undefined>>({})
-const keyKindOf = (b: Binding): ValueKind | undefined =>
+const keyKindOf = (b: ConcreteBinding): ValueKind | undefined =>
   b.mode === 'ts' || b.mode === 'attr' ? kinds.value[`${b.entity.type}/${b.entity.id}/${b.key}`] : undefined
 watch(
   () => [props.widget.bindings, props.client],
   async () => {
     const c = props.client
     if (!c) return
-    for (const b of Object.values(props.widget.bindings).flatMap(v => (Array.isArray(v) ? v : [v]))) {
+    // 跟随上下文的绑定按样例设备 / 样例测点查最近值类型
+    for (const raw of Object.values(props.widget.bindings).flatMap(v => (Array.isArray(v) ? v : [v]))) {
+      const b = sampleBinding(raw)
       if (b.mode !== 'ts' || !b.entity.id || !b.key) continue
       const k = `${b.entity.type}/${b.entity.id}/${b.key}`
       if (k in kinds.value) continue

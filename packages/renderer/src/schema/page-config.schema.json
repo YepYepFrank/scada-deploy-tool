@@ -164,10 +164,10 @@
           "const": "ts"
         },
         "entity": {
-          "$ref": "#/definitions/EntityRef"
+          "$ref": "#/definitions/EntitySource"
         },
         "key": {
-          "type": "string",
+          "$ref": "#/definitions/KeySource",
           "minLength": 1
         }
       },
@@ -178,6 +178,17 @@
       ],
       "additionalProperties": false,
       "description": "实时遥测:订阅一个 key 的最新值与后续推送。"
+    },
+    "EntitySource": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/EntityRef"
+        },
+        {
+          "$ref": "#/definitions/ContextEntityRef"
+        }
+      ],
+      "description": "固定实体,或取自上下文"
     },
     "EntityRef": {
       "type": "object",
@@ -205,6 +216,90 @@
       "additionalProperties": false,
       "description": "实体引用:渲染器与数据层只认 id(项目文件里按名称存、发布时解析为 id 的规则见 ADR-002)。"
     },
+    "ContextEntityRef": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "const": "context"
+        },
+        "key": {
+          "$ref": "#/definitions/ContextKey"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "DEVICE",
+            "ASSET"
+          ],
+          "description": "期望的实体类型;填了就校验,上下文给的类型不符 → 该卡显示配置错误而不是去订阅"
+        },
+        "fallback": {
+          "$ref": "#/definitions/EntityRef",
+          "description": "样例 / 兜底实体:编辑器靠它挑测点、出预览。**运行时只有 whenMissing 为 'fallback' 才用它**—— 样例设备不该悄悄成为生产页面的默认值。"
+        },
+        "whenMissing": {
+          "$ref": "#/definitions/WhenMissing"
+        }
+      },
+      "required": [
+        "source",
+        "key"
+      ],
+      "additionalProperties": false,
+      "description": "实体取自上下文"
+    },
+    "ContextKey": {
+      "type": "string",
+      "description": "上下文键:标准键 `selectedSite` / `selectedDevice` / `selectedMeasurePoint` / `timeRange`, 其余业务键一律放在 `custom` 下(`custom.selectedTu`),避免顶层键名失控。`selectedAlarm` 为预留,一期绑定不可引用。",
+      "pattern": "^(selectedSite|selectedDevice|selectedMeasurePoint|timeRange|custom\\.[A-Za-z][A-Za-z0-9_]*)$"
+    },
+    "WhenMissing": {
+      "type": "string",
+      "enum": [
+        "empty",
+        "hide",
+        "error",
+        "fallback"
+      ],
+      "description": "上下文里没有这个键(或为 null)时这张卡怎么办:\n- `empty`(缺省):显示中性的「未选择设备」空态,不请求、不订阅、不算报错;\n- `hide`:整张卡不画;\n- `error`:显示错误态并抛 bindError(这一页必须有上下文才有意义时用);\n- `fallback`:用 `fallback` 去订阅(必须同时给 fallback;适合「默认先看 1# PCS」的页面)。"
+    },
+    "KeySource": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/ContextKeyRef"
+        }
+      ],
+      "description": "固定测点,或取自上下文"
+    },
+    "ContextKeyRef": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "const": "context"
+        },
+        "key": {
+          "$ref": "#/definitions/ContextKey"
+        },
+        "fallback": {
+          "type": "string",
+          "minLength": 1
+        },
+        "whenMissing": {
+          "$ref": "#/definitions/WhenMissing"
+        }
+      },
+      "required": [
+        "source",
+        "key"
+      ],
+      "additionalProperties": false,
+      "description": "测点(key)取自上下文:历史数据页「选测点」用。上下文里的值是 key 字符串或 `{ key, label?, unit? }`"
+    },
     "TsHistoryBinding": {
       "type": "object",
       "properties": {
@@ -213,19 +308,18 @@
           "const": "ts-history"
         },
         "entity": {
-          "$ref": "#/definitions/EntityRef"
+          "$ref": "#/definitions/EntitySource"
         },
         "keys": {
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/definitions/KeySource"
           },
           "minItems": 1
         },
         "window": {
-          "type": "string",
-          "description": "时间窗口:整数 + 单位(m / h / d),如 '15m' / '24h' / '7d'。",
-          "pattern": "^\\d+(m|h|d)$"
+          "$ref": "#/definitions/WindowSource",
+          "description": "时间窗口:'15m' / '24h' / '7d',或绝对区间 { from, to },或取自上下文(0.9.0)"
         },
         "agg": {
           "$ref": "#/definitions/Aggregation",
@@ -240,6 +334,73 @@
       ],
       "additionalProperties": false,
       "description": "历史 + 实时追加:先按窗口拉历史,再订阅同 key 追加。"
+    },
+    "WindowSource": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/WindowLiteralString"
+        },
+        {
+          "$ref": "#/definitions/AbsoluteRange"
+        },
+        {
+          "$ref": "#/definitions/ContextWindowRef"
+        }
+      ],
+      "description": "「最近 N」、绝对区间,或取自上下文。绝对区间只拉历史,不追加实时"
+    },
+    "WindowLiteralString": {
+      "type": "string",
+      "description": "时间窗口字面量:整数 + 单位(m / h / d),如 '15m' / '24h' / '7d'。",
+      "pattern": "^\\d+(m|h|d)$"
+    },
+    "AbsoluteRange": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "number"
+        },
+        "to": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "additionalProperties": false,
+      "description": "绝对时间区间(2026-09-21,历史数据页「选起止日期」用):毫秒时间戳,`from < to`。 与窗口字面量并列——`getHistory` 的第三个参数两种都收,实现内部统一换成 startTs / endTs。"
+    },
+    "ContextWindowRef": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "const": "context"
+        },
+        "key": {
+          "$ref": "#/definitions/ContextKey"
+        },
+        "fallback": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WindowLiteralString"
+            },
+            {
+              "$ref": "#/definitions/AbsoluteRange"
+            }
+          ]
+        },
+        "whenMissing": {
+          "$ref": "#/definitions/WhenMissing"
+        }
+      },
+      "required": [
+        "source",
+        "key"
+      ],
+      "additionalProperties": false,
+      "description": "时间范围取自上下文:上下文里的值是窗口字面量('24h')或绝对区间 `{ from, to }`(毫秒 / ISO 字符串 / Date)"
     },
     "Aggregation": {
       "type": "string",
@@ -261,13 +422,13 @@
           "const": "attr"
         },
         "entity": {
-          "$ref": "#/definitions/EntityRef"
+          "$ref": "#/definitions/EntitySource"
         },
         "scope": {
           "$ref": "#/definitions/AttributeScope"
         },
         "key": {
-          "type": "string",
+          "$ref": "#/definitions/KeySource",
           "minLength": 1
         }
       },
@@ -296,7 +457,7 @@
           "const": "alarm"
         },
         "entity": {
-          "$ref": "#/definitions/EntityRef"
+          "$ref": "#/definitions/EntitySource"
         },
         "types": {
           "type": "array",
@@ -342,9 +503,8 @@
           "pattern": "^[a-z][a-z0-9-]*$"
         },
         "window": {
-          "type": "string",
-          "description": "时间窗口:同 ts-history。",
-          "pattern": "^\\d+(m|h|d)$"
+          "$ref": "#/definitions/WindowSource",
+          "description": "时间窗口:同 ts-history(0.9.0 起同样可以是绝对区间或取自上下文)。"
         },
         "interval": {
           "$ref": "#/definitions/ExtInterval",
@@ -353,7 +513,7 @@
         "params": {
           "type": "object",
           "additionalProperties": {},
-          "description": "源特有参数(站点 / 业务 id、指标名等)。"
+          "description": "源特有参数(站点 / 业务 id、指标名等)。kz 通用历史查询的 `params.entity` 与 `params.keys[i]` 同样可以写成取自上下文的形式(`{ source: 'context', key: … }`),由渲染器在调用 ext() 前解析。"
         }
       },
       "required": [

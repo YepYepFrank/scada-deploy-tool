@@ -8,6 +8,7 @@
  * - 一个 pt 可能被多处引用(复制 / 粘贴出来的元素与原件看同一个测点):改其中一处的绑定时**写时复制**——
  *   给这一处换一个新 pt,别处不受影响;删引用时只清理「已经没人引用」的绑定。
  */
+import { isContextRef } from '@grid/scada-renderer'
 import {
   collectPointRefs,
   nodeBox,
@@ -52,7 +53,10 @@ const findValueLabel = (doc: SldDoc, id: string): SldValueLabel | undefined => {
 export function isPointBound(b: Binding | null | undefined): boolean {
   if (!b) return false
   if (b.mode === 'const') return b.value !== undefined && b.value !== ''
-  if (b.mode === 'ts' || b.mode === 'attr') return !!(b.entity?.id || b.entity?.name) && !!b.key
+  if (b.mode === 'ts' || b.mode === 'attr') {
+    const e = b.entity as { id?: string; name?: string; source?: string } | undefined
+    return !!(e?.id || e?.name || e?.source === 'context') && !!b.key
+  }
   return true
 }
 
@@ -133,7 +137,8 @@ export function findMetaNode(tree: MetaNode | null | undefined, id: string): Met
  * 不然 BindingRow 认为没选实体、也拉不到 key。只影响显示;用户真改了才会写回。
  */
 export function hydrateBinding(b: Binding | null, tree: MetaNode | null | undefined): Binding | null {
-  if (!b || !('entity' in b) || !b.entity || b.entity.id || !b.entity.name) return b
+  // 接线图的测点绑定不走「跟随上下文」(图里的设备是画死的);万一手写了,原样放过
+  if (!b || !('entity' in b) || !b.entity || isContextRef(b.entity) || b.entity.id || !b.entity.name) return b
   const hit = findEntityByName(tree, b.entity.type, b.entity.name)
   return hit ? ({ ...b, entity: { type: hit.type, id: hit.id, name: hit.name } } as Binding) : b
 }
@@ -147,7 +152,7 @@ export function withDefaultEntity(
   entity: SldEntityName | undefined,
   tree: MetaNode | null | undefined
 ): Binding | null {
-  if (!b || !entity || !('entity' in b) || b.entity?.id || b.entity?.name) return b
+  if (!b || !entity || !('entity' in b) || isContextRef(b.entity) || b.entity?.id || b.entity?.name) return b
   const hit = findEntityByName(tree, entity.type, entity.name)
   return { ...b, entity: { type: entity.type, id: hit?.id ?? '', name: entity.name } } as Binding
 }

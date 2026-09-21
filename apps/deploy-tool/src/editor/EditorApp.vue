@@ -747,6 +747,7 @@ defineExpose({
         :customer-pass="customerIdentity?.pass"
         :cards="isCards"
         :page-id="refPageId"
+        :tree="meta.tree.value"
         @close="closePreview"
       />
       <div

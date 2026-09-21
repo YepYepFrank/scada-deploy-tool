@@ -73,6 +73,30 @@ const card = checked.ok ? pickWidget(checked.value, 'w_3k9f2a1c') : undefined //
 - **组件 id 的稳定性**:工具在创建组件时生成一次(`w_` + 8 位随机),改属性 / 绑定 / 换模板都不变;把槽位里的组件换成别的类型 = 另一张卡 = 新 id。旧页面里 `w-<slot>` / `<type>-<slot>` 形式的 id 同样有效。
 - `listWidgetRefs(pageConfig)` 列出一页里全部卡片的 `{ id, type, slot, title }`,给对照 / 排查引用用。
 
+## 绑定上下文(0.9.0)
+
+绑定里的实体 / 测点 / 时间范围可以写成「取自页面上下文」,宿主只管给上下文,渲染器解析、订阅、换设备时只重订受影响的组件:
+
+```ts
+// 配置(部署工具产出):entity / key / window 三处各自可跟随,也可写死
+{ mode: 'ts-history',
+  entity: { source: 'context', key: 'selectedDevice', type: 'DEVICE' },
+  keys:   [{ source: 'context', key: 'selectedMeasurePoint' }],
+  window: { source: 'context', key: 'timeRange' } }
+
+// 宿主
+const ctx = reactive<BindingContext>({ selectedDevice: null, selectedMeasurePoint: 'P', timeRange: '24h' })
+provideBindingContext(ctx)                      // 或 <ScadaWidget :binding-context="ctx">,props 优先
+ctx.selectedDevice = { type: 'DEVICE', id, name }
+ctx.timeRange = { from: Date.parse('2026-09-01'), to: Date.parse('2026-09-08') }   // 绝对区间:只拉历史
+```
+
+- 键:`selectedSite` / `selectedDevice` / `selectedMeasurePoint` / `timeRange` / `custom.<名字>`。
+- 缺上下文时按 `whenMissing`:`empty`(缺省,「未选择设备」)/ `hide` / `error` / `fallback`(显式选了才用 `fallback`)。
+- 渲染器只读不写;联动靠 `widget-event`(整卡 `click`、表格 `row-click`、告警 `alarm-click`、接线图 `node-click`),宿主收到后自己改上下文。
+- `contextKeysOf(widgets)` / 组件实例的 `contextKeys`:这页 / 这张卡要喂哪些键。
+- 0.8.0 及更早的渲染器不认识这种写法。详见 CHANGELOG 0.9.0 与 `docs/给同事的-渲染器0.9.0交付-2026-09-21.md`。
+
 ## 组件放大(0.3.2)
 
 `<ScadaPage>` 与 `<ScadaWidget>` 里每个组件右上角有「⤢」按钮(悬停时显示):点开把该组件铺满整个视口再渲染一份,共用同一份实时值、不新建订阅;✕ / Esc 关闭,另有「浏览器全屏」。默认开着,`:expandable="false"` 关掉;`design` 态不显示。事件 `expand(widgetId | null)`。放大层 Teleport 到 body,根节点 `.sr-page.sr-expand.sr-theme-<theme>`,令牌照常可覆盖。

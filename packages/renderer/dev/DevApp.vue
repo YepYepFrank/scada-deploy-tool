@@ -4,10 +4,11 @@
  * design 模式用 sampleData;「随机数据」用内置 MockDataSource(2 秒一推,含历史 / 属性 / 告警 / ext);不依赖 TB。
  * 「镜像真数据」用 LegacyDataSource(工具自用数据源)连镜像 TB:登录 → 选设备 → 把演示配置里的实体 / key 换成该设备实际有的。
  */
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { LegacyDataSource } from '@grid/tb-client'
 import type { DataSource, TsUpdate, ConnectionStatus, AlarmInfo, TsPoint } from '@grid/tb-client'
 import { ScadaPage, ScadaWidget, listWidgets, listTemplates, listWidgetRefs, pickWidget } from '../src/index'
+import type { BindingContext, WidgetEventPayload } from '../src/index'
 import { SAMPLE_SVG } from '../src/widgets/image'
 import type { PageConfig, WidgetConfig } from '../src/schema/page-config'
 import { sldMockValue, sldSampleWidget } from './sld-sample'
@@ -228,6 +229,71 @@ const typesOf = (id: string) =>
 const usedTypes = computed(() => typesOf(template.value))
 const coveredAll = new Set(templates.flatMap(t => [...typesOf(t.id)]))
 
+// ---------- 绑定上下文演示(0.9.0):宿主只改 ctx,卡片自己换订阅 ----------
+const CTX_DEVICES = [
+  { type: 'DEVICE' as const, id: 'ctx-pcs-1', name: '1# PCS' },
+  { type: 'DEVICE' as const, id: 'ctx-pcs-2', name: '2# PCS' },
+  { type: 'DEVICE' as const, id: 'ctx-pcs-3', name: '3# PCS' },
+]
+const ctx = reactive<BindingContext>({ selectedDevice: null, selectedMeasurePoint: 'P', timeRange: '24h' })
+const ctxDeviceId = computed({
+  get: () => ctx.selectedDevice?.id ?? '',
+  set: id => (ctx.selectedDevice = CTX_DEVICES.find(d => d.id === id) ?? null),
+})
+const SEL = { source: 'context', key: 'selectedDevice', type: 'DEVICE' } as const
+const PT = { source: 'context', key: 'selectedMeasurePoint' } as const
+const ctxCards: WidgetConfig[] = [
+  {
+    id: 'ctx_num',
+    slot: 'x',
+    type: 'number-card',
+    props: { title: '当前设备 · 当前测点', decimals: 1 },
+    bindings: { value: { mode: 'ts', entity: SEL, key: PT } },
+  },
+  {
+    id: 'ctx_gauge',
+    slot: 'x',
+    type: 'gauge',
+    props: { title: '当前设备 · P', max: 200 },
+    bindings: { value: { mode: 'ts', entity: SEL, key: 'P' } },
+  },
+  {
+    id: 'ctx_line',
+    slot: 'x',
+    type: 'line',
+    props: { title: '趋势(跟随设备 / 测点 / 时间范围)' },
+    bindings: {
+      series: [{ mode: 'ts-history', entity: SEL, keys: [PT], window: { source: 'context', key: 'timeRange' } }],
+    },
+  },
+  {
+    id: 'ctx_fixed',
+    slot: 'x',
+    type: 'number-card',
+    props: { title: '固定绑定(不跟随)', decimals: 1 },
+    bindings: { value: { mode: 'ts', entity: DEV, key: 'P' } },
+  },
+  {
+    id: 'ctx_table',
+    slot: 'x',
+    type: 'table',
+    props: { title: '设备一览(点一行 = 选中该设备)' },
+    bindings: { rows: CTX_DEVICES.map(d => ({ mode: 'ts' as const, entity: d, key: 'P' })) },
+  },
+]
+const ctxLog = ref<string[]>([])
+/** 联动:宿主收到事件自己改上下文(渲染器只读不写) */
+function onCtxEvent(ev: WidgetEventPayload) {
+  const entity = (ev.detail as { entity?: (typeof CTX_DEVICES)[number] } | undefined)?.entity
+  ctxLog.value = [
+    `${ev.widgetId} · ${ev.name}${entity ? ' → ' + (entity.name ?? entity.id) : ''}`,
+    ...ctxLog.value,
+  ].slice(0, 4)
+  if (ev.name === 'row-click' && entity?.id) ctx.selectedDevice = entity
+}
+/** mock 的订阅记账:看得见「换设备 = 退旧订新,固定绑定不动」 */
+const mockSubs = reactive<Record<string, number>>({})
+
 // ---------- MockDataSource ----------
 const statusCbs = new Set<(s: ConnectionStatus) => void>()
 // 样例接线图的测点(dev/sld-sample.ts)先按它的规则给:开关偶尔变位、数值在合理范围跳动
@@ -280,12 +346,24 @@ const mock: DataSource = {
     statusCbs.add(cb)
     return () => statusCbs.delete(cb)
   },
-  subscribeTs(_e, keys, cb) {
+  subscribeTs(e, keys, cb) {
+    // 上下文演示的三台设备数值错开一档,切设备时一眼看得出换了
+    const bias = e.id.startsWith('ctx-pcs-') ? (Number(e.id.slice(-1)) - 1) * 40 : 0
     const push = () =>
-      cb(keys.map<TsUpdate>(k => ({ key: k, points: [{ ts: Date.now(), value: Math.round(rnd(k) * 100) / 100 }] })))
+      cb(
+        keys.map<TsUpdate>(k => ({
+          key: k,
+          points: [{ ts: Date.now(), value: Math.round((rnd(k) + bias) * 100) / 100 }],
+        }))
+      )
     push()
     const t = setInterval(() => !offline.value && push(), 2000)
-    return () => clearInterval(t)
+    const tag = e.name ?? e.id
+    mockSubs[tag] = (mockSubs[tag] ?? 0) + 1
+    return () => {
+      clearInterval(t)
+      if (--mockSubs[tag]! <= 0) delete mockSubs[tag]
+    }
   },
   subscribeAttr(_e, scope, keys, cb) {
     const push = () =>
@@ -607,11 +685,64 @@ const soloStyle = computed(() => {
           <ScadaWidget :config="soloWidget" :data-source="dsForPage" :design="design" />
         </div>
       </section>
+      <section class="dev-solo" data-ctx-demo>
+        <h2>
+          绑定上下文 <code>:binding-context</code>
+          <small class="dim">0.9.0 · 宿主只改上下文,卡片自己换订阅(用随机数据源,不看上面的模式开关)</small>
+        </h2>
+        <label
+          >当前设备 selectedDevice
+          <select v-model="ctxDeviceId" data-role="ctx-device">
+            <option value="">(不选)</option>
+            <option v-for="d in CTX_DEVICES" :key="d.id" :value="d.id">{{ d.name }}</option>
+          </select></label
+        >
+        <label
+          >当前测点 selectedMeasurePoint
+          <select v-model="ctx.selectedMeasurePoint" data-role="ctx-point">
+            <option :value="null">(不选)</option>
+            <option v-for="k in ['P', 'Q', 'Ia', 'F']" :key="k" :value="k">{{ k }}</option>
+          </select></label
+        >
+        <label
+          >时间范围 timeRange
+          <select v-model="ctx.timeRange" data-role="ctx-range">
+            <option :value="null">(不选)</option>
+            <option v-for="w in ['1h', '24h', '7d']" :key="w" :value="w">最近 {{ w }}</option>
+          </select></label
+        >
+        <div class="dev-ctx-grid">
+          <div v-for="c in ctxCards" :key="c.id" class="dev-ctx-cell" :class="`dev-ctx-${c.type}`">
+            <ScadaWidget :config="c" :data-source="mock" :binding-context="ctx" @widget-event="onCtxEvent" />
+          </div>
+        </div>
+        <p class="dim" data-role="ctx-subs">
+          当前实时订阅:{{
+            Object.entries(mockSubs)
+              .map(([k, n]) => `${k} × ${n}`)
+              .join(' · ') || '(无)'
+          }}
+        </p>
+        <p v-if="ctxLog.length" class="dim" data-role="ctx-log">widget-event:{{ ctxLog.join(' | ') }}</p>
+      </section>
     </main>
   </div>
 </template>
 
 <style>
+.dev-ctx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.dev-ctx-cell {
+  height: 150px;
+}
+.dev-ctx-line,
+.dev-ctx-table {
+  height: 260px;
+}
 .dev {
   display: grid;
   grid-template-columns: 320px 1fr;

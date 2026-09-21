@@ -15,6 +15,27 @@ import KeyPicker from '../components/KeyPicker.vue'
 import EntityTree from './EntityTree.vue'
 import type { KeyInfo, MetaClient, MetaNode } from '../meta/MetaNode'
 import { emptyBinding } from './binding-check'
+import { isContextRef, type WhenMissing } from '@grid/scada-renderer'
+import {
+  contextRefsOf,
+  CUSTOM_KEY_RE,
+  ENTITY_CONTEXT_KEYS,
+  entitySourceOf,
+  keySourceOf,
+  sampleEntityOf,
+  sampleKeyOf,
+  sampleWindowOf,
+  setEntityFollows,
+  setKeyFollows,
+  setWhenMissing,
+  setWindowFollows,
+  WHEN_MISSING,
+  whenMissingOf,
+  windowSourceOf,
+  withPickedEntity,
+  withPickedKey,
+  withPickedWindow,
+} from './context-binding'
 import { declaredAlarmsFor, declaredKeysFor, type Declared } from './declared-keys'
 import {
   aggLabel,
@@ -25,7 +46,6 @@ import {
   EXT_METRICS,
   extAgg,
   extEntity,
-  extKeys,
   extKind,
   extMetric,
   extStationId,
@@ -84,22 +104,84 @@ const stationRef = computed<EntityRef | undefined>(() => {
   if (!id) return undefined
   return { type: 'DEVICE', id, name: findNode(props.tree, id)?.name ?? '' }
 })
+/**
+ * 当前「选中的实体」:固定绑定就是它;跟随上下文的绑定(渲染器 0.9.0)是**样例设备**——
+ * 编辑器靠它列测点、出预览,运行时换成宿主给的当前设备。
+ */
 const entity = computed<EntityRef | undefined>(() =>
   props.modelValue && 'entity' in props.modelValue
-    ? props.modelValue.entity
+    ? sampleEntityOf(props.modelValue.entity)
     : // ext 的实体在 params 里:归档历史是 params.entity,收益趋势是 params.stationId(一台网关设备)
       mode.value === 'ext'
       ? extK.value === 'revenue'
         ? stationRef.value
-        : extEntity(props.modelValue)
+        : sampleEntityOf(extEntity(props.modelValue))
       : undefined
 )
+
+// ---------- 跟随页面上下文(当前设备 / 站点 / 测点 / 时间范围)----------
+/** 收益趋势的 stationId 是裸 id,不支持跟随;const 没有实体 */
+const canFollow = computed(
+  () => !!mode.value && mode.value !== 'const' && !(mode.value === 'ext' && extK.value !== 'history')
+)
+const entitySrc = computed(() => entitySourceOf(props.modelValue))
+const followsEntity = computed(() => isContextRef(entitySrc.value))
+const ctxKey = computed(() => (followsEntity.value ? (entitySrc.value as { key: string }).key : ''))
+const ctxKeyIsCustom = computed(() => !!ctxKey.value && !ENTITY_CONTEXT_KEYS.some(k => k.key === ctxKey.value))
+const customDraft = ref('')
+function setFollow(raw: string) {
+  if (!props.modelValue) return
+  if (raw === '') return emit('update:modelValue', setEntityFollows(props.modelValue, null))
+  if (raw === 'custom') {
+    customDraft.value = ctxKeyIsCustom.value ? ctxKey.value.replace(/^custom\./, '') : ''
+    return emit(
+      'update:modelValue',
+      setEntityFollows(props.modelValue, ctxKeyIsCustom.value ? ctxKey.value : 'custom.')
+    )
+  }
+  emit('update:modelValue', setEntityFollows(props.modelValue, raw))
+}
+function setCustomKey(raw: string) {
+  if (!props.modelValue) return
+  customDraft.value = raw.trim()
+  emit('update:modelValue', setEntityFollows(props.modelValue, `custom.${customDraft.value}`))
+}
+const customBad = computed(() => ctxKeyIsCustom.value && !CUSTOM_KEY_RE.test(ctxKey.value))
+const keySrc = computed(() => keySourceOf(props.modelValue))
+const followsKey = computed(() => isContextRef(keySrc.value))
+const canFollowKey = computed(
+  () => mode.value === 'ts' || mode.value === 'ts-history' || (mode.value === 'ext' && extK.value === 'history')
+)
+const followsWindow = computed(() => isContextRef(windowSourceOf(props.modelValue)))
+const usesCtx = computed(() => contextRefsOf(props.modelValue).length > 0)
+const missing = computed(() => whenMissingOf(props.modelValue))
+function toggleKeyFollow(on: boolean) {
+  if (props.modelValue) emit('update:modelValue', setKeyFollows(props.modelValue, on))
+}
+const checked = (e: Event) => (e.target as HTMLInputElement).checked
+function setMissing(raw: string) {
+  if (props.modelValue) emit('update:modelValue', setWhenMissing(props.modelValue, raw as WhenMissing))
+}
+/** 窗口下拉:'@ctx' = 跟随 timeRange;其余是字面量。跟随时另有一个「样例窗口」下拉 */
+const windowValue = computed(() => (followsWindow.value ? '@ctx' : sampleWindowOf(windowSourceOf(props.modelValue))))
+const windowSample = computed(() => sampleWindowOf(windowSourceOf(props.modelValue)))
+function setWindow(raw: string) {
+  if (!props.modelValue) return
+  if (raw === '@ctx') return emit('update:modelValue', setWindowFollows(props.modelValue, true))
+  const base = followsWindow.value ? setWindowFollows(props.modelValue, false) : props.modelValue
+  emit('update:modelValue', { ...(base as object), window: raw || undefined } as Binding)
+}
+function setWindowSample(raw: string) {
+  patch({ window: withPickedWindow(windowSourceOf(props.modelValue), raw) })
+}
 
 /** 换 mode:尽量保留实体,其它字段按新 mode 的最小合法形状重建 */
 function setMode(raw: string) {
   const m = raw as BindingMode | ''
   if (!m) return emit('update:modelValue', null)
-  emit('update:modelValue', emptyBinding(m, entity.value))
+  // 换 mode 时「跟随上下文」的实体设置带过去(样例实体照旧保留)
+  const next = emptyBinding(m, entity.value)
+  emit('update:modelValue', followsEntity.value && m !== 'const' ? setEntityFollows(next, ctxKey.value) : next)
 }
 function patch(p: Record<string, unknown>) {
   if (!props.modelValue) return
@@ -127,13 +209,21 @@ function pickEntity(e: EntityRef) {
   treeOpen.value = false
   const m = mode.value
   // 换实体后 key 清空(不同设备 key 不同)
+  // 跟随上下文时选的是样例实体(写进 fallback);测点跟随上下文时不清(它本来就不属于哪台设备)
+  const ent = withPickedEntity(entitySrc.value, e)
+  const keepKey = followsKey.value
   if (m === 'ext') {
     // 归档历史换实体 → 清测点;收益趋势换的是「站点」,存 id
-    patchParams(extK.value === 'revenue' ? { stationId: e.id } : { entity: e, keys: [] })
+    patchParams(extK.value === 'revenue' ? { stationId: e.id } : keepKey ? { entity: ent } : { entity: ent, keys: [] })
     return
   }
+  if (keepKey) return patch({ entity: ent })
   patch(
-    m === 'ts-history' ? { entity: e, keys: [] } : m === 'ts' || m === 'attr' ? { entity: e, key: '' } : { entity: e }
+    m === 'ts-history'
+      ? { entity: ent, keys: [] }
+      : m === 'ts' || m === 'attr'
+        ? { entity: ent, key: '' }
+        : { entity: ent }
   )
 }
 
@@ -230,14 +320,19 @@ const entityText = computed(() => {
  * 测点的话除第一个之外都会被丢掉(审查 R3)。要画多条曲线,在槽位上「+ 添加一条」绑定。
  * 这里只保留单选;遇到早期配置留下的多 key,原样显示并给出两个明确的处理办法。
  */
-const hkeys = computed(() => ((props.modelValue as { keys?: string[] } | null)?.keys ?? []) as string[])
+const rawHKeys = computed(() => ((props.modelValue as { keys?: unknown[] } | null)?.keys ?? []) as unknown[])
+/** 显示用:跟随上下文的测点显示它的样例 */
+const hkeys = computed(() => rawHKeys.value.map(sampleKeyOf))
 const extraKeys = computed(() => hkeys.value.slice(1).filter(Boolean))
 /** 换第一个测点时保留多余项,免得「改个 key」把它们悄悄抹掉 —— 多余项要用下面两个按钮显式处理 */
 function setHKey(v: string) {
-  patch({ keys: [v, ...hkeys.value.slice(1)].filter(Boolean) })
+  patch({ keys: [withPickedKey(rawHKeys.value[0], v), ...rawHKeys.value.slice(1)].filter(Boolean) })
 }
 function keepFirstKey() {
-  patch({ keys: hkeys.value.slice(0, 1).filter(Boolean) })
+  patch({ keys: rawHKeys.value.slice(0, 1).filter(Boolean) })
+}
+function setKey(v: string) {
+  patch({ key: withPickedKey(keySrc.value, v) })
 }
 
 // alarm types
@@ -273,13 +368,16 @@ function setConst(raw: string) {
  * ext 归档历史同样是「一条绑定 = 一条序列」:渲染器只取 `Object.values(series)[0]`,
  * 多写的 key 会被悄悄丢掉(与 ts-history 的审查 R3 同一回事)。这里只单选,遗留多 key 给两个明确出口。
  */
-const ekeys = computed(() => extKeys(props.modelValue))
+const rawEKeys = computed(
+  () => ((props.modelValue as { params?: { keys?: unknown[] } } | null)?.params?.keys ?? []) as unknown[]
+)
+const ekeys = computed(() => rawEKeys.value.map(sampleKeyOf))
 const ekeyExtra = computed(() => ekeys.value.slice(1).filter(Boolean))
 function setEKey(v: string) {
-  patchParams({ keys: [v, ...ekeys.value.slice(1)].filter(Boolean) })
+  patchParams({ keys: [withPickedKey(rawEKeys.value[0], v), ...rawEKeys.value.slice(1)].filter(Boolean) })
 }
 function keepFirstEKey() {
-  patchParams({ keys: ekeys.value.slice(0, 1).filter(Boolean) })
+  patchParams({ keys: rawEKeys.value.slice(0, 1).filter(Boolean) })
 }
 /** 手写 params 的后路:只在「已经是 ext 且形状不认识」时自动展开,平时收着 */
 const advanced = ref(false)
@@ -299,7 +397,6 @@ function setParams(raw: string) {
     paramsBad.value = true
   }
 }
-const str = (v: unknown) => (v === undefined || v === null ? '' : String(v))
 // 模板里不能写 as 断言:读当前绑定的字段 / 读事件值都走这两个助手
 const f = (k: string): unknown => (props.modelValue as unknown as Record<string, unknown> | null)?.[k]
 const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value
@@ -323,15 +420,65 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
         >
           {{
             entity?.id
-              ? `${entity.type === 'ASSET' ? '◆' : '▫'} ${entityText}`
+              ? `${followsEntity ? '样例:' : ''}${entity.type === 'ASSET' ? '◆' : '▫'} ${entityText}`
               : tree
                 ? extK === 'revenue'
                   ? '选择站点(网关设备)…'
-                  : '选择实体…'
+                  : followsEntity
+                    ? '选样例设备(用来挑测点、看预览)…'
+                    : '选择实体…'
                 : '先连接 TB'
           }}
         </button>
       </template>
+    </div>
+    <!-- 跟随页面上下文(渲染器 0.9.0):宿主给「当前设备 / 站点」,这张卡跟着换;样例设备只在编辑器里用 -->
+    <div v-if="canFollow" class="br-line br-ctx" data-role="ctx-line">
+      <label
+        >实体来源
+        <select
+          data-role="ctx-entity"
+          :value="followsEntity ? (ctxKeyIsCustom ? 'custom' : ctxKey) : ''"
+          @change="setFollow(ev($event))"
+        >
+          <option value="">固定(上面选的这个)</option>
+          <option v-for="k in ENTITY_CONTEXT_KEYS" :key="k.key" :value="k.key">跟随{{ k.label }} · {{ k.key }}</option>
+          <option value="custom">跟随自定义键 · custom.…</option>
+        </select></label
+      >
+      <label v-if="ctxKeyIsCustom"
+        >custom.
+        <input
+          class="br-type-in"
+          :class="{ bad: customBad }"
+          data-role="ctx-custom"
+          :value="ctxKey.replace(/^custom\./, '')"
+          placeholder="如 selectedTu"
+          @change="setCustomKey(ev($event))"
+      /></label>
+      <label v-if="canFollowKey" class="br-check"
+        ><input
+          type="checkbox"
+          data-role="ctx-key"
+          :checked="followsKey"
+          @change="toggleKeyFollow(checked($event))"
+        />测点跟随当前测点</label
+      >
+      <label v-if="usesCtx"
+        >没选时
+        <select data-role="ctx-missing" :value="missing" @change="setMissing(ev($event))">
+          <option v-for="m in WHEN_MISSING" :key="m.value" :value="m.value">{{ m.label }}</option>
+        </select></label
+      >
+    </div>
+    <div v-if="usesCtx" class="br-hint" data-role="ctx-hint">
+      这条绑定跟随页面上下文:运行时由宿主页面提供{{
+        contextRefsOf(modelValue)
+          .map(r => r.key)
+          .join('、')
+      }};这里选的{{ followsEntity ? '设备' : '' }}{{ followsEntity && followsKey ? '、' : ''
+      }}{{ followsKey ? '测点' : '' }}{{ (followsEntity || followsKey) && followsWindow ? '、' : ''
+      }}{{ followsWindow ? '窗口' : '' }}只是样例(挑测点、看预览用)。
     </div>
     <div v-if="treeOpen && tree" class="br-tree">
       <EntityTree :root="tree" :selected-id="entity?.id ?? null" :height="treeHeight" @select="pickEntity" />
@@ -340,10 +487,10 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
     <!-- ts -->
     <div v-if="mode === 'ts'" class="br-line">
       <KeyPicker
-        :model-value="str(f('key'))"
+        :model-value="sampleKeyOf(f('key'))"
         :groups="keyGroups"
-        :placeholder="loading ? '读取测点…' : entity?.id ? '选择测点' : '先选实体'"
-        @update:model-value="patch({ key: $event })"
+        :placeholder="loading ? '读取测点…' : entity?.id ? (followsKey ? '选样例测点' : '选择测点') : '先选实体'"
+        @update:model-value="setKey($event)"
       />
     </div>
     <!-- attr -->
@@ -352,7 +499,7 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
         <option v-for="s in SCOPES" :key="s" :value="s">{{ s }}</option>
       </select>
       <KeyPicker
-        :model-value="str(f('key'))"
+        :model-value="sampleKeyOf(f('key'))"
         :groups="attrGroups"
         :placeholder="loading ? '读取属性…' : '选择属性'"
         @update:model-value="patch({ key: $event })"
@@ -378,7 +525,14 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
       <div class="br-line">
         <label
           >窗口
-          <select :value="f('window')" data-role="window" @change="patch({ window: ev($event) })">
+          <select :value="windowValue" data-role="window" @change="setWindow(ev($event))">
+            <option value="@ctx">跟随时间范围 · timeRange</option>
+            <option v-for="w in WINDOWS" :key="w" :value="w">{{ w }}</option>
+          </select></label
+        >
+        <label v-if="followsWindow"
+          >样例
+          <select :value="windowSample" data-role="window-sample" @change="setWindowSample(ev($event))">
             <option v-for="w in WINDOWS" :key="w" :value="w">{{ w }}</option>
           </select></label
         >
@@ -450,12 +604,15 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
         <template v-else>
           <label
             >窗口
-            <select
-              :value="f('window') ?? ''"
-              data-role="ext-window"
-              @change="patch({ window: ev($event) || undefined })"
-            >
+            <select :value="windowValue" data-role="ext-window" @change="setWindow(ev($event))">
               <option value="">默认(30d)</option>
+              <option value="@ctx">跟随时间范围 · timeRange</option>
+              <option v-for="w in WINDOWS" :key="w" :value="w">{{ w }}</option>
+            </select></label
+          >
+          <label v-if="followsWindow"
+            >样例
+            <select :value="windowSample" data-role="ext-window-sample" @change="setWindowSample(ev($event))">
               <option v-for="w in WINDOWS" :key="w" :value="w">{{ w }}</option>
             </select></label
           >
@@ -547,6 +704,18 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
   margin-left: 4px;
   font-size: 10px;
   opacity: 0.75;
+}
+.br-ctx {
+  padding: 4px 6px;
+  border-left: 2px solid var(--ed-accent, #19b7ff);
+  background: rgba(25, 183, 255, 0.06);
+  border-radius: 0 6px 6px 0;
+}
+.br-check input {
+  margin: 0;
+}
+.br input.bad {
+  border-color: #ff6b6b;
 }
 .br-legacy {
   font-size: 12px;

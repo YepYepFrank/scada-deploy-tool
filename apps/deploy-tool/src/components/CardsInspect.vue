@@ -5,9 +5,9 @@
  * 三处共用:第 4 步「预览卡片库」(编辑器 PreviewPane)、大屏 site.html?cards=1、第 5 步「打开检视页」。
  */
 import { computed, reactive } from 'vue'
-import { getWidget, ScadaWidget, type PageConfig, type WidgetConfig } from '@grid/scada-renderer'
+import { getWidget, ScadaWidget, type BindingContext, type PageConfig, type WidgetConfig } from '@grid/scada-renderer'
 import type { DataSource } from '@grid/tb-client'
-import { refJson, refSnippet, widgetTitle } from '../editor/widget-ref'
+import { refJson, refSnippet, widgetContextKeys, widgetTitle } from '../editor/widget-ref'
 
 const props = defineProps<{
   config: PageConfig
@@ -17,6 +17,8 @@ const props = defineProps<{
   dataSource?: DataSource | null
   /** 编辑态:用 sampleData,不订阅 */
   design?: boolean
+  /** 绑定上下文(预览的「上下文模拟」给;跟随上下文的卡从这里取当前设备 / 测点 / 时间范围) */
+  bindingContext?: BindingContext | null
 }>()
 
 /** 每种组件在检视页里的容器尺寸(px):图表 / 表格 / 告警列表要宽一点 */
@@ -49,11 +51,18 @@ const rows = computed(() =>
 /** 绑定摘要:槽位 = mode 实体名.key(多序列逐条) */
 function bindingLines(w: WidgetConfig): string[] {
   const one = (b: Record<string, unknown>) => {
+    // 跟随页面上下文的实体 / 测点 / 窗口显示成 @键名(如 @selectedDevice)
+    const ctx = (x: unknown) =>
+      x && typeof x === 'object' && (x as { source?: string }).source === 'context'
+        ? `@${String((x as { key?: string }).key)}`
+        : ''
     const e = b.entity as { name?: string; id?: string } | undefined
-    const ent = e?.name || e?.id || ''
-    const key = typeof b.key === 'string' ? b.key : Array.isArray(b.keys) ? (b.keys as string[]).join('+') : ''
+    const ent = ctx(e) || e?.name || e?.id || ''
+    const keyText = (k: unknown) => ctx(k) || String(k)
+    const key =
+      b.key !== undefined && b.key !== '' ? keyText(b.key) : Array.isArray(b.keys) ? b.keys.map(keyText).join('+') : ''
     const src = typeof b.source === 'string' ? `:${b.source}` : ''
-    const win = typeof b.window === 'string' ? ` · ${b.window}` : ''
+    const win = typeof b.window === 'string' ? ` · ${b.window}` : ctx(b.window) ? ` · ${ctx(b.window)}` : ''
     return `${String(b.mode ?? '?')}${src}${ent ? ' ' + ent : ''}${key ? '.' + key : ''}${win}`
   }
   return Object.entries(w.bindings ?? {}).map(([slot, b]) => {
@@ -104,6 +113,7 @@ async function copy(kind: 'json' | 'code', w: WidgetConfig) {
             :config="r.w"
             :data-source="dataSource ?? undefined"
             :design="!!design"
+            :binding-context="bindingContext ?? undefined"
             :expandable="false"
             @bind-error="(id, slot, m) => onErr(id, slot, m)"
           />
@@ -129,6 +139,9 @@ async function copy(kind: 'json' | 'code', w: WidgetConfig) {
             <span v-else class="ci-dim" data-role="ci-unpublished">发布后才有</span>
           </div>
           <div class="ci-ids"><span class="ci-dim">组件 id</span> <code>{{ r.w.id }}</code></div>
+          <div v-if="widgetContextKeys(r.w).length" class="ci-ids" data-role="ci-ctx-keys">
+            <span class="ci-dim">需要上下文</span> <code>{{ widgetContextKeys(r.w).join('、') }}</code>
+          </div>
           <div v-if="pageId" class="ci-btns">
             <button type="button" class="ci-btn" data-role="ci-copy-json" @click="copy('json', r.w)">复制引用</button>
             <button type="button" class="ci-btn" data-role="ci-copy-code" @click="copy('code', r.w)">复制接入代码</button>

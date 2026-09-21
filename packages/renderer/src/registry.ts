@@ -3,6 +3,7 @@
  * 契约层(JSON Schema)只管形状;这里管「template / type 存在、slot 在模板内、绑定槽位与 valueType / modes / multiple 相符」。
  * 槽位先按静态 bindingSlots 的名字找,找不到再按 dynamicSlots 的前缀匹配(接线图的 `pt.<pointId>`)。
  */
+import { isContextRef } from './binding-context'
 import type { PageConfig, WidgetConfig, Binding } from './schema/page-config'
 import type { WidgetDefinition, TemplateDefinition, BindingSlotSpec } from './schema/registry'
 
@@ -13,7 +14,7 @@ export interface RegistryIssue {
   path: string
   message: string
   /** 稳定问题码,供上层(编辑器校验层)分层 / 去重;只对少数检查给出 */
-  code?: 'template-slot-required' | 'binding-slot-required'
+  code?: 'template-slot-required' | 'binding-slot-required' | 'context-fallback-missing'
 }
 
 const widgets_ = new Map<string, WidgetDefinition>()
@@ -194,6 +195,15 @@ function validateBindings(w: WidgetConfig, def: WidgetDefinition, base: string):
         })
       else if (!MODE_VALUE_TYPES[one.mode].includes(spec.valueType))
         issues.push({ level: 'error', path: pp, message: `mode "${one.mode}" 无法提供 "${spec.valueType}" 类型的值` })
+      // 绑定上下文(0.9.0):whenMissing 为 fallback 却没给 fallback,运行时一缺上下文就是错误态——发布前就该拦住
+      for (const ref of contextRefsOf(one))
+        if (ref.whenMissing === 'fallback' && (ref.fallback === undefined || ref.fallback === null))
+          issues.push({
+            level: 'error',
+            path: pp,
+            code: 'context-fallback-missing',
+            message: `上下文「${ref.key}」配了 whenMissing: "fallback",必须同时给 fallback`,
+          })
     })
   }
   for (const s of def.bindingSlots) {
@@ -206,4 +216,21 @@ function validateBindings(w: WidgetConfig, def: WidgetDefinition, base: string):
       })
   }
   return issues
+}
+
+/** 一条绑定里所有「取自上下文」的引用(实体 / 测点 / 时间范围 / ext 的 params.entity、params.keys) */
+function contextRefsOf(b: Binding): { key: string; whenMissing?: string; fallback?: unknown }[] {
+  const out: { key: string; whenMissing?: string; fallback?: unknown }[] = []
+  const add = (x: unknown) => {
+    if (isContextRef(x)) out.push(x as { key: string; whenMissing?: string; fallback?: unknown })
+  }
+  if ('entity' in b) add(b.entity)
+  if (b.mode === 'ts' || b.mode === 'attr') add(b.key)
+  if (b.mode === 'ts-history') b.keys.forEach(add)
+  if (b.mode === 'ts-history' || b.mode === 'ext') add(b.window)
+  if (b.mode === 'ext') {
+    add(b.params?.entity)
+    if (Array.isArray(b.params?.keys)) b.params.keys.forEach(add)
+  }
+  return out
 }
