@@ -18,6 +18,7 @@
  */
 import type { Cell, Edge, Graph, Node } from '@antv/x6'
 import {
+  SLD_BUS_WIDTH,
   SLD_GRID,
   busLength,
   busOffset,
@@ -50,7 +51,8 @@ export const SHAPE_WIRE = 'edge'
 export const BUS_ANCHOR = 'sld-bus'
 /** 母线节点的命中盒厚度(可见粗线 6px)。取 2×栅格:X6 把节点左上角吸到栅格,中线也就落在栅格上 */
 export const BUS_THICK = 2 * SLD_GRID
-export const BUS_LINE = 6
+/** 母线线宽的缺省值:与运行时一致(SLD_BUS_WIDTH);单条母线可在属性面板里改(bus.width) */
+export const BUS_LINE = SLD_BUS_WIDTH
 export const PORT_GROUP = 'p'
 
 export const Z = { frame: 0, bus: 1, wire: 2, node: 3, label: 4 } as const
@@ -162,30 +164,49 @@ export function nodeToCell(node: SldNode, symbols: SldSymbolLookup = lookupSldSy
   }
 }
 
-export function busAttrs(horizontal: boolean, name?: string): SldBusCell['attrs'] {
-  const half = -BUS_LINE / 2
+/**
+ * 母线的 attrs。线体两头各多画半个线宽(refWidth2 / refHeight2 = 线宽,起点退半个线宽)——
+ * 相当于运行时的 `stroke-linecap: square`:横竖两条母线端头对端头(L 形)时,拐角那一小块方角才是满的,
+ * 否则会缺一个「线宽 / 2 见方」的口子(2026-09-20 YY 提的「横竖母线连接时有空缺」)。
+ * setAttrs 是合并语义,所以颜色 / 线宽每次都显式给值,改回缺省时才复位得掉。
+ */
+export function busAttrs(
+  horizontal: boolean,
+  name?: string,
+  width: number = BUS_LINE,
+  color?: string
+): SldBusCell['attrs'] {
+  const line = width > 0 ? width : BUS_LINE
+  const half = -line / 2
+  const fill = color || 'currentColor'
   return {
     hit: { refWidth: '100%', refHeight: '100%', fill: 'transparent', stroke: 'none' },
     body: horizontal
       ? {
           refWidth: '100%',
+          refWidth2: line,
           refHeight: null,
+          refHeight2: null,
           width: null,
-          height: BUS_LINE,
+          height: line,
           refX: 0,
-          refX2: 0,
+          refX2: half,
           refY: '50%',
           refY2: half,
+          fill,
         }
       : {
           refHeight: '100%',
+          refHeight2: line,
           refWidth: null,
+          refWidth2: null,
           height: null,
-          width: BUS_LINE,
+          width: line,
           refY: 0,
-          refY2: 0,
+          refY2: half,
           refX: '50%',
           refX2: half,
+          fill,
         },
     label: { text: name ?? '' },
   }
@@ -205,13 +226,15 @@ export function busToCell(bus: SldBus): SldBusCell {
     height: horizontal ? BUS_THICK : len,
     zIndex: Z.bus,
     data: { kind: 'bus', bus: clone(bus), horizontal, reversed },
-    attrs: busAttrs(horizontal, bus.name),
+    attrs: busAttrs(horizontal, bus.name, bus.width, bus.color),
   }
 }
 
 /** 编辑器里标签显示的文字:文字标签原样;数值标签没有实时值,用「--」占位(与运行时无数据时一致) */
 export function labelDisplayText(l: SldLabel): string {
   if (l.kind === 'text') return l.text
+  // 状态标签:编辑器里没有实时值,按「在线」的样子占位(与设计态 sampleData 一致)
+  if (l.kind === 'status') return `● ${l.title ? l.title + ' ' : ''}在线`
   return `${l.title ? l.title + ' ' : ''}--${l.format?.unit ? ' ' + l.format.unit : ''}`
 }
 
@@ -227,6 +250,10 @@ export function estimateTextWidth(text: string, size: number): number {
   for (const ch of text) em += ch.charCodeAt(0) > 0x2e7f ? 1 : 0.6
   return Math.max(SLD_GRID, Math.ceil(em * size))
 }
+
+/** 标签缺省字色(与 x6-graph 里注册的一致) */
+export const LABEL_FILL = '#c9d8ee'
+const l_bold = (l: SldLabel): boolean => !!l.bold
 
 const labelHeight = (size: number): number => Math.max(1, Math.ceil((size * 1.4) / (2 * SLD_GRID))) * 2 * SLD_GRID
 
@@ -245,7 +272,8 @@ export function labelToCell(label: SldLabel): SldLabelCell {
     zIndex: Z.label,
     data: { kind: 'label', label: clone(label) },
     attrs: {
-      text: { text, fontSize: size, ...(color ? { fill: color } : {}) },
+      // setAttrs 是合并语义:颜色 / 粗细每次都给,清掉自定义值时才回得到缺省
+      text: { text, fontSize: size, fill: color ?? LABEL_FILL, fontWeight: l_bold(label) ? 700 : 400 },
     },
   }
 }

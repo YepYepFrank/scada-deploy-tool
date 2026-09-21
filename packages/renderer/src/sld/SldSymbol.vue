@@ -22,8 +22,10 @@ const props = withDefaults(
     state?: SldSwitchState
     rot?: SldRotation
     flip?: boolean
+    /** 放大倍数(SldNode.scale):以旋转后包围盒左上角为原点整体等比放大,线宽与图元文字一起放大 */
+    scale?: number
   }>(),
-  { state: 'open', rot: 0, flip: false }
+  { state: 'open', rot: 0, flip: false, scale: 1 }
 )
 
 const def = computed(() => getSldSymbol(props.symbol))
@@ -47,6 +49,7 @@ const transform = computed(() => (def.value ? symbolTransform(def.value, props.r
     :class="{ 'sr-sld-symbol-unknown': !def }"
     :data-symbol="symbol"
     :data-state="def?.stateBody ? state : undefined"
+    :transform="scale !== 1 ? `scale(${scale})` : undefined"
   >
     <!-- eslint-disable vue/no-v-text-v-html-on-component -->
     <g class="sr-sld-symbol-shape" :transform="transform">

@@ -5,7 +5,8 @@
  * 前缀与单位用标签色(相色),数值用主题前景色;数据过期 → 数值变灰并挂 <title>「数据时间 …」。
  */
 import { computed, inject } from 'vue'
-import { sldPointSlot, type SldLabel } from '../../sld'
+import { resolveOnlineState, sldPointSlot, type SldLabel } from '../../sld'
+import SldOnlineDot from './SldOnlineDot.vue'
 import { SLD_CONTEXT_KEY } from './context'
 import { asPointValue, formatSldValue, formatTs, isStale, labelColor } from './format'
 
@@ -22,13 +23,38 @@ const shown = computed(() =>
 const stale = computed(
   () => !!ctx && !!point.value && !shown.value?.empty && isStale(point.value.ts, ctx.now.value, ctx.staleMs.value)
 )
+/** 状态标签(灯 + 文字):灯的半径跟字号走,文字让出灯的宽度 */
+const size = computed(() => props.label.size ?? 12)
+const dotR = computed(() => Math.max(3, Math.round(size.value * 0.36)))
+const online = computed(() =>
+  props.label.kind === 'status'
+    ? resolveOnlineState(asPointValue(ctx?.values()[sldPointSlot(props.label.pt)]))
+    : 'unknown'
+)
+const ONLINE_TEXT = { online: '在线', offline: '离线', unknown: '未知' } as const
 const tip = computed(() =>
   error.value ? `数据不可用:${error.value}` : stale.value && point.value ? `数据时间 ${formatTs(point.value.ts)}` : ''
 )
 </script>
 
 <template>
+  <g v-if="label.kind === 'status'" class="sr-sld-status" :class="`sr-sld-status-${online}`" :data-id="label.id">
+    <SldOnlineDot :pt="label.pt" :x="label.x + dotR" :y="label.y" :r="dotR" />
+    <text
+      class="sr-sld-label sr-sld-label-status"
+      :x="label.x + dotR * 2 + 6"
+      :y="label.y"
+      :font-size="size"
+      :font-weight="label.bold ? 700 : undefined"
+      dominant-baseline="middle"
+      :style="color ? { fill: color } : undefined"
+    >
+      <tspan v-if="label.title">{{ label.title + ' ' }}</tspan>
+      <tspan class="sr-sld-status-word">{{ ONLINE_TEXT[online] }}</tspan>
+    </text>
+  </g>
   <text
+    v-else
     class="sr-sld-label"
     :class="[
       `sr-sld-label-${label.kind}`,
@@ -37,7 +63,8 @@ const tip = computed(() =>
     :data-id="label.id"
     :x="label.x"
     :y="label.y"
-    :font-size="label.size ?? 12"
+    :font-size="size"
+    :font-weight="label.bold ? 700 : undefined"
     dominant-baseline="middle"
     :style="color ? { fill: color } : undefined"
   >

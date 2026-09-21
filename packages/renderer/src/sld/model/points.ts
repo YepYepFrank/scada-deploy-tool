@@ -1,12 +1,27 @@
 /** 测点引用与状态映射(T5.0 实现)。 */
-import type { SldDoc, SldPointRef, SldPointValue, SldStateRef, SldSwitchState } from './types'
+import type { SldDoc, SldOnlineState, SldPointRef, SldPointValue, SldStateRef, SldSwitchState } from './types'
 
-/** doc 里对测点的全部引用(节点状态 + 数值标签),按出现顺序;同一 pt 被多处引用会出现多次 */
+/** doc 里对测点的全部引用(节点状态 / 在线灯 + 数值 / 状态标签),按出现顺序;同一 pt 被多处引用会出现多次 */
 export function collectPointRefs(doc: SldDoc): SldPointRef[] {
   const refs: SldPointRef[] = []
-  for (const n of doc.nodes) if (n.state) refs.push({ pt: n.state.pt, from: 'state', owner: n.id })
-  for (const l of doc.labels) if (l.kind === 'value') refs.push({ pt: l.pt, from: 'label', owner: l.id })
+  for (const n of doc.nodes) {
+    if (n.state) refs.push({ pt: n.state.pt, from: 'state', owner: n.id })
+    if (n.online) refs.push({ pt: n.online.pt, from: 'online', owner: n.id })
+  }
+  for (const l of doc.labels)
+    if (l.kind === 'value' || l.kind === 'status') refs.push({ pt: l.pt, from: 'label', owner: l.id })
   return refs
+}
+
+/**
+ * 测点值 → 在线三态。真值(true / 'true' / 1 / '1')在线,假值(false / 'false' / 0 / '0')离线,其余未知。
+ * 不看时间戳:TB 的 `active` 只在上下线那一刻更新,「很久没变」恰恰说明一直稳定。
+ */
+export function resolveOnlineState(value: SldPointValue | undefined): SldOnlineState {
+  const v = value?.v
+  if (v === true || v === 1 || v === 'true' || v === '1') return 'online'
+  if (v === false || v === 0 || v === 'false' || v === '0') return 'offline'
+  return 'unknown'
 }
 
 /**

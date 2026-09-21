@@ -23,13 +23,18 @@ import {
   bindingOf,
   bindingTarget,
   clearState,
+  enableOnlineForNodes,
   findEntityByName,
   hydrateBinding,
   invertStateMap,
   isPointBound,
   selectionOfRef,
   setNodeEntity,
+  setNodeOnline,
+  setOnlineBinding,
+  setOnlineCorner,
   setStateBinding,
+  setStatusLabelBinding,
   setStateMap,
   unboundRefs,
   withDefaultEntity,
@@ -88,14 +93,14 @@ async function placeCenter(): Promise<void> {
 
 const refs = computed(() => collectPointRefs(doc.value))
 const unbound = computed(() => unboundRefs(content.value))
-function refText(r: { pt: string; from: 'state' | 'label'; owner: string }): string {
-  if (r.from === 'state') {
+function refText(r: { pt: string; from: 'state' | 'label' | 'online'; owner: string }): string {
+  if (r.from !== 'label') {
     const n = doc.value.nodes.find(x => x.id === r.owner)
-    return `${n?.name || r.owner} · 开关状态`
+    return `${n?.name || r.owner} · ${r.from === 'online' ? '在线状态' : '开关状态'}`
   }
   const l = doc.value.labels.find(x => x.id === r.owner)
   const host = l?.attach ? doc.value.nodes.find(x => x.id === l.attach) : undefined
-  const title = l?.kind === 'value' && l.title ? l.title : '数值'
+  const title = l?.kind === 'status' ? `状态标签 ${l.title ?? ''}` : l?.kind === 'value' && l.title ? l.title : '数值'
   return host ? `${host.name || host.id} · ${title}` : `标签 ${r.owner} · ${title}`
 }
 
@@ -150,6 +155,63 @@ function invert(): void {
 function removeState(): void {
   const id = node.value?.id
   if (id) ctx!.apply(d => clearState(d, id), '清除状态测点')
+}
+
+/* ───────────── 在线状态(2026-09-20) ───────────── */
+
+const ONLINE_HINT = '一般绑设备的服务端属性 active(平台自己维护:设备上线为 true、掉线为 false)'
+const onlineSpec = computed<BindingSlotSpec>(() => ({
+  name: `pt.${node.value?.online?.pt ?? soloStatus.value?.pt ?? 'new'}`,
+  title: '在线状态',
+  valueType: 'any',
+  modes: ['attr', 'ts', 'const'],
+}))
+const onlineBinding = computed(() =>
+  node.value?.online ? hydrateBinding(bindingOf(content.value, node.value.online.pt), tree.value) : null
+)
+function toggleOnline(e: Event): void {
+  const n = node.value
+  if (!n) return
+  const on = (e.target as HTMLInputElement).checked
+  ctx!.apply(d => setNodeOnline(d, n.id, on, tree.value, () => ctx!.newId('p')), on ? '加在线状态灯' : '去掉在线状态灯')
+}
+function setOnlinePoint(b: Binding | null): void {
+  const n = node.value
+  if (!n) return
+  const next = withDefaultEntity(b, n.entity, tree.value)
+  ctx!.apply(d => setOnlineBinding(d, n.id, next, () => ctx!.newId('p')), '改在线状态测点')
+}
+function setCorner(e: Event): void {
+  const id = node.value?.id
+  const at = (e.target as HTMLSelectElement).value as 'tl' | 'tr' | 'bl' | 'br'
+  if (id) ctx!.apply(d => setOnlineCorner(d, id, at), '改状态灯位置')
+}
+/** 多选:选中的节点里有设备、还没灯的,一次全开 */
+const onlineCandidates = computed(() => {
+  const ids = new Set(ctx.selection.value.nodes)
+  return doc.value.nodes.filter(n => ids.has(n.id) && n.entity && !n.online).map(n => n.id)
+})
+function enableOnlineBatch(): void {
+  const ids = onlineCandidates.value
+  if (!ids.length) return
+  ctx!.apply(
+    d => (enableOnlineForNodes(d, ids, tree.value, () => ctx!.newId('p')) ? undefined : false),
+    `给 ${ids.length} 台设备加在线状态灯`
+  )
+}
+
+/** 选中的单个状态标签(灯 + 文字,标整站 / 某一路通讯) */
+const soloStatus = computed(() => {
+  const t = target.value
+  const l = t.kind === 'status' ? doc.value.labels.find(x => x.id === t.id) : undefined
+  return l?.kind === 'status' ? l : undefined
+})
+const statusBinding = computed(() =>
+  soloStatus.value ? hydrateBinding(bindingOf(content.value, soloStatus.value.pt), tree.value) : null
+)
+function setStatusPoint(b: Binding | null): void {
+  const id = soloStatus.value?.id
+  if (id) ctx!.apply(d => setStatusLabelBinding(d, id, b, () => ctx!.newId('p')), '改状态标签测点')
 }
 
 /* ───────────── 节点:数值标签 ───────────── */
@@ -260,6 +322,40 @@ function addLabel(): void {
         </p>
       </section>
 
+      <section class="sld-bd-sec" data-sec="online">
+        <h4 class="sld-bd-sec-title">
+          <label class="sld-bd-check">
+            <input type="checkbox" data-role="online-toggle" :checked="!!node.online" @change="toggleOnline" />
+            在线状态灯
+          </label>
+          <i v-if="node.online && !isPointBound(onlineBinding)" class="sld-bd-dot" title="未绑定" />
+          <code v-if="node.online">pt.{{ node.online.pt }}</code>
+        </h4>
+        <template v-if="node.online">
+          <BindingRow
+            :key="`online-${node.id}`"
+            :spec="onlineSpec"
+            :model-value="onlineBinding"
+            :tree="tree"
+            :client="client"
+            :declared="declared"
+            @update:model-value="setOnlinePoint"
+          />
+          <label class="sld-bd-row">
+            <span class="sld-bd-hint">灯的位置</span>
+            <select data-role="online-corner" :value="node.online.at ?? 'tr'" @change="setCorner">
+              <option value="tr">右上</option>
+              <option value="tl">左上</option>
+              <option value="br">右下</option>
+              <option value="bl">左下</option>
+            </select>
+          </label>
+        </template>
+        <p class="sld-bd-hint">
+          在线 = 绿点呼吸,离线 = 红点常亮,没数据 = 灰点。节点有设备时勾上就自动绑好。{{ ONLINE_HINT }}。
+        </p>
+      </section>
+
       <section class="sld-bd-sec" data-sec="labels">
         <h4 class="sld-bd-sec-title">数值标签({{ labels.length }})</h4>
         <ValueLabelEditor v-for="l in labels" :key="l.id" :label-id="l.id" :default-entity="node.entity" />
@@ -271,6 +367,29 @@ function addLabel(): void {
     <section v-else-if="soloLabel" class="sld-bd-sec" data-sec="label">
       <h4 class="sld-bd-sec-title">数值标签</h4>
       <ValueLabelEditor :label-id="soloLabel.id" :default-entity="soloLabelEntity" />
+    </section>
+
+    <!-- 选中一个状态标签(灯 + 文字):标整个站点 / 某一路通讯的在线与否 -->
+    <section v-else-if="soloStatus" class="sld-bd-sec" data-sec="status">
+      <h4 class="sld-bd-sec-title">
+        状态标签
+        <i v-if="!isPointBound(statusBinding)" class="sld-bd-dot" title="未绑定" />
+        <code>pt.{{ soloStatus.pt }}</code>
+      </h4>
+      <BindingRow
+        :key="`status-${soloStatus.id}`"
+        :spec="onlineSpec"
+        :model-value="statusBinding"
+        :tree="tree"
+        :client="client"
+        :declared="declared"
+        @update:model-value="setStatusPoint"
+      />
+      <p class="sld-bd-hint">
+        标整个站点就绑**网关设备**的 active(站点在设备树里就是那台网关)。{{
+          ONLINE_HINT
+        }}。文字、字号、颜色在「属性」页签里改。
+      </p>
     </section>
 
     <!-- 概览 -->
@@ -292,12 +411,30 @@ function addLabel(): void {
           </button>
         </li>
       </ul>
-      <p class="sld-bd-hint">选中一个节点或数值标签可编辑它的测点。</p>
+      <p v-if="onlineCandidates.length" class="sld-bd-row">
+        <button type="button" class="sld-bd-mini" data-role="online-batch" @click="enableOnlineBatch">
+          给选中的 {{ onlineCandidates.length }} 台设备加在线状态灯
+        </button>
+      </p>
+      <p class="sld-bd-hint">选中一个节点或标签可编辑它的测点;框选多台设备可以一次加在线状态灯。</p>
     </section>
   </fieldset>
 </template>
 
 <style>
+.sld-bd-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.sld-bd select {
+  padding: 3px 6px;
+  color: inherit;
+  background: var(--ed-bg-0, #061024);
+  border: 1px solid var(--ed-line, rgba(83, 196, 255, 0.2));
+  border-radius: 4px;
+}
 .sld-bd {
   min-width: 0;
   margin: 0;

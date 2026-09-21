@@ -19,6 +19,7 @@ import {
   type SldIssue,
   type SldSelection,
   type SldSymbolLookup,
+  type SldPointRef,
 } from '@grid/scada-renderer'
 import type { SldEditorContent } from '../../ext'
 
@@ -44,14 +45,14 @@ export interface IssueReport {
 
 const bound = (v: Binding | Binding[] | undefined): boolean => (Array.isArray(v) ? v.length > 0 : !!v)
 
-function ownerText(doc: SldDoc, from: 'state' | 'label', owner: string): string {
-  if (from === 'state') {
+function ownerText(doc: SldDoc, from: SldPointRef['from'], owner: string): string {
+  if (from !== 'label') {
     const n = doc.nodes.find(x => x.id === owner)
-    return `节点 ${owner}${n?.name ? `(${n.name})` : ''}的开关状态`
+    return `节点 ${owner}${n?.name ? `(${n.name})` : ''}的${from === 'online' ? '在线状态灯' : '开关状态'}`
   }
   const l = doc.labels.find(x => x.id === owner)
-  const title = l?.kind === 'value' ? l.title : undefined
-  return `数值标签 ${owner}${title ? `(${title})` : ''}`
+  const title = l?.kind === 'value' || l?.kind === 'status' ? l.title : undefined
+  return `${l?.kind === 'status' ? '状态标签' : '数值标签'} ${owner}${title ? `(${title})` : ''}`
 }
 
 /** 没人引用的 `pt.*` 槽位 */
@@ -73,7 +74,7 @@ export function checkBindings(content: SldEditorContent): PanelIssue[] {
     issues.push({
       level: 'error',
       code: 'unbound-point',
-      path: r.from === 'state' ? `nodes/${r.owner}/state/pt` : `labels/${r.owner}/pt`,
+      path: r.from === 'label' ? `labels/${r.owner}/pt` : `nodes/${r.owner}/${r.from}/pt`,
       slot,
       message: `${ownerText(doc, r.from, r.owner)}引用了测点「${r.pt}」,但还没有绑定`,
     })

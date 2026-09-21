@@ -33,5 +33,41 @@ const title = computed(() => {
 <template>
   <div v-if="node" class="sld-node-view" :class="{ 'sld-node-source': !!node.source }" :title="title">
     <SldSymbolBox :symbol="node.symbol" :rot="node.rot" :flip="!!node.flip" />
+    <!-- 在线状态灯的占位(编辑器里没有实时值,按「在线」画;位置与运行时一致) -->
+    <i v-if="node.online" class="sld-node-online" :data-at="node.online.at ?? 'tr'" />
   </div>
 </template>
+
+<style>
+.sld-node-view {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.sld-node-online {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px;
+  border-radius: 50%;
+  background: #2ff0bb;
+  box-shadow: 0 0 0 3px rgba(47, 240, 187, 0.25);
+  pointer-events: none;
+}
+.sld-node-online[data-at='tr'] {
+  right: -3px;
+  top: -3px;
+}
+.sld-node-online[data-at='tl'] {
+  left: -3px;
+  top: -3px;
+}
+.sld-node-online[data-at='br'] {
+  right: -3px;
+  bottom: -3px;
+}
+.sld-node-online[data-at='bl'] {
+  left: -3px;
+  bottom: -3px;
+}
+</style>

@@ -76,7 +76,9 @@ const emit = defineEmits<{
 /* ───────────── 图 ───────────── */
 
 const doc = computed(() => (isSldDoc(props.doc) ? props.doc : undefined))
-const empty = computed(() => !doc.value || (!doc.value.nodes.length && !doc.value.buses.length))
+const empty = computed(
+  () => !doc.value || (!doc.value.nodes.length && !doc.value.buses.length && !doc.value.labels.length)
+)
 const canvas = computed(() => {
   const c = doc.value?.canvas
   const ok = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0
@@ -490,6 +492,57 @@ function onDblClick() {
 .sr-sld-alarm-warn > .sr-sld-alarm-halo {
   color: var(--sr-warn, #ffd166);
 }
+/* 在线灯:在线绿点、光晕呼吸;离线红点常亮(光晕不动);未知灰点。呼吸用 transform + opacity,不触发布局 */
+.sr-sld-online {
+  pointer-events: none;
+}
+.sr-sld-online-core {
+  fill: currentColor;
+  stroke: var(--sr-sld-halo, rgba(2, 8, 23, 0.75));
+  stroke-width: 1;
+}
+.sr-sld-online-halo {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0.28;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.sr-sld-online-online {
+  color: var(--sr-ok, #2ff0bb);
+}
+.sr-sld-online-online .sr-sld-online-halo {
+  animation: sr-sld-breathe 2.4s ease-in-out infinite;
+}
+.sr-sld-online-offline {
+  color: var(--sr-bad, #ff5f7a);
+}
+.sr-sld-online-unknown {
+  color: var(--sr-ink-2, #8fbce8);
+}
+.sr-sld-online-unknown .sr-sld-online-halo {
+  opacity: 0;
+}
+.sr-sld-status-online .sr-sld-status-word {
+  fill: var(--sr-ok, #2ff0bb);
+}
+.sr-sld-status-offline .sr-sld-status-word {
+  fill: var(--sr-bad, #ff5f7a);
+}
+.sr-sld-status-unknown .sr-sld-status-word {
+  fill: var(--sr-ink-2, #8fbce8);
+}
+@keyframes sr-sld-breathe {
+  0%,
+  100% {
+    opacity: 0.12;
+    transform: scale(0.6);
+  }
+  50% {
+    opacity: 0.42;
+    transform: scale(1);
+  }
+}
 @keyframes sr-sld-blink {
   0%,
   100% {
@@ -500,7 +553,8 @@ function onDblClick() {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sr-sld-alarm-halo {
+  .sr-sld-alarm-halo,
+  .sr-sld-online-online .sr-sld-online-halo {
     animation: none;
   }
 }

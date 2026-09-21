@@ -5,6 +5,7 @@
  * (图里引用的 `pt.*` 有没有绑定)不在这里,在部署工具 `editor/validate.ts`(ADR-005 D9)。
  * 输入按 unknown 对待(项目文件可能被手改坏):任何形状都不抛异常,只出 issue。
  */
+import { validNodeScales } from './geometry'
 import { busLength } from './geometry'
 import { SLD_DOC_VERSION, SLD_GRID, SLD_ID_PATTERN } from './types'
 import type { SldDoc, SldIssue, SldSymbolDefinition, SldSymbolLookup } from './types'
@@ -89,6 +90,14 @@ export function validateSldDoc(doc: unknown, symbols: SldSymbolLookup): SldIssue
     if (!def) error(`${path}/symbol`, 'unknown-symbol', `图元 ${JSON.stringify(item.symbol) ?? '缺失'} 不在图元库里`)
     if (!onGrid(item.x) || !onGrid(item.y))
       warn(path, 'off-grid', `节点坐标 (${String(item.x)}, ${String(item.y)}) 不落在 ${SLD_GRID} 的栅格上`)
+    if (isObj(item.online)) checkPt(`${path}/online/pt`, item.online.pt)
+    // 放大倍数:必须让包围盒与端口仍落栅格(编辑器只给得出合法值;手改 JSON / 换图元之后可能不合法)
+    if (item.scale !== undefined && def && !validNodeScales(def, SLD_GRID).includes(item.scale as number))
+      warn(
+        `${path}/scale`,
+        'bad-scale',
+        `放大倍数 ${JSON.stringify(item.scale)} 会让图元「${def.name}」的端口离开栅格,可用:${validNodeScales(def, SLD_GRID).join(' / ')}`
+      )
     if (isObj(item.state)) checkPt(`${path}/state/pt`, item.state.pt)
     else if (def?.conduct === 'switch')
       warn(`${path}/state`, 'missing-state', '开关没有配状态来源(state),带电计算按常合处理')
@@ -146,7 +155,7 @@ export function validateSldDoc(doc: unknown, symbols: SldSymbolLookup): SldIssue
   arr(doc.labels).forEach((item, i) => {
     const path = checkId('labels', item, i)
     if (!isObj(item)) return
-    if (item.kind === 'value') checkPt(`${path}/pt`, item.pt)
+    if (item.kind === 'value' || item.kind === 'status') checkPt(`${path}/pt`, item.pt)
     if (item.attach !== undefined && !(typeof item.attach === 'string' && nodes.has(item.attach)))
       error(`${path}/attach`, 'unknown-point-owner', `标签依附的节点 ${JSON.stringify(item.attach)} 不存在`)
   })

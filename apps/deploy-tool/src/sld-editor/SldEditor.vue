@@ -182,12 +182,13 @@ const overLayers = ext.layers.filter(l => l.z === 'over')
 
 /* ───────────── 内置操作 ───────────── */
 
-type Mode = 'select' | 'bus' | 'label' | 'frame'
+type Mode = 'select' | 'bus' | 'label' | 'status' | 'frame'
 const mode = ref<Mode>('select')
 const MODE_HINT: Record<Mode, string> = {
   select: '',
   bus: '画母线:按下拖出一条水平 / 垂直母线(Esc 取消)',
   label: '加文字:点一下放置(Esc 取消)',
+  status: '加在线状态标签:点一下放置,再到「绑定」页签选测点(整站一般绑网关的 active)(Esc 取消)',
   frame: '加分组框:按下拖出一个矩形(Esc 取消)',
 }
 function setMode(next: Mode): void {
@@ -358,6 +359,16 @@ const builtinTools: BuiltinTool[] = [
     enabled: editable,
     active: () => mode.value === 'label',
     run: () => setMode('label'),
+  },
+  {
+    id: 'mode-status',
+    title: '加在线状态标签',
+    group: 'arrange',
+    order: 11.5,
+    keys: ['o'],
+    enabled: editable,
+    active: () => mode.value === 'status',
+    run: () => setMode('status'),
   },
   {
     id: 'mode-frame',
@@ -605,6 +616,20 @@ function onDrawDown(e: PointerEvent): void {
   if (mode.value === 'label') {
     const id = store.newId('l')
     if (apply(d => void d.doc.labels.push({ id, x: at.x, y: at.y, kind: 'text', text: '文字' }), '加文字'))
+      store.select({ labels: [id] })
+    mode.value = 'select'
+    return
+  }
+  if (mode.value === 'status') {
+    // 状态标签(灯 + 文字):标整个站点 / 某一路通讯在线与否。先落到图上,测点在「绑定」页签里选(一般是网关的 active)
+    const id = store.newId('l')
+    const pt = store.newId('p')
+    if (
+      apply(
+        d => void d.doc.labels.push({ id, x: at.x, y: at.y, kind: 'status', pt, title: '站点', size: 14 }),
+        '加在线状态标签'
+      )
+    )
       store.select({ labels: [id] })
     mode.value = 'select'
     return

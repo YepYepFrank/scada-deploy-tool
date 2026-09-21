@@ -12,6 +12,7 @@ import {
   collectPointRefs,
   nodeBox,
   sldPointSlot,
+  nodeScale,
   symbolPoint,
   type Binding,
   type SldDoc,
@@ -63,13 +64,14 @@ export function unboundRefs(content: SldEditorContent): SldPointRef[] {
   return collectPointRefs(content.doc).filter(r => !isPointBound(bindingOf(content, r.pt)))
 }
 
-/** 一个节点名下的引用:自己的状态测点 + 依附在它上面的数值标签 */
+/** 一个节点名下的引用:自己的状态测点 / 在线灯 + 依附在它上面的数值标签 */
 export function nodePointRefs(doc: SldDoc, nodeId: string): SldPointRef[] {
   const attached = new Set(doc.labels.filter(l => l.kind === 'value' && l.attach === nodeId).map(l => l.id))
-  return collectPointRefs(doc).filter(r => (r.from === 'state' ? r.owner === nodeId : attached.has(r.owner)))
+  return collectPointRefs(doc).filter(r => (r.from === 'label' ? attached.has(r.owner) : r.owner === nodeId))
 }
 
-export type BindingTarget = { kind: 'node'; id: string } | { kind: 'label'; id: string } | { kind: 'none' }
+export type BindingTarget =
+  { kind: 'node'; id: string } | { kind: 'label'; id: string } | { kind: 'status'; id: string } | { kind: 'none' }
 
 /** 面板编辑的对象:恰好选中一个节点,或恰好选中一个数值标签;其余(没选 / 多选 / 选了别的)为 none */
 export function bindingTarget(doc: SldDoc, sel: SldSelection): BindingTarget {
@@ -77,6 +79,8 @@ export function bindingTarget(doc: SldDoc, sel: SldSelection): BindingTarget {
   if (total !== 1) return { kind: 'none' }
   if (sel.nodes.length === 1 && findNode(doc, sel.nodes[0]!)) return { kind: 'node', id: sel.nodes[0]! }
   if (sel.labels.length === 1 && findValueLabel(doc, sel.labels[0]!)) return { kind: 'label', id: sel.labels[0]! }
+  if (sel.labels.length === 1 && doc.labels.find(l => l.id === sel.labels[0])?.kind === 'status')
+    return { kind: 'status', id: sel.labels[0]! }
   return { kind: 'none' }
 }
 
@@ -93,7 +97,7 @@ export function unboundCount(content: SldEditorContent, sel: SldSelection): numb
 
 /** 引用 → 选择集(概览里点一条未绑的:状态测点选节点,标签选标签) */
 export const selectionOfRef = (ref: SldPointRef): Partial<SldSelection> =>
-  ref.from === 'state' ? { nodes: [ref.owner] } : { labels: [ref.owner] }
+  ref.from === 'label' ? { labels: [ref.owner] } : { nodes: [ref.owner] }
 
 /** 设备树里按类型 + 名字找实体(图里只存名字,要 id 时回树上找) */
 export function findEntityByName(
@@ -248,6 +252,96 @@ export function mapRemoveRow<V extends string>(map: Record<string, V>, key: stri
   return next
 }
 
+/* ───────────── 在线状态(2026-09-20) ───────────── */
+
+/** TB 给每台设备维护的在线标志:服务端属性 `active`(true / false),只在上下线时更新 */
+export const ONLINE_ATTR_KEY = 'active'
+
+/** 某个实体的「在线」绑定:服务端属性 active。实体 id 此刻不知道就留空,发布时按名解析(ADR-002) */
+export function onlineBindingOf(entity: SldEntityName, tree: MetaNode | null | undefined): Binding {
+  const hit = findEntityByName(tree, entity.type, entity.name)
+  return {
+    mode: 'attr',
+    entity: { type: entity.type, id: hit?.id ?? '', name: entity.name },
+    scope: 'SERVER_SCOPE',
+    key: ONLINE_ATTR_KEY,
+  }
+}
+
+/**
+ * 给节点开 / 关在线灯。开的时候节点有设备就**自动绑好**它的 active,不用人再去选测点;
+ * 没设备也能开(灯先是灰的,在下面的绑定行里自己选)。关掉时清理没人引用的绑定。
+ */
+export function setNodeOnline(
+  draft: SldEditorContent,
+  nodeId: string,
+  on: boolean,
+  tree: MetaNode | null | undefined,
+  newPointId: () => string
+): void | false {
+  const n = findNode(draft.doc, nodeId)
+  if (!n) return false
+  if (!on) {
+    if (!n.online) return false
+    const pt = n.online.pt
+    delete n.online
+    pruneBinding(draft, pt)
+    return
+  }
+  if (n.online) return false
+  n.online = { pt: newPointId() }
+  if (n.entity) draft.bindings[sldPointSlot(n.online.pt)] = onlineBindingOf(n.entity, tree)
+}
+
+export function setOnlineBinding(
+  draft: SldEditorContent,
+  nodeId: string,
+  binding: Binding | null,
+  newPointId: () => string
+): void | false {
+  const n = findNode(draft.doc, nodeId)
+  if (!n?.online) return false
+  writeBinding(draft, n.online, binding, newPointId)
+}
+
+export function setOnlineCorner(draft: SldEditorContent, nodeId: string, at: 'tl' | 'tr' | 'bl' | 'br'): void | false {
+  const n = findNode(draft.doc, nodeId)
+  if (!n?.online) return false
+  if (at === 'tr') delete n.online.at
+  else n.online.at = at
+}
+
+/**
+ * 选中的节点里,**有设备、还没有在线灯**的一次全开(一张图几十台设备,逐个勾太累)。返回开了几个。
+ */
+export function enableOnlineForNodes(
+  draft: SldEditorContent,
+  nodeIds: readonly string[],
+  tree: MetaNode | null | undefined,
+  newPointId: () => string
+): number {
+  let n = 0
+  for (const id of nodeIds) {
+    const node = findNode(draft.doc, id)
+    if (!node?.entity || node.online) continue
+    setNodeOnline(draft, id, true, tree, newPointId)
+    n++
+  }
+  return n
+}
+
+/** 状态标签(灯 + 文字)的绑定 */
+export function setStatusLabelBinding(
+  draft: SldEditorContent,
+  labelId: string,
+  binding: Binding | null,
+  newPointId: () => string
+): void | false {
+  const l = draft.doc.labels.find(x => x.id === labelId)
+  if (l?.kind !== 'status') return false
+  writeBinding(draft, l, binding, newPointId)
+}
+
 /* ───────────── 数值标签 ───────────── */
 
 export const attachedValueLabels = (doc: SldDoc, nodeId: string): SldValueLabel[] =>
@@ -261,7 +355,9 @@ export function nextLabelPosition(doc: SldDoc, node: SldNode, def: SldSymbolDefi
   const taken = new Set(doc.labels.filter(l => l.attach === node.id).map(l => `${l.x},${l.y}`))
   const free = (p: SldPoint): boolean => !taken.has(`${p.x},${p.y}`)
   const slots: SldPoint[] = (def?.labelSlots ?? []).map(s => {
-    const p = symbolPoint(def!, node.rot, !!node.flip, s.dx, s.dy)
+    const q = symbolPoint(def!, node.rot, !!node.flip, s.dx, s.dy)
+    const k = nodeScale(node)
+    const p = { x: q.x * k, y: q.y * k }
     return { x: node.x + p.x, y: node.y + p.y }
   })
   const hit = slots.find(free)
@@ -403,6 +499,16 @@ export function dropEntity(
     const pt = newId('p')
     node.state = { pt, map: { ...points.state.map } }
     draft.bindings[sldPointSlot(pt)] = ts(points.state.key)
+  }
+  // 拖进来的是设备:顺手把在线状态灯开好、绑上它的 active(2026-09-20;不想要在「绑定」页签里勾掉)
+  if (entity.type === 'DEVICE') {
+    node.online = { pt: newId('p') }
+    draft.bindings[sldPointSlot(node.online.pt)] = {
+      mode: 'attr',
+      entity: { type: ref.type, id: ref.id, name: ref.name },
+      scope: 'SERVER_SCOPE',
+      key: ONLINE_ATTR_KEY,
+    }
   }
   for (const l of points?.labels ?? []) {
     const format: SldValueFormat = {

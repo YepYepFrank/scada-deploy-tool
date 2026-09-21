@@ -84,14 +84,16 @@ const node = (id: string, symbol: string, extra: Partial<SldNode> = {}): SldNode
 /** 配了状态来源的断路器 */
 const qf = (id: string): SldNode =>
   node(id, 'breaker', { state: { pt: `p-${id}`, map: { '1': 'closed', '0': 'open' } } })
-const bus = (id: string, kv?: number): SldBus => ({
-  id,
-  x1: 0,
-  y1: 0,
-  x2: 400,
-  y2: 0,
-  ...(kv === undefined ? {} : { kv }),
-})
+/**
+ * 每条母线单独占一行(y 按 id 错开):2026-09-20 起「一条的端头落在另一条上」算连通(busesTouch),
+ * 夹具里要是全画在同一处,所有母线就互相搭上了——这里测的是连线 / 开关的传播,不是母线搭接。
+ */
+const busRow = new Map<string, number>()
+const bus = (id: string, kv?: number): SldBus => {
+  if (!busRow.has(id)) busRow.set(id, busRow.size * 100)
+  const y = busRow.get(id)!
+  return { id, x1: 0, y1: y, x2: 400, y2: y, ...(kv === undefined ? {} : { kv }) }
+}
 /** 端点简写:'n1.a' = 节点端口;'bus1@120' = 母线上 d = 120 */
 const end = (s: string): SldWireEnd => {
   if (s.includes('@')) {

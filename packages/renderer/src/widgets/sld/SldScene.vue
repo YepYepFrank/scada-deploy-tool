@@ -9,6 +9,7 @@ import { computed } from 'vue'
 import {
   lookupSldSymbol,
   wirePoints,
+  type SldBus,
   type SldDoc,
   type SldEnergizeResult,
   type SldEnergy,
@@ -75,6 +76,19 @@ const nodeAlarm = computed(() => {
   return out
 })
 
+/**
+ * 母线的内联样式:自定义线宽;自定义颜色盖过电压等级色——但失电照样变灰(不然带电着色就白做了),
+ * 所以失电(sr-sld-e-dead)时不写 color,让样式表里的灰接管。
+ */
+function busStyle(b: SldBus): Record<string, string> | undefined {
+  const paint = busPaint.value[b.id]
+  const color = paint?.cls === 'sr-sld-e-dead' ? undefined : (b.color ?? paint?.color)
+  const out: Record<string, string> = {}
+  if (color) out.color = color
+  if (b.width && b.width > 0) out.strokeWidth = String(b.width)
+  return Object.keys(out).length ? out : undefined
+}
+
 const horizontal = (b: { x1: number; y1: number; x2: number; y2: number }): boolean =>
   Math.abs(b.x2 - b.x1) >= Math.abs(b.y2 - b.y1)
 </script>
@@ -93,7 +107,7 @@ const horizontal = (b: { x1: number; y1: number; x2: number; y2: number }): bool
         :key="b.id"
         class="sr-sld-bus"
         :class="busPaint[b.id]?.cls"
-        :style="busPaint[b.id]?.color ? { color: busPaint[b.id]!.color } : undefined"
+        :style="busStyle(b)"
         :data-id="b.id"
         :x1="b.x1"
         :y1="b.y1"
@@ -114,8 +128,8 @@ const horizontal = (b: { x1: number; y1: number; x2: number; y2: number }): bool
           <text
             v-if="b.name"
             class="sr-sld-bus-name"
-            :x="horizontal(b) ? b.x1 : b.x1 + 8"
-            :y="horizontal(b) ? b.y1 - 12 : b.y1 - 8"
+            :x="horizontal(b) ? b.x1 : b.x1 + 6 + (b.width ?? 4) / 2"
+            :y="horizontal(b) ? b.y1 - 10 - (b.width ?? 4) / 2 : b.y1 - 8"
             font-size="12"
             dominant-baseline="middle"
           >

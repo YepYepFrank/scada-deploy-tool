@@ -144,6 +144,15 @@ text('t_safe', 1030, 700, '安全检测')
 
 text('t_title', 460, 20, '仙人山服务区微电网系统', 16)
 
+// 在线状态(2026-09-20):有设备的节点各挂一盏灯(测点 ON_<节点 id>),左上角一个整站的状态标签
+for (const n of nodes) {
+  if (!n.entity) continue
+  n.online = { pt: `ON_${n.id}` }
+  points.push(n.online.pt)
+}
+points.push('ON_site')
+labels.push({ id: 'l_site', x: 60, y: 24, kind: 'status', pt: 'ON_site', title: '站点', size: 14, bold: true })
+
 export const SLD_SAMPLE_DOC: SldDoc = {
   v: 1,
   canvas: { w: 1180, h: 730, grid: 10 },
@@ -175,6 +184,8 @@ export function sldSampleWidget(id: string, slot: string, entity: EntityRef, sit
 const switchState = new Map<string, number>()
 const jitter = (base: number, span: number) => Math.round((base + (Math.random() - 0.5) * span) * 100) / 100
 
+const offlineKey = (): string | undefined => points.filter(p => p.startsWith('ON_') && p !== 'ON_site')[1]
+
 /** 样例图的 key → 随机值;不认识的 key 返回 undefined(交给 DevApp 原有的随机规则) */
 export function sldMockValue(key: string): number | undefined {
   if (key.startsWith('SW_') || key === safePt) {
@@ -185,6 +196,8 @@ export function sldMockValue(key: string): number | undefined {
     switchState.set(key, s)
     return s
   }
+  // 在线灯:整站与大多数设备在线;挑一台固定离线(看红灯常亮),免得满屏都是绿的看不出区别
+  if (key.startsWith('ON_')) return key === offlineKey() ? 0 : 1
   if (/^U(ab|bc|ca)_/.test(key)) return jitter(10.5, 0.2)
   if (key.startsWith('P_t')) return jitter(180, 60)
   if (key.startsWith('Q_t')) return jitter(40, 20)

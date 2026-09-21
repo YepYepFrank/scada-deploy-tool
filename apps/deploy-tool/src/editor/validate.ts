@@ -27,6 +27,7 @@ import {
   type SldDoc,
   type SldIssue,
   type WidgetConfig,
+  type SldPointRef,
 } from '@grid/scada-renderer'
 import type { EntityRef } from '@grid/tb-client'
 import type { KeyInfo, MetaNode } from '../meta/MetaNode'
@@ -162,14 +163,14 @@ const slotBound = (w: WidgetConfig, slot: string): boolean => {
 }
 
 /** 「节点 n3(1# 进线柜)的开关状态」/「数值标签 l7(Ia)」—— 让人在图上找得到是谁引用的 */
-function describePointOwner(doc: SldDoc, from: 'state' | 'label', owner: string): string {
-  if (from === 'state') {
+function describePointOwner(doc: SldDoc, from: SldPointRef['from'], owner: string): string {
+  if (from !== 'label') {
     const n = doc.nodes.find(x => x.id === owner)
-    return `节点 ${owner}${n?.name ? `(${n.name})` : ''}的开关状态`
+    return `节点 ${owner}${n?.name ? `(${n.name})` : ''}的${from === 'online' ? '在线状态灯' : '开关状态'}`
   }
   const l = doc.labels.find(x => x.id === owner)
-  const title = l?.kind === 'value' ? l.title : undefined
-  return `数值标签 ${owner}${title ? `(${title})` : ''}`
+  const title = l?.kind === 'value' || l?.kind === 'status' ? l.title : undefined
+  return `${l?.kind === 'status' ? '状态标签' : '数值标签'} ${owner}${title ? `(${title})` : ''}`
 }
 
 /**

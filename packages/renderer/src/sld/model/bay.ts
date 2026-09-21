@@ -91,8 +91,11 @@ export function duplicateBay(
   for (const list of [doc.nodes, doc.buses, doc.wires, doc.labels, doc.frames ?? []])
     for (const x of list) usedIds.add(x.id)
   const usedPts = new Set<string>()
-  for (const n of doc.nodes) if (n.state) usedPts.add(n.state.pt)
-  for (const l of doc.labels) if (l.kind === 'value') usedPts.add(l.pt)
+  for (const n of doc.nodes) {
+    if (n.state) usedPts.add(n.state.pt)
+    if (n.online) usedPts.add(n.online.pt)
+  }
+  for (const l of doc.labels) if (l.kind === 'value' || l.kind === 'status') usedPts.add(l.pt)
   for (const slot of Object.keys(bindings))
     if (slot.startsWith(SLD_POINT_SLOT_PREFIX)) usedPts.add(slot.slice(SLD_POINT_SLOT_PREFIX.length))
 
@@ -127,6 +130,7 @@ export function duplicateBay(
       if (node.name !== undefined) node.name = rename(node.name)
       if (node.entity) node.entity.name = rename(node.entity.name)
       if (node.state) node.state.pt = mapPt(node.state.pt)
+      if (node.online) node.online.pt = mapPt(node.online.pt)
       out.nodes.push(node)
       created.nodes.push(node.id)
     }
@@ -171,7 +175,7 @@ export function duplicateBay(
       label.x += sx
       label.y += sy
       if (label.attach !== undefined) label.attach = nodeIds.get(label.attach) ?? label.attach
-      if (label.kind === 'value') label.pt = mapPt(label.pt)
+      if (label.kind === 'value' || label.kind === 'status') label.pt = mapPt(label.pt)
       out.labels.push(label)
       created.labels.push(label.id)
     }

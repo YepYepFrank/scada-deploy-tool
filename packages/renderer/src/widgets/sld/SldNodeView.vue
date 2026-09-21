@@ -5,7 +5,16 @@
  * 颜色:给 <g> 设 color,图元片段只用 currentColor(ADR-005 约定 3)。
  */
 import { computed } from 'vue'
-import { SldSymbol, getSldSymbol, portDirection, symbolBoxSize, type SldNode, type SldSwitchState } from '../../sld'
+import {
+  SldSymbol,
+  getSldSymbol,
+  nodeScale,
+  portDirection,
+  symbolBoxSize,
+  type SldNode,
+  type SldSwitchState,
+} from '../../sld'
+import SldOnlineDot from './SldOnlineDot.vue'
 import type { SldAlarmLevel } from './format'
 
 const props = withDefaults(
@@ -24,8 +33,15 @@ const props = withDefaults(
 )
 
 const def = computed(() => getSldSymbol(props.node.symbol))
-/** 旋转后的包围盒尺寸;未知图元画 40×40 占位框 */
-const box = computed(() => (def.value ? symbolBoxSize(def.value, props.node.rot) : { w: 40, h: 40 }))
+const scale = computed(() => nodeScale(props.node))
+/** 旋转 + 放大之后的包围盒尺寸;未知图元画 40×40 占位框 */
+const box = computed(() => (def.value ? symbolBoxSize(def.value, props.node.rot, scale.value) : { w: 40, h: 40 }))
+/** 在线灯挂在包围盒的哪个角(缺省右上),往外让出一点,不压图元的线 */
+const onlineAt = computed(() => {
+  const at = props.node.online?.at ?? 'tr'
+  const { w, h } = box.value
+  return { x: at === 'tl' || at === 'bl' ? -3 : w + 3, y: at === 'tl' || at === 'tr' ? -3 : h + 3 }
+})
 
 /**
  * 名称落点:默认图元下方居中;下方有端口出线(名字会压在线上)时依次改放右 / 左 / 上,四面都有线还是放下方。
@@ -55,8 +71,10 @@ const namePos = computed(() => {
     <rect v-if="clickable" class="sr-sld-hit" :x="-2" :y="-2" :width="box.w + 4" :height="box.h + 4" rx="3" />
     <!-- 带电着色只作用在图元上:名称不跟着变灰 / 变虚 -->
     <g class="sr-sld-node-symbol" :class="energyClass" :style="color ? { color } : undefined">
-      <SldSymbol :symbol="node.symbol" :state="state" :rot="node.rot" :flip="node.flip" />
+      <SldSymbol :symbol="node.symbol" :state="state" :rot="node.rot" :flip="node.flip" :scale="scale" />
     </g>
+    <!-- 在线灯不吃带电着色:设备离线和线路失电是两回事 -->
+    <SldOnlineDot v-if="node.online" :pt="node.online.pt" :x="onlineAt.x" :y="onlineAt.y" />
     <text
       v-if="showName && node.name"
       class="sr-sld-node-name"

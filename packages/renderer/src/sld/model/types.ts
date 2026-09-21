@@ -13,6 +13,8 @@
  *
  * 2026-09-18 修订(T5.0 收尾,ADR-005「契约修订」):节点坐标语义、栅格固定 10、母线接点改整数距离 d、
  * 图元文字保持正向、标签颜色与枚举文字、分组框 frames。
+ * 2026-09-20 修订(全部可选新增,v 仍为 1):节点 `scale` / `online`、母线 `width` / `color`、
+ * 标签 `bold` 与新的 `status` 标签(在线灯 + 文字)、母线搭母线视为连通(topology.busesTouch)。
  */
 
 /** 栅格:v1 固定 10(图元按 10 画;doc.canvas.grid 保留字段但必须等于它,validateSldDoc 会报) */
@@ -48,6 +50,19 @@ export interface SldStateRef {
   map: Record<string, 'open' | 'closed'>
 }
 
+/**
+ * 在线状态来源(2026-09-20):测点值为真(true / 'true' / 1 / '1')= 在线,为假 = 离线,没数据 = 未知(灰)。
+ * 一般绑设备的服务端属性 `active`。**不判数据过期**——`active` 三天没变不代表数据旧了,它只在上下线时才变。
+ */
+export interface SldOnlineRef {
+  pt: string
+  /** 状态灯挂在图元包围盒的哪个角,缺省右上(tr) */
+  at?: 'tl' | 'tr' | 'bl' | 'br'
+}
+
+/** 在线灯的三态 */
+export type SldOnlineState = 'online' | 'offline' | 'unknown'
+
 export interface SldNode {
   id: string
   /** 图元 id,在图元注册表里查 */
@@ -67,6 +82,13 @@ export interface SldNode {
   source?: { kv?: number }
   /** conduct = 'transformer' 的图元用:各端口侧的电压等级,如 `{ hv: 10, lv: 0.4 }` */
   portKv?: Record<string, number>
+  /**
+   * 放大倍数,缺省 1。图元整体(含线宽、图元内文字)等比放大,端口跟着走。
+   * 只许取「放大后包围盒与全部端口仍落栅格」的值(见 geometry.validNodeScales),否则连线对不上栅格。
+   */
+  scale?: number
+  /** 在线 / 离线状态灯;不配不画 */
+  online?: SldOnlineRef
 }
 
 /** 母线:水平或垂直的一段粗线,线上任意栅格位置可接线。约定 (x1,y1) 是左端 / 上端。 */
@@ -79,7 +101,14 @@ export interface SldBus {
   name?: string
   /** 电压等级;给了就以它为准着色,不给则继承带电计算传来的等级 */
   kv?: number
+  /** 线宽(像素),缺省 4(SLD_BUS_WIDTH) */
+  width?: number
+  /** 自定义颜色:带电 / 不着色时用它(盖过电压等级色);失电仍然变灰,否则带电着色就没意义了 */
+  color?: string
 }
+
+/** 母线缺省线宽 */
+export const SLD_BUS_WIDTH = 4
 
 /**
  * 连线端点:接在节点端口上,或接在母线上距 (x1,y1) 为 d 的位置(像素,栅格整数倍,0 ≤ d ≤ 母线长)。
@@ -118,6 +147,7 @@ export type SldLabel =
       text: string
       size?: number
       color?: SldLabelColor
+      bold?: boolean
     }
   | {
       id: string
@@ -132,6 +162,22 @@ export type SldLabel =
       format?: SldValueFormat
       size?: number
       color?: SldLabelColor
+      bold?: boolean
+    }
+  | {
+      id: string
+      x: number
+      y: number
+      attach?: string
+      /** 状态标签(2026-09-20):一颗在线灯 + 文字,用来标整个站点(或任何一路通讯)在线 / 离线 */
+      kind: 'status'
+      /** 在线状态测点,语义同 SldOnlineRef.pt */
+      pt: string
+      /** 灯后面的文字,如「站点」;后面自动跟「在线 / 离线 / 未知」 */
+      title?: string
+      size?: number
+      color?: SldLabelColor
+      bold?: boolean
     }
 
 /** 分组框:虚线矩形 + 标题(柜体 / 系统分区,如「LP3」「储能系统」);纯装饰,不参与连通与带电计算 */
@@ -230,7 +276,8 @@ export interface SldPoint {
 /** doc 里对测点的一处引用 */
 export interface SldPointRef {
   pt: string
-  from: 'state' | 'label'
+  /** state = 节点开关状态;label = 数值 / 状态标签;online = 节点在线灯 */
+  from: 'state' | 'label' | 'online'
   /** 节点 id(state)或标签 id(label) */
   owner: string
 }
@@ -266,6 +313,7 @@ export interface SldIssue {
     | 'bad-version'
     | 'bad-grid'
     | 'bus-end-out-of-range'
+    | 'bad-scale'
   message: string
 }
 

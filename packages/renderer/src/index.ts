@@ -1,5 +1,5 @@
 // @grid/scada-renderer 公共入口。
-export const version = '0.6.0'
+export const version = '0.7.0'
 export * from './schema'
 export { default as ScadaPage } from './ScadaPage.vue'
 /** 单张卡片入口(0.3.0):把页面里的某张卡单独嵌进宿主自己的页面;配 pickWidget 按「页面 id + 组件 id」取卡 */
