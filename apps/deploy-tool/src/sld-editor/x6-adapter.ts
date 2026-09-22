@@ -269,12 +269,17 @@ export function labelToCell(label: SldLabel): SldLabelCell {
   const text = labelDisplayText(label)
   const height = labelHeight(size) // 偶数格:半高也是栅格整数倍,y 落栅格的标签其节点左上角也落栅格
   const color = labelColor(label)
+  // 分了列的数值标签(colW,2026-09-22)实际占到「列宽 + 单位」那么远;画布上的盒子照这个给,
+  // 不然选中框比字窄。列对齐的样子以预览 / 大屏为准,X6 的单行文本画不出三列。
+  const colW = label.kind === 'value' && label.colW ? label.colW : 0
+  const unit = label.kind === 'value' ? label.format?.unit : undefined
+  const width = colW ? colW + (unit ? estimateTextWidth(' ' + unit, size) : 0) : estimateTextWidth(text, size)
   return {
     id: label.id,
     shape: SHAPE_LABEL,
     x: label.x,
     y: label.y - height / 2,
-    width: estimateTextWidth(text, size),
+    width,
     height,
     zIndex: Z.label,
     data: { kind: 'label', label: clone(label) },
@@ -284,6 +289,11 @@ export function labelToCell(label: SldLabel): SldLabelCell {
     },
   }
 }
+
+/** 分组框缺省边框(与 x6-graph 注册的一致;setAttrs 是合并语义,每次都显式给值才复位得掉) */
+export const FRAME_STROKE = '#5b7aa8'
+export const FRAME_WIDTH = 1
+export const FRAME_DASH = '6 4'
 
 export function frameToCell(frame: SldFrame): SldFrameCell {
   return {
@@ -295,7 +305,14 @@ export function frameToCell(frame: SldFrame): SldFrameCell {
     height: frame.h,
     zIndex: Z.frame,
     data: { kind: 'frame', frame: clone(frame) },
-    attrs: { title: { text: frame.title ?? '' } },
+    attrs: {
+      title: { text: frame.title ?? '' },
+      body: {
+        stroke: frame.color || FRAME_STROKE,
+        strokeWidth: frame.width || FRAME_WIDTH,
+        strokeDasharray: frame.solid ? 'none' : FRAME_DASH,
+      },
+    },
   }
 }
 

@@ -26,17 +26,27 @@ export function resolveOnlineState(value: SldPointValue | undefined): SldOnlineS
 
 /**
  * 测点值 → 开关状态。值按 String() 比对 ref.map 的键;true / false 同时按 '1' / '0' 再比一次。
- * 没值、映射不上、或 now - ts > staleMs(给了 staleMs 才判)→ 'unknown'。
+ * 没值、映射不上、或 now - ts > staleMs(给了 staleMs 才判)→ `ref.fallback ?? 'unknown'`
+ * (2026-09-22:现场很多回路没有位置信号,配 `fallback: 'closed'` 就按合闸画,有数据仍以数据为准)。
  * 节点没配状态来源(ref 为 undefined)→ 'closed'(SldNode.state 的约定:缺省视为常合)。
  */
+/**
+ * 没有实时数据时这个图元按什么画(2026-09-22):编辑器画布、设计态缩略图都用它,与运行时 `SldWidget` 的规则同源。
+ * 开关(conduct = 'switch')常合、其余带 stateBody 的图元(接地刀、状态灯)按分位;配了 `state.fallback` 以它为准。
+ */
+export function designSwitchState(def: { conduct?: string } | undefined, ref: SldStateRef | undefined): SldSwitchState {
+  return ref?.fallback ?? (def?.conduct === 'switch' ? 'closed' : 'open')
+}
+
 export function resolveSwitchState(
   ref: SldStateRef | undefined,
   value: SldPointValue | undefined,
   opts?: { now?: number; staleMs?: number }
 ): SldSwitchState {
   if (!ref) return 'closed'
-  if (!value || value.v === undefined || value.v === null) return 'unknown'
-  if (opts?.staleMs !== undefined && (opts.now ?? Date.now()) - value.ts > opts.staleMs) return 'unknown'
+  const miss = ref.fallback ?? 'unknown'
+  if (!value || value.v === undefined || value.v === null) return miss
+  if (opts?.staleMs !== undefined && (opts.now ?? Date.now()) - value.ts > opts.staleMs) return miss
   const keys = [String(value.v)]
   if (typeof value.v === 'boolean') keys.push(value.v ? '1' : '0')
   for (const k of keys) {
@@ -44,5 +54,5 @@ export function resolveSwitchState(
     const hit = Object.prototype.hasOwnProperty.call(ref.map, k) ? ref.map[k] : undefined
     if (hit === 'open' || hit === 'closed') return hit
   }
-  return 'unknown'
+  return miss
 }

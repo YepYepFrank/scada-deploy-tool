@@ -3,6 +3,8 @@
  * 一个标签(文字 / 数值)。数值标签直接从注入的上下文读自己那一个 `pt.*` 键——别的测点变化不会让它重画。
  * 左对齐、垂直居中(与图元 labelSlots 的约定一致);文字不随任何图元旋转。
  * 前缀与单位用标签色(相色),数值用主题前景色;数据过期 → 数值变灰并挂 <title>「数据时间 …」。
+ * 配了 `colW`(2026-09-22)就按三列画:前缀左对齐、数值右对齐到 x + colW、单位跟其后——
+ * 一组标签设同一个 colW,数字就排成一列(「Uab 388.7 V」与「P 0.4 kW」对得齐)。
  */
 import { computed, inject } from 'vue'
 import { resolveOnlineState, sldPointSlot, type SldLabel } from '../../sld'
@@ -32,6 +34,13 @@ const online = computed(() =>
     : 'unknown'
 )
 const ONLINE_TEXT = { online: '在线', offline: '离线', unknown: '未知' } as const
+/** 三列对齐:数值右边界相对标签 x 的偏移;不配(或 <= 0)则退回「前缀 数值 单位」直接拼接 */
+const colW = computed(() => {
+  const w = props.label.kind === 'value' ? props.label.colW : undefined
+  return typeof w === 'number' && Number.isFinite(w) && w > 0 ? w : 0
+})
+/** 单位与数值之间留的空(与字号成比例,字大了也不会贴住) */
+const unitGap = computed(() => Math.max(3, Math.round(size.value * 0.3)))
 const tip = computed(() =>
   error.value ? `数据不可用:${error.value}` : stale.value && point.value ? `数据时间 ${formatTs(point.value.ts)}` : ''
 )
@@ -70,6 +79,13 @@ const tip = computed(() =>
   >
     <title v-if="tip">{{ tip }}</title>
     <template v-if="label.kind === 'text'">{{ label.text }}</template>
+    <template v-else-if="colW">
+      <tspan v-if="label.title" class="sr-sld-label-title">{{ label.title }}</tspan>
+      <tspan class="sr-sld-label-num" :x="label.x + colW" text-anchor="end">{{ shown!.text }}</tspan>
+      <tspan v-if="shown!.unit" class="sr-sld-label-unit" :x="label.x + colW + unitGap" text-anchor="start">{{
+        shown!.unit
+      }}</tspan>
+    </template>
     <template v-else>
       <tspan v-if="label.title" class="sr-sld-label-title">{{ label.title + ' ' }}</tspan>
       <tspan class="sr-sld-label-num">{{ shown!.text }}</tspan>

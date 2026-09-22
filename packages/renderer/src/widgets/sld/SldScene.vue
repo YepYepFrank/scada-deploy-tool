@@ -125,7 +125,16 @@ const horizontal = (b: { x1: number; y1: number; x2: number; y2: number }): bool
   <g class="sr-sld-scene">
     <g class="sr-sld-layer-frames">
       <g v-for="f in doc.frames ?? []" :key="f.id" class="sr-sld-frame" :data-id="f.id">
-        <rect :x="f.x" :y="f.y" :width="f.w" :height="f.h" />
+        <!-- 边框颜色 / 粗细 / 虚实可配(2026-09-22);都不配时走 CSS 里的主题色虚线 -->
+        <rect
+          :x="f.x"
+          :y="f.y"
+          :width="f.w"
+          :height="f.h"
+          :stroke="f.color || undefined"
+          :stroke-width="f.width || undefined"
+          :stroke-dasharray="f.solid ? 'none' : undefined"
+        />
         <text v-if="f.title" :x="f.x + 8" :y="f.y + 14" font-size="12" dominant-baseline="middle">{{ f.title }}</text>
       </g>
     </g>

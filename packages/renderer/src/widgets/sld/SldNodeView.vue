@@ -8,9 +8,10 @@ import { computed } from 'vue'
 import {
   SldSymbol,
   getSldSymbol,
+  isFreeSizeSymbol,
+  nodeBoxSize,
   nodeScale,
   portDirection,
-  symbolBoxSize,
   type SldNode,
   type SldSwitchState,
 } from '../../sld'
@@ -34,8 +35,17 @@ const props = withDefaults(
 
 const def = computed(() => getSldSymbol(props.node.symbol))
 const scale = computed(() => nodeScale(props.node))
-/** 旋转 + 放大之后的包围盒尺寸;未知图元画 40×40 占位框 */
-const box = computed(() => (def.value ? symbolBoxSize(def.value, props.node.rot, scale.value) : { w: 40, h: 40 }))
+/** 自由宽高(设备框)才透传 size,其余图元走 scale */
+const freeSize = computed(() => (isFreeSizeSymbol(def.value) ? props.node.size : undefined))
+/** 旋转 + 放大 / 自由宽高之后的包围盒尺寸;未知图元画 40×40 占位框 */
+const box = computed(() => (def.value ? nodeBoxSize(props.node, def.value) : { w: 40, h: 40 }))
+/**
+ * 图元描边色(2026-09-22):节点自己设了 color 就以它为准,盖过电压等级色。
+ * **失电时颜色仍在,只是跟着 .sr-sld-e-dead 一起变暗**(opacity 0.45)——不像母线那样整根变灰:
+ * 设备框、互感器这些器件多半根本不在带电回路里(conduct: 'none' 恒判失电),真按失电抹掉颜色就等于不让改。
+ * 母线是导体,「失电 = 灰」是安全信号,那边的规矩不变(见 SldBusView)。
+ */
+const paint = computed(() => props.node.color ?? props.color)
 /** 在线灯挂在包围盒的哪个角(缺省右上),往外让出一点,不压图元的线 */
 const onlineAt = computed(() => {
   const at = props.node.online?.at ?? 'tr'
@@ -70,8 +80,15 @@ const namePos = computed(() => {
     <rect v-if="alarm" class="sr-sld-alarm-halo" :x="-6" :y="-6" :width="box.w + 12" :height="box.h + 12" rx="4" />
     <rect v-if="clickable" class="sr-sld-hit" :x="-2" :y="-2" :width="box.w + 4" :height="box.h + 4" rx="3" />
     <!-- 带电着色只作用在图元上:名称不跟着变灰 / 变虚 -->
-    <g class="sr-sld-node-symbol" :class="energyClass" :style="color ? { color } : undefined">
-      <SldSymbol :symbol="node.symbol" :state="state" :rot="node.rot" :flip="node.flip" :scale="scale" />
+    <g class="sr-sld-node-symbol" :class="energyClass" :style="paint ? { color: paint } : undefined">
+      <SldSymbol
+        :symbol="node.symbol"
+        :state="state"
+        :rot="node.rot"
+        :flip="node.flip"
+        :scale="scale"
+        :size="freeSize"
+      />
     </g>
     <!-- 在线灯不吃带电着色:设备离线和线路失电是两回事 -->
     <SldOnlineDot v-if="node.online" :pt="node.online.pt" :x="onlineAt.x" :y="onlineAt.y" />

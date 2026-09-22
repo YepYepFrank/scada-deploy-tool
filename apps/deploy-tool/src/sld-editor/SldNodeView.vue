@@ -6,7 +6,7 @@
  */
 import { computed, inject, onBeforeUnmount, shallowRef } from 'vue'
 import type { Node } from '@antv/x6'
-import { SldSymbolBox, type SldNode } from '@grid/scada-renderer'
+import { SldSymbolBox, designSwitchState, getSldSymbol, isFreeSizeSymbol, type SldNode } from '@grid/scada-renderer'
 
 // x6-vue-shape 还会把 node / graph 当 props 传进来;这里用 inject,别让它们作为 attribute 落到 DOM 上
 defineOptions({ inheritAttrs: false })
@@ -28,11 +28,28 @@ const title = computed(() => {
   if (!n) return ''
   return [n.name, n.entity?.name].filter(Boolean).join(' · ') || n.id
 })
+
+const def = computed(() => (node.value ? getSldSymbol(node.value.symbol) : undefined))
+/**
+ * 编辑器里没有实时值,按「无数据时该画成什么样」画(2026-09-22 YY:开关一直画成分位,
+ * 看着像整站都跳闸了)。开关常合、接地刀等按分位;节点配了 state.fallback 以它为准。
+ */
+const state = computed(() => designSwitchState(def.value, node.value?.state))
+/** 设备框这类图元可以自由改宽高 */
+const size = computed(() => (isFreeSizeSymbol(def.value) ? node.value?.size : undefined))
+/** 自定义描边色:编辑器里不算带电,直接按它上色 */
+const color = computed(() => node.value?.color)
 </script>
 
 <template>
-  <div v-if="node" class="sld-node-view" :class="{ 'sld-node-source': !!node.source }" :title="title">
-    <SldSymbolBox :symbol="node.symbol" :rot="node.rot" :flip="!!node.flip" />
+  <div
+    v-if="node"
+    class="sld-node-view"
+    :class="{ 'sld-node-source': !!node.source }"
+    :style="color ? { color } : undefined"
+    :title="title"
+  >
+    <SldSymbolBox :symbol="node.symbol" :state="state" :rot="node.rot" :flip="!!node.flip" :size="size" />
     <!-- 在线状态灯的占位(编辑器里没有实时值,按「在线」画;位置与运行时一致) -->
     <i v-if="node.online" class="sld-node-online" :data-at="node.online.at ?? 'tr'" />
   </div>

@@ -5,7 +5,7 @@
  * (图里引用的 `pt.*` 有没有绑定)不在这里,在部署工具 `editor/validate.ts`(ADR-005 D9)。
  * 输入按 unknown 对待(项目文件可能被手改坏):任何形状都不抛异常,只出 issue。
  */
-import { validNodeScales } from './geometry'
+import { freeSizeStep, isFreeSizeSymbol, isValidFreeSize, validNodeScales } from './geometry'
 import { busLength } from './geometry'
 import { SLD_DOC_VERSION, SLD_GRID, SLD_ID_PATTERN } from './types'
 import type { SldDoc, SldIssue, SldSymbolDefinition, SldSymbolLookup } from './types'
@@ -98,6 +98,21 @@ export function validateSldDoc(doc: unknown, symbols: SldSymbolLookup): SldIssue
         'bad-scale',
         `放大倍数 ${JSON.stringify(item.scale)} 会让图元「${def.name}」的端口离开栅格,可用:${validNodeScales(def, SLD_GRID).join(' / ')}`
       )
+    // 自由宽高(2026-09-22):只有 freeBody 图元能用,且必须是步长的整数倍,否则端口离开栅格
+    if (item.size !== undefined && def) {
+      const size = item.size as { w?: unknown; h?: unknown }
+      const wh = { w: Number(size?.w), h: Number(size?.h) }
+      if (!isFreeSizeSymbol(def))
+        warn(`${path}/size`, 'bad-size', `图元「${def.name}」不能自由改宽高,只能按倍数放大(size 会被忽略)`)
+      else if (!isValidFreeSize(def, wh, SLD_GRID)) {
+        const step = freeSizeStep(def, SLD_GRID)
+        warn(
+          `${path}/size`,
+          'bad-size',
+          `宽高 ${JSON.stringify(item.size)} 会让图元「${def.name}」的端口离开栅格,宽须是 ${step.w} 的整数倍、高须是 ${step.h} 的整数倍`
+        )
+      }
+    }
     if (isObj(item.state)) checkPt(`${path}/state/pt`, item.state.pt)
     else if (def?.conduct === 'switch')
       warn(`${path}/state`, 'missing-state', '开关没有配状态来源(state),带电计算按常合处理')

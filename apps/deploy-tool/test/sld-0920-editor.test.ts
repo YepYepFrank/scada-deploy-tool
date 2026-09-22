@@ -46,10 +46,10 @@ const ids = () => {
 describe('节点大小', () => {
   it('合法倍数写进去,回到 1 就删字段;不合法的倍数拒绝', () => {
     const d = doc()
-    expect(setNodeScale(d, 'n1', 2, getSldSymbol)).toBe(true)
+    expect(setNodeScale(d, ['n1'], 2, getSldSymbol)).toBe(true)
     expect(d.nodes[0]!.scale).toBe(2)
-    expect(setNodeScale(d, 'n1', 1.37, getSldSymbol)).toBe(false)
-    expect(setNodeScale(d, 'n1', 1, getSldSymbol)).toBe(true)
+    expect(setNodeScale(d, ['n1'], 1.37, getSldSymbol)).toBe(false)
+    expect(setNodeScale(d, ['n1'], 1, getSldSymbol)).toBe(true)
     expect('scale' in d.nodes[0]!).toBe(false)
   })
   it('以包围盒中心为准放大:中轴线上的端口横向不挪,出线还是直的', () => {
@@ -57,7 +57,7 @@ describe('节点大小', () => {
     const def = getSldSymbol('breaker')!
     const top = def.ports.find(p => p.x === def.w / 2)!
     const before = portPosition(d.nodes[0]!, def, top.id)!
-    setNodeScale(d, 'n1', 2, getSldSymbol)
+    setNodeScale(d, ['n1'], 2, getSldSymbol)
     expect(portPosition(d.nodes[0]!, def, top.id)!.x).toBe(before.x)
     expect(d.nodes[0]!.x % 10).toBe(0)
     expect(d.nodes[0]!.y % 10).toBe(0)
@@ -65,7 +65,7 @@ describe('节点大小', () => {
   it('画布上的节点盒子与端口跟着变大', () => {
     const d = doc()
     const before = nodeToCell(d.nodes[0]!)
-    setNodeScale(d, 'n1', 2, getSldSymbol)
+    setNodeScale(d, ['n1'], 2, getSldSymbol)
     const after = nodeToCell(d.nodes[0]!)
     expect(after.width).toBe(before.width * 2)
     expect(after.height).toBe(before.height * 2)
@@ -106,7 +106,7 @@ describe('拖拉手柄改图元大小(2026-09-21)', () => {
   it('拖回 1 倍:scale 字段删掉', () => {
     const d = doc()
     const { w, h } = box()
-    setNodeScale(d, 'n1', 3, getSldSymbol)
+    setNodeScale(d, ['n1'], 3, getSldSymbol)
     const n = d.nodes[0]!
     resizeNodeByBox(d, 'n1', { x: n.x, y: n.y, width: w * 1.05, height: h * 1.05 }, getSldSymbol)
     expect('scale' in n).toBe(false)
@@ -116,17 +116,17 @@ describe('拖拉手柄改图元大小(2026-09-21)', () => {
 describe('母线粗细 / 颜色', () => {
   it('缺省值(4)不落进 JSON;越界拒绝', () => {
     const d = doc()
-    expect(setBusWidth(d, 'b1', 8)).toBe(true)
+    expect(setBusWidth(d, ['b1'], 8)).toBe(true)
     expect(d.buses[0]!.width).toBe(8)
-    expect(setBusWidth(d, 'b1', 99)).toBe(false)
-    expect(setBusWidth(d, 'b1', 4)).toBe(true)
+    expect(setBusWidth(d, ['b1'], 99)).toBe(false)
+    expect(setBusWidth(d, ['b1'], 4)).toBe(true)
     expect('width' in d.buses[0]!).toBe(false)
   })
   it('颜色只认 #hex;给 undefined 恢复按电压等级', () => {
     const d = doc()
-    expect(setBusColor(d, 'b1', 'red; drop table')).toBe(false)
-    expect(setBusColor(d, 'b1', '#ff8800')).toBe(true)
-    expect(setBusColor(d, 'b1', undefined)).toBe(true)
+    expect(setBusColor(d, ['b1'], 'red; drop table')).toBe(false)
+    expect(setBusColor(d, ['b1'], '#ff8800')).toBe(true)
+    expect(setBusColor(d, ['b1'], undefined)).toBe(true)
     expect('color' in d.buses[0]!).toBe(false)
   })
   it('画布:线体两头各多画半个线宽(横竖母线端头对端头时拐角不缺口),线宽 / 颜色生效', () => {
@@ -135,7 +135,7 @@ describe('母线粗细 / 颜色', () => {
     const v = busAttrs(false).body!
     expect(v).toMatchObject({ refHeight: '100%', refHeight2: 4, refY2: -2, width: 4, refX2: -2, fill: 'currentColor' })
     const d = doc()
-    setBusWidth(d, 'b1', 10)
+    setBusWidth(d, ['b1'], 10)
     expect(busToCell(d.buses[0]!).attrs.body).toMatchObject({ height: 10, refWidth2: 10 })
   })
 })
@@ -143,21 +143,21 @@ describe('母线粗细 / 颜色', () => {
 describe('文字样式', () => {
   it('字号 / 加粗 / 颜色;缺省值删字段', () => {
     const d = doc()
-    expect(setLabelStyle(d, 'l1', { size: 24, bold: true, color: 'a' })).toBe(true)
+    expect(setLabelStyle(d, ['l1'], { size: 24, bold: true, color: 'a' })).toBe(true)
     expect(d.labels[0]).toMatchObject({ size: 24, bold: true, color: 'a' })
-    expect(setLabelStyle(d, 'l1', { size: 12, bold: false, color: '' })).toBe(true)
+    expect(setLabelStyle(d, ['l1'], { size: 12, bold: false, color: '' })).toBe(true)
     expect(d.labels[0]).toEqual({ id: 'l1', x: 10, y: 10, kind: 'text', text: '10kV I 段' })
   })
   it('越界字号、乱写的颜色拒绝', () => {
     const d = doc()
-    expect(setLabelStyle(d, 'l1', { size: 500 })).toBe(false)
-    expect(setLabelStyle(d, 'l1', { color: 'javascript:alert(1)' })).toBe(false)
+    expect(setLabelStyle(d, ['l1'], { size: 500 })).toBe(false)
+    expect(setLabelStyle(d, ['l1'], { color: 'javascript:alert(1)' })).toBe(false)
   })
   it('画布:每次都显式给颜色 / 粗细(setAttrs 是合并语义,清掉自定义值要能回缺省)', () => {
     const d = doc()
-    setLabelStyle(d, 'l1', { size: 20, bold: true, color: '#00ff00' })
+    setLabelStyle(d, ['l1'], { size: 20, bold: true, color: '#00ff00' })
     expect(labelToCell(d.labels[0]!).attrs.text).toMatchObject({ fontSize: 20, fontWeight: 700, fill: '#00ff00' })
-    setLabelStyle(d, 'l1', { bold: false, color: '' })
+    setLabelStyle(d, ['l1'], { bold: false, color: '' })
     expect(labelToCell(d.labels[0]!).attrs.text).toMatchObject({ fontWeight: 400, fill: LABEL_FILL })
   })
 })

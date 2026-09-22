@@ -19,6 +19,7 @@ import {
   lookupSldSymbol,
   nodeBox,
   registerBuiltinSldSymbols,
+  isFreeSizeSymbol,
   symbolBoxSize,
   type SldNode,
   type SldPoint,
@@ -237,6 +238,53 @@ const overLayers = ext.layers.filter(l => l.z === 'over')
 
 /* ───────────── 内置操作 ───────────── */
 
+/**
+ * 右栏宽度可拖(2026-09-22 现场反馈「右侧功能区大小无法改变」;做法与部署工具主编辑器的分隔条一致):
+ * 默认 300px,拖动记到本机浏览器,范围 [240px, 60vw];双击分隔条恢复默认。
+ */
+const RIGHT_W_KEY = 'gridops_sld_right_w'
+const RIGHT_W_DEFAULT = 300
+const RIGHT_W_MIN = 240
+function loadRightWidth(): number {
+  try {
+    const n = Number(localStorage.getItem(RIGHT_W_KEY))
+    return n >= RIGHT_W_MIN ? n : RIGHT_W_DEFAULT
+  } catch {
+    return RIGHT_W_DEFAULT
+  }
+}
+const rightWidth = ref(loadRightWidth())
+const clampRightWidth = (n: number): number => Math.round(Math.min(window.innerWidth * 0.6, Math.max(RIGHT_W_MIN, n)))
+function saveRightWidth(): void {
+  try {
+    localStorage.setItem(RIGHT_W_KEY, String(rightWidth.value))
+  } catch {
+    /* 私密窗口等存不了就算了 */
+  }
+}
+function startRightResize(e: PointerEvent): void {
+  e.preventDefault()
+  const el = e.currentTarget as HTMLElement
+  el.setPointerCapture(e.pointerId)
+  const move = (ev: PointerEvent): void => {
+    rightWidth.value = clampRightWidth(el.ownerDocument.defaultView!.innerWidth - ev.clientX)
+  }
+  const up = (): void => {
+    el.removeEventListener('pointermove', move)
+    el.removeEventListener('pointerup', up)
+    saveRightWidth()
+    // 画布可用宽度变了,让 X6 重新量一次
+    graph()?.resize()
+  }
+  el.addEventListener('pointermove', move)
+  el.addEventListener('pointerup', up)
+}
+function resetRightWidth(): void {
+  rightWidth.value = RIGHT_W_DEFAULT
+  saveRightWidth()
+  graph()?.resize()
+}
+
 type Mode = 'select' | 'bus' | 'label' | 'status' | 'frame'
 const mode = ref<Mode>('select')
 /** 叠放层次:选中了图元或母线才可用 */
@@ -256,12 +304,17 @@ function followResize(cell: X6Node): void {
   const data = cell.getData() as { node?: SldNode } | undefined
   const def = data?.node && lookupSldSymbol(data.node.symbol)
   if (!data?.node || !def) return
-  const base = symbolBoxSize(def, data.node.rot, 1)
   const { width, height } = cell.getSize()
-  const k = Math.max(width / base.w, height / base.h)
   const { x, y } = cell.getPosition()
-  const items = nodeToCell({ ...data.node, x, y, scale: k }).ports.items
-  cell.prop('ports/items', items, { sld: 'sync', rewrite: true })
+  const turned = data.node.rot === 90 || data.node.rot === 270
+  // 设备框这类图元长宽分开拉,其余按较大的一边等比
+  const draft: SldNode = isFreeSizeSymbol(def)
+    ? { ...data.node, x, y, size: { w: turned ? height : width, h: turned ? width : height } }
+    : (() => {
+        const base = symbolBoxSize(def, data.node.rot, 1)
+        return { ...data.node, x, y, scale: Math.max(width / base.w, height / base.h) }
+      })()
+  cell.prop('ports/items', nodeToCell(draft).ports.items, { sld: 'sync', rewrite: true })
 }
 
 const MODE_HINT: Record<Mode, string> = {
@@ -821,7 +874,12 @@ defineExpose({ ctx, store })
 </script>
 
 <template>
-  <div ref="rootEl" class="sld-ed" :class="{ 'sld-ed-readonly': isReadonly }">
+  <div
+    ref="rootEl"
+    class="sld-ed"
+    :class="{ 'sld-ed-readonly': isReadonly }"
+    :style="{ '--sld-right-w': rightWidth + 'px' }"
+  >
     <header class="sld-ed-toolbar">
       <template v-for="(grp, gi) in toolbar" :key="grp.group">
         <span v-if="gi > 0" class="sld-ed-sep" />
@@ -920,6 +978,13 @@ defineExpose({ ctx, store })
     </main>
 
     <aside class="sld-ed-side">
+      <div
+        class="sld-ed-splitter"
+        data-role="side-splitter"
+        title="拖动调整右栏宽度,双击恢复默认"
+        @pointerdown="startRightResize"
+        @dblclick="resetRightWidth"
+      ></div>
       <template v-if="ext.panels.length">
         <nav class="sld-ed-tabs">
           <button
@@ -957,7 +1022,8 @@ defineExpose({ ctx, store })
   --sld-line: var(--ed-line, rgba(83, 196, 255, 0.2));
   --sld-accent: var(--ed-accent, #19b7ff);
   display: grid;
-  grid-template: 'bar bar bar' auto 'pal stage side' minmax(0, 1fr) / 168px minmax(0, 1fr) 300px;
+  /* 右栏宽度由 --sld-right-w 决定(默认 300px,可拖,见 startRightResize) */
+  grid-template: 'bar bar bar' auto 'pal stage side' minmax(0, 1fr) / 168px minmax(0, 1fr) var(--sld-right-w, 300px);
   /* 按键说明浮层 inset: 0 铺在整个编辑器上 */
   position: relative;
   width: 100%;
@@ -1159,12 +1225,29 @@ defineExpose({ ctx, store })
   border-color: var(--sld-accent);
 }
 .sld-ed-side {
+  position: relative;
   grid-area: side;
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--sld-bg-1);
   border-left: 1px solid var(--sld-line);
+}
+/* 右栏左沿的拖拽条(2026-09-22):8px 宽,悬停时亮一道,双击恢复默认宽度 */
+.sld-ed-splitter {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 3;
+  touch-action: none;
+}
+.sld-ed-splitter:hover,
+.sld-ed-splitter:active {
+  background: linear-gradient(to right, var(--sld-accent), transparent);
+  opacity: 0.6;
 }
 .sld-ed-tabs {
   display: flex;

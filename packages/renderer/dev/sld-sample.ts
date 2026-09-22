@@ -90,6 +90,8 @@ for (const [k, x, b, d, entity] of [
   })
   wire(`w_t${k}_a`, port(`qf_t${k}`, 'b'), port(`t${k}`, 'hv'))
   sw(`qf_lv${k}`, 'breaker', x - 20, 370)
+  // 2026-09-22:这两台没有位置信号(测点一直没值),配成「没数据按合闸画」,不然整段画成虚线、带电色也传不下去
+  nodes[nodes.length - 1]!.state!.fallback = 'closed'
   wire(`w_t${k}_lv`, port(`t${k}`, 'lv'), port(`qf_lv${k}`))
   wire(`w_lv${k}_bus`, port(`qf_lv${k}`, 'b'), bus('b04', x - 60))
   // 主变的名称画在右侧(下方有出线),数值放左侧
@@ -153,6 +155,43 @@ for (const n of nodes) {
 points.push('ON_site')
 labels.push({ id: 'l_site', x: 60, y: 24, kind: 'status', pt: 'ON_site', title: '站点', size: 14, bold: true })
 
+/* ── 2026-09-22 新增的几样,顺手在样例里各来一个 ──
+   设备框自由改宽高 + 框里一组对齐的数值 + 图元自定义色 + 分组框实线彩框 + 开关「没数据按合闸画」。 */
+const PROT_X = 560
+const PROT_Y = 610
+node({
+  id: 'prot1',
+  symbol: 'device-box',
+  x: PROT_X,
+  y: PROT_Y,
+  rot: 0,
+  size: { w: 240, h: 100 },
+  color: '#ff9f43',
+})
+text('t_prot', PROT_X + 14, PROT_Y + 20, '保护', 13)
+// 三列对齐:前缀左对齐、数字右对齐到 colW、单位跟其后。故意用长短不一的前缀
+;(
+  [
+    ['Uab', 'V', 1],
+    ['P', 'kW', 2],
+    ['Q', 'kVar', 3],
+  ] as const
+).forEach(([title, unit, i]) => {
+  const pt = `PROT_${title}`
+  points.push(pt)
+  labels.push({
+    id: `l_${pt}`,
+    x: PROT_X + 14,
+    y: PROT_Y + 20 + i * 20,
+    kind: 'value',
+    pt,
+    title,
+    format: { unit, digits: 1 },
+    colW: 120,
+    attach: 'prot1',
+  })
+})
+
 export const SLD_SAMPLE_DOC: SldDoc = {
   v: 1,
   canvas: { w: 1180, h: 730, grid: 10 },
@@ -170,6 +209,8 @@ export const SLD_SAMPLE_DOC: SldDoc = {
     { id: 'fr_lp4', x: 600, y: 455, w: 220, h: 130, title: 'LP4' },
     { id: 'fr_pv', x: 930, y: 455, w: 90, h: 260, title: '光伏系统' },
     { id: 'fr_bess', x: 1030, y: 455, w: 140, h: 220, title: '储能系统' },
+    // 边框颜色 / 粗细 / 实线(2026-09-22)
+    { id: 'fr_prot', x: 550, y: 600, w: 260, h: 120, title: '保护柜', color: '#ff9f43', width: 2, solid: true },
   ],
 }
 

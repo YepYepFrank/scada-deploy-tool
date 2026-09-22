@@ -13,7 +13,7 @@ import {
   collectPointRefs,
   nodeBox,
   sldPointSlot,
-  nodeScale,
+  nodeScaleXY,
   symbolPoint,
   type Binding,
   type SldDoc,
@@ -360,10 +360,10 @@ export function nextLabelPosition(doc: SldDoc, node: SldNode, def: SldSymbolDefi
   const taken = new Set(doc.labels.filter(l => l.attach === node.id).map(l => `${l.x},${l.y}`))
   const free = (p: SldPoint): boolean => !taken.has(`${p.x},${p.y}`)
   const slots: SldPoint[] = (def?.labelSlots ?? []).map(s => {
-    const q = symbolPoint(def!, node.rot, !!node.flip, s.dx, s.dy)
-    const k = nodeScale(node)
-    const p = { x: q.x * k, y: q.y * k }
-    return { x: node.x + p.x, y: node.y + p.y }
+    // 缩放与端口同一套(等比倍数,或设备框的自由宽高)
+    const { kx, ky } = nodeScaleXY(node, def)
+    const q = symbolPoint(def!, node.rot, !!node.flip, s.dx, s.dy, kx, ky)
+    return { x: node.x + q.x, y: node.y + q.y }
   })
   const hit = slots.find(free)
   if (hit) return hit

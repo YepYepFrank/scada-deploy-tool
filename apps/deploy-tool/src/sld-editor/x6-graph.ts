@@ -20,7 +20,7 @@ import {
   type NodeView,
 } from '@antv/x6'
 import { register } from '@antv/x6-vue-shape'
-import { SLD_GRID, busOffset, busPoint, getSldSymbol, type SldPoint } from '@grid/scada-renderer'
+import { SLD_GRID, busOffset, busPoint, getSldSymbol, isFreeSizeSymbol, type SldPoint } from '@grid/scada-renderer'
 import SldNodeView from './SldNodeView.vue'
 import {
   BUS_ANCHOR,
@@ -278,7 +278,8 @@ export function createSldCanvas(container: HTMLElement, minimap: HTMLElement, op
           enabled: node =>
             editable() && (node.shape === SHAPE_BUS || node.shape === SHAPE_FRAME || node.shape === SHAPE_NODE),
           orthogonal: true,
-          preserveAspectRatio: node => node.shape === SHAPE_NODE,
+          // 设备框这类 freeBody 图元可以随便拉长宽(2026-09-22);其余图元仍锁宽高比、松手吸附到合法倍数
+          preserveAspectRatio: node => node.shape === SHAPE_NODE && !isFreeSizeNode(node),
           minWidth: node =>
             node.shape === SHAPE_NODE
               ? SLD_GRID
@@ -344,6 +345,12 @@ export function createSldCanvas(container: HTMLElement, minimap: HTMLElement, op
       graph.dispose()
     },
   }
+}
+
+/** 这个节点是不是能自由改宽高的图元(设备框):拖手柄时不锁宽高比 */
+const isFreeSizeNode = (node: Node): boolean => {
+  const n = (node.getData() as { node?: { symbol?: string } } | undefined)?.node
+  return isFreeSizeSymbol(n?.symbol ? getSldSymbol(n.symbol) : undefined)
 }
 
 const isHorizontalBus = (node: Node): boolean =>

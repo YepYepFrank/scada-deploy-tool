@@ -7,7 +7,9 @@
  * 3. 旋转 90 / 270 时包围盒宽高互换,并把旋转后的包围盒**左上角对回局部原点**;
  * 4. 最后平移到 (node.x, node.y)。
  * 5.(2026-09-20)node.scale:上面 1–3 步得到的局部坐标整体乘 k(以旋转后包围盒左上角为原点等比放大),再做第 4 步。
- *    所以端口 = node + k × transformLocal(...),包围盒 = k × symbolBoxSize(...);<SldSymbol :scale> 就是最外层套一个 scale(k)。
+ * 6.(2026-09-22)横竖分开:第 1 步之前先把局部坐标乘 (kx, ky)——等比放大就是 kx = ky = scale;
+ *    `freeBody` 图元(设备框)另给 node.size 时 kx = size.w / def.w、ky = size.h / def.h,图形按实际宽高重画、
+ *    只有端口按比例走。所以端口 = node + transformLocal(乘过 kx/ky 的坐标),包围盒 = nodeBoxSize()。
  * 第 3 步让「节点落栅格」不受旋转影响:w、h、端口坐标都是栅格整数倍时,结果一定还是栅格整数点
  * (真按中心旋转会多出 (w − h) / 2 的偏移,40×60 的图元转 90° 就偏 10,栅格取 20 时落不上)。
  */
@@ -31,18 +33,33 @@ const DIR_VEC: Record<SldPortDir, [number, number]> = { n: [0, -1], e: [1, 0], s
 /** doc.canvas.grid 不合法时的兜底栅格 */
 const FALLBACK_GRID = 10
 
-/** 图元局部坐标 → 镜像 + 旋转之后的局部坐标(原点 = 旋转后包围盒左上角) */
-function transformLocal(def: SldSymbolDefinition, rot: SldRotation, flip: boolean, x: number, y: number): SldPoint {
-  const fx = flip ? def.w - x : x
+/**
+ * 图元局部坐标 → 缩放 + 镜像 + 旋转之后的局部坐标(原点 = 旋转后包围盒左上角)。
+ * kx / ky 缺省 1;等比放大时 kx = ky = k,结果与「先变换再整体乘 k」完全一致(0.7.0 起的行为)。
+ */
+function transformLocal(
+  def: SldSymbolDefinition,
+  rot: SldRotation,
+  flip: boolean,
+  x: number,
+  y: number,
+  kx = 1,
+  ky = 1
+): SldPoint {
+  const w = def.w * kx
+  const h = def.h * ky
+  const sx = x * kx
+  const sy = y * ky
+  const fx = flip ? w - sx : sx
   switch (rot) {
     case 90:
-      return { x: def.h - y, y: fx }
+      return { x: h - sy, y: fx }
     case 180:
-      return { x: def.w - fx, y: def.h - y }
+      return { x: w - fx, y: h - sy }
     case 270:
-      return { x: y, y: def.w - fx }
+      return { x: sy, y: w - fx }
     default:
-      return { x: fx, y }
+      return { x: fx, y: sy }
   }
 }
 
@@ -56,8 +73,16 @@ function transformDir(dir: SldPortDir, rot: SldRotation, flip: boolean): SldPort
  * 图元局部坐标里的一个点 → 镜像 + 旋转之后的局部坐标(与端口同一套规则)。
  * 图元文字(texts)、数值标签默认落点(labelSlots)用它定位:位置跟着转,文字本身不转。
  */
-export function symbolPoint(def: SldSymbolDefinition, rot: SldRotation, flip: boolean, x: number, y: number): SldPoint {
-  return transformLocal(def, rot, flip, x, y)
+export function symbolPoint(
+  def: SldSymbolDefinition,
+  rot: SldRotation,
+  flip: boolean,
+  x: number,
+  y: number,
+  kx = 1,
+  ky = 1
+): SldPoint {
+  return transformLocal(def, rot, flip, x, y, kx, ky)
 }
 
 /** 节点的放大倍数:缺省 / 非法值都当 1 */
@@ -68,6 +93,72 @@ export function nodeScale(node: { scale?: number }): number {
 
 /** 编辑器里供选的放大倍数 */
 export const SLD_NODE_SCALES: readonly number[] = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6]
+
+/** 这个图元能不能自由改宽高(2026-09-22):`freeBody` 图元(设备框)可以,其余只能等比放大 */
+export const isFreeSizeSymbol = (def: SldSymbolDefinition | undefined): boolean => !!def?.freeBody
+
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : Math.abs(a))
+
+/**
+ * 自由改宽高时的最小步长(2026-09-22):宽 / 高各自要多大一步,端口才仍然落在栅格上。
+ * 端口 x 是 `def.w` 的某个比例,放大到 w 之后是 `x / def.w × w`;把所有端口 x 与 def.w 的最大公约数记作 gx,
+ * 则只要 `w` 是 `grid × def.w / gx` 的整数倍,所有端口就都落栅格。设备框 80×40、端口在边中点 → 步长 2 格。
+ */
+export function freeSizeStep(def: SldSymbolDefinition, grid: number = FALLBACK_GRID): { w: number; h: number } {
+  const g = grid > 0 ? grid : FALLBACK_GRID
+  const gx = def.ports.reduce((acc, p) => gcd(acc, p.x), def.w) || def.w
+  const gy = def.ports.reduce((acc, p) => gcd(acc, p.y), def.h) || def.h
+  return { w: (g * def.w) / gx, h: (g * def.h) / gy }
+}
+
+/** 把一个宽高吸附到最近的合法自由尺寸(至少一步) */
+export function snapFreeSize(
+  def: SldSymbolDefinition,
+  w: number,
+  h: number,
+  grid: number = FALLBACK_GRID
+): { w: number; h: number } {
+  const step = freeSizeStep(def, grid)
+  const one = (v: number, s: number): number => Math.max(s, Math.round(v / s) * s)
+  return { w: one(w, step.w), h: one(h, step.h) }
+}
+
+/** 这个宽高合不合法(自由尺寸:正数 + 步长整数倍) */
+export function isValidFreeSize(
+  def: SldSymbolDefinition,
+  size: { w: number; h: number },
+  grid: number = FALLBACK_GRID
+): boolean {
+  const step = freeSizeStep(def, grid)
+  const ok = (v: number, s: number): boolean => v > 0 && Math.abs(v / s - Math.round(v / s)) < 1e-9
+  return ok(size.w, step.w) && ok(size.h, step.h)
+}
+
+/**
+ * 节点的横 / 纵缩放系数(2026-09-22)。`freeBody` 图元配了 `size` 就按 size 算,否则横纵都是 `scale`。
+ * 端口、包围盒、SVG transform 三处都走这一个函数,不会各算各的。
+ */
+export function nodeScaleXY(
+  node: { scale?: number; size?: { w: number; h: number } },
+  def?: SldSymbolDefinition
+): {
+  kx: number
+  ky: number
+} {
+  const k = nodeScale(node)
+  const size = node.size
+  if (!def || !isFreeSizeSymbol(def) || !size || !(size.w > 0) || !(size.h > 0)) return { kx: k, ky: k }
+  return { kx: size.w / def.w, ky: size.h / def.h }
+}
+
+/** 节点未旋转时的实际宽高(图元局部坐标):自由尺寸取 size,否则 def 乘倍数 */
+export function nodeLocalSize(
+  node: { scale?: number; size?: { w: number; h: number } },
+  def: SldSymbolDefinition
+): { w: number; h: number } {
+  const { kx, ky } = nodeScaleXY(node, def)
+  return { w: def.w * kx, h: def.h * ky }
+}
 
 /**
  * 这个图元能用哪些放大倍数:放大后包围盒与**全部端口**仍是栅格整数倍的才行——端口离了栅格,连线就对不齐了。
@@ -86,17 +177,37 @@ export function symbolBoxSize(def: SldSymbolDefinition, rot: SldRotation = 0, sc
   return scale === 1 ? box : { w: box.w * scale, h: box.h * scale }
 }
 
+/** 节点旋转后的包围盒尺寸:等比放大与自由宽高都走这里(symbolBoxSize 留给图元面板缩略图那种「无节点」的场合) */
+export function nodeBoxSize(
+  node: { rot: SldRotation; scale?: number; size?: { w: number; h: number } },
+  def: SldSymbolDefinition
+): { w: number; h: number } {
+  const { w, h } = nodeLocalSize(node, def)
+  return node.rot === 90 || node.rot === 270 ? { w: h, h: w } : { w, h }
+}
+
 /**
  * 与 portPosition 同一套规则的 SVG transform 串(<SldSymbol> 用);不需要变换时返回 undefined。
  * SVG 的 transform 列表右边的先作用,所以镜像写在最右。
  */
-export function symbolTransform(def: SldSymbolDefinition, rot: SldRotation = 0, flip = false): string | undefined {
-  // 放大不在这里做:<SldSymbol> 在最外层统一套 scale(k),图形和图元文字一起放大
+export function symbolTransform(
+  def: SldSymbolDefinition,
+  rot: SldRotation = 0,
+  flip = false,
+  kx = 1,
+  ky = 1,
+  /** false = 图形已经按实际宽高画好了(freeBody),只摆位置、不再拉伸 */
+  scaleBody = true
+): string | undefined {
+  // transform 列表右边的先作用,所以顺序是:缩放 → 镜像 → 旋转,与 transformLocal 一致
+  const w = def.w * kx
+  const h = def.h * ky
   const parts: string[] = []
-  if (rot === 90) parts.push(`translate(${def.h} 0) rotate(90)`)
-  else if (rot === 180) parts.push(`translate(${def.w} ${def.h}) rotate(180)`)
-  else if (rot === 270) parts.push(`translate(0 ${def.w}) rotate(270)`)
-  if (flip) parts.push(`translate(${def.w} 0) scale(-1 1)`)
+  if (rot === 90) parts.push(`translate(${h} 0) rotate(90)`)
+  else if (rot === 180) parts.push(`translate(${w} ${h}) rotate(180)`)
+  else if (rot === 270) parts.push(`translate(0 ${w}) rotate(270)`)
+  if (flip) parts.push(`translate(${w} 0) scale(-1 1)`)
+  if (scaleBody && (kx !== 1 || ky !== 1)) parts.push(`scale(${kx} ${ky})`)
   return parts.length ? parts.join(' ') : undefined
 }
 
@@ -104,9 +215,9 @@ export function symbolTransform(def: SldSymbolDefinition, rot: SldRotation = 0, 
 export function portPosition(node: SldNode, def: SldSymbolDefinition, portId: string): SldPoint | undefined {
   const port = def.ports.find(p => p.id === portId)
   if (!port) return undefined
-  const p = transformLocal(def, node.rot, !!node.flip, port.x, port.y)
-  const k = nodeScale(node)
-  return { x: node.x + p.x * k, y: node.y + p.y * k }
+  const { kx, ky } = nodeScaleXY(node, def)
+  const p = transformLocal(def, node.rot, !!node.flip, port.x, port.y, kx, ky)
+  return { x: node.x + p.x, y: node.y + p.y }
 }
 
 /** 端口出线朝向(镜像 + 旋转之后) */
@@ -121,7 +232,7 @@ export function portDirection(node: SldNode, def: SldSymbolDefinition, portId: s
  * 也就是说 node.x / node.y 记的是「画面上看到的包围盒左上角」,旋转不会让节点离开栅格。
  */
 export function nodeBox(node: SldNode, def: SldSymbolDefinition): { x: number; y: number; w: number; h: number } {
-  return { x: node.x, y: node.y, ...symbolBoxSize(def, node.rot, nodeScale(node)) }
+  return { x: node.x, y: node.y, ...nodeBoxSize(node, def) }
 }
 
 /** 母线长度(像素);母线约定水平或垂直,斜的(validateSldDoc 会报)按欧氏长度算 */

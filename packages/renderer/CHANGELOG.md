@@ -2,6 +2,33 @@
 
 版本按 SemVer;0.x 期间次版本号可含破坏性变更,会在条目里标「破坏」。契约(`schemaVersion`)的变更走 ADR,不随包版本隐式变化。
 
+## 0.10.0 — 2026-09-22
+
+现场走查一次接线图提的六条(YY 转来的测试意见),其中五条在渲染器。全部是 `SldDoc` 的**可选新增**,
+`v` 仍为 1、旧图不用迁移;页面配置契约 `schemaVersion` 不变。第六条「右侧功能区不能拖宽」纯属编辑器,不在这。
+
+- **图元自定义描边色**:`SldNode.color`(`#rgb` / `#rrggbb`)。原来图元颜色只能跟着带电着色走,
+  电流互感器这类器件想单独标个颜色没有入口。**失电时颜色仍在,只是跟着 `.sr-sld-e-dead` 一起变暗**——
+  设备框、互感器多半根本不在带电回路里(`conduct: 'none'` 恒判失电),真按失电抹掉就等于不让改。
+  母线不变:母线是导体,「失电 = 灰」是安全信号(`SldBus.color` 的老规矩照旧)。
+- **设备框自由改宽高**:`SldNode.size = { w, h }`,配合图元定义新增的 `freeBody(w, h)`。
+  目前只有 `device-box` 是这种图元。**按实际宽高重画,不是把 80×40 的矩形拉伸**——拉伸会把线宽也拉扁
+  (横 3 倍宽的框,竖边 6px、横边 2px)。端口仍按比例走,永远在四边中点。
+  宽高必须是 `freeSizeStep(def, grid)` 的整数倍(设备框 = 2 格),否则端口离开栅格、连线对不齐;
+  `validateSldDoc` 对不合法的值报新的 `bad-size`。等比 `scale` 与自由 `size` 互斥,设了一个就清掉另一个。
+  新 API:`isFreeSizeSymbol` / `freeSizeStep` / `snapFreeSize` / `isValidFreeSize` / `nodeScaleXY` / `nodeLocalSize` / `nodeBoxSize`。
+  `symbolTransform(def, rot, flip, kx, ky, scaleBody)` 与 `symbolPoint(..., kx, ky)` 多了缩放参数(缺省 1,行为不变);
+  `<SldSymbol :size>` / `<SldSymbolBox :size>` 同。
+- **分组框边框**:`SldFrame.color` / `width` / `solid`。原来写死淡蓝 1px 虚线。都不配时和以前一模一样。
+- **数值标签三列对齐**:`SldLabel.colW`(仅数值标签)。给了就按三列画——前缀左对齐、**数字右对齐**到 `x + colW`、
+  单位跟在数字后面左对齐。一组标签设同一个 `colW`,数字就排成一列(现场原话:「数据没有对齐」——
+  「Uab 388.7 V」与「P 0.4 kW」因为前缀宽度不同,数字起点各不一样)。不配则照旧直接拼接。
+- **开关没数据时按什么画**:`SldStateRef.fallback`(`'closed'` / `'open'`,缺省仍是 `'unknown'` 虚线)。
+  现场很多回路只有电流、没有位置信号,状态测点一直没值 → 图元一直虚线,还因为「不确定」把带电色卡在上游,
+  整段画成灰的。配成 `'closed'` 就没数据按合闸画,**有数据仍以数据为准**。
+  新增 `designSwitchState(def, ref)`:没有实时数据时该画成什么样(开关常合、其余按分位),
+  编辑器画布与设计态共用这一条规则——此前编辑器里开关一律画成分位,看着像整站都跳闸了。
+
 ## 0.9.0 — 2026-09-21
 
 **绑定上下文 BindingContext**(方案见 `docs/方案讨论-BindingContext-2026-09-21.md`,庄 09-21 答复后定稿)。全部是可选新增,

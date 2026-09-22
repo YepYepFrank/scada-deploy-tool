@@ -49,6 +49,12 @@ export type SldSwitchState = 'open' | 'closed' | 'unknown'
 export interface SldStateRef {
   pt: string
   map: Record<string, 'open' | 'closed'>
+  /**
+   * 没数据 / 数据过期 / 值映射不上时按什么画(2026-09-22)。缺省 `'unknown'`(虚线),
+   * 但现场很多回路只有电流没有位置信号,整张图全是虚线、还因「不确定」传不了带电色;
+   * 这时把它设成 `'closed'`,没数据就按合闸画(带电照常传过去),有数据仍以数据为准。
+   */
+  fallback?: SldSwitchState
 }
 
 /**
@@ -88,6 +94,16 @@ export interface SldNode {
    * 只许取「放大后包围盒与全部端口仍落栅格」的值(见 geometry.validNodeScales),否则连线对不上栅格。
    */
   scale?: number
+  /**
+   * 自定义描边色(2026-09-22,`#rgb` / `#rrggbb`):盖过电压等级色,**失电时照样变灰**(与母线 color 同一套规矩)。
+   * 不设则沿用带电着色 / 主题强调色。
+   */
+  color?: string
+  /**
+   * 自由宽高(2026-09-22):**只对 `freeBody` 图元(设备框)有效**,给了就以它为准、忽略 `scale`。
+   * 图元局部坐标(未旋转),必须是 `geometry.freeSizeStep()` 的整数倍——否则端口离开栅格,连线就对不齐。
+   */
+  size?: { w: number; h: number }
   /** 在线 / 离线状态灯;不配不画 */
   online?: SldOnlineRef
   /** 叠放层次,缺省 0;见 SldBus.z 的说明 */
@@ -168,6 +184,12 @@ export type SldLabel =
       pt: string
       /** 前缀文字,如「P」「Ia」 */
       title?: string
+      /**
+       * 数值列的起点(2026-09-22,相对标签 x 的像素偏移):给了就按三列画——前缀左对齐、数值**右对齐**到这里、
+       * 单位跟在数值后面左对齐。一组标签设同一个值,数字就排成一列(「Uab 388.7 V」与「P 0.4 kW」对得齐)。
+       * 不给则照旧「前缀 数值 单位」直接拼接。
+       */
+      colW?: number
       format?: SldValueFormat
       size?: number
       color?: SldLabelColor
@@ -197,6 +219,12 @@ export interface SldFrame {
   w: number
   h: number
   title?: string
+  /** 边框颜色(2026-09-22,`#rgb` / `#rrggbb`);不设则随主题(淡蓝) */
+  color?: string
+  /** 边框粗细(2026-09-22),缺省 1 */
+  width?: number
+  /** 实线边框(2026-09-22);缺省虚线 */
+  solid?: boolean
 }
 
 export interface SldDoc {
@@ -259,6 +287,12 @@ export interface SldSymbolDefinition {
   defaultSource?: boolean
   /** SVG 片段(不含外层 <svg> / <g>),局部坐标;只用 currentColor(约定 3);**不放文字**(文字写 texts) */
   body: string
+  /**
+   * 可自由改宽高的矩形类图元(2026-09-22,设备框):给了这个函数就按**实际宽高重画**图形,
+   * 而不是把 `body` 拉伸——拉伸会把线宽也拉扁(横 3 倍宽的框,竖边 6px、横边 2px)。
+   * 端口坐标仍按 w / h 的比例缩放(边中点还是边中点),所以端口逻辑不用另写一套。
+   */
+  freeBody?: (w: number, h: number) => string
   texts?: SldSymbolText[]
   /** 随开关状态追加的片段(如刀闸的动触头);conduct = 'switch' 的图元必须三态齐全 */
   stateBody?: Record<SldSwitchState, string>
@@ -323,6 +357,7 @@ export interface SldIssue {
     | 'bad-grid'
     | 'bus-end-out-of-range'
     | 'bad-scale'
+    | 'bad-size'
   message: string
 }
 

@@ -7,7 +7,7 @@
  */
 import { computed } from 'vue'
 import type { SldRotation, SldSwitchState } from './model/types'
-import { symbolBoxSize } from './model/geometry'
+import { isFreeSizeSymbol } from './model/geometry'
 import { getSldSymbol } from './symbols/registry'
 import { unknownSldSymbol } from './symbols/placeholder'
 import SldSymbol from './SldSymbol.vue'
@@ -18,14 +18,18 @@ const props = withDefaults(
     state?: SldSwitchState
     rot?: SldRotation
     flip?: boolean
+    /** 自由宽高(设备框,2026-09-22):viewBox 跟着变,盒子里的图形按实际宽高重画 */
+    size?: { w: number; h: number }
   }>(),
-  { state: 'open', rot: 0, flip: false }
+  { state: 'open', rot: 0, flip: false, size: undefined }
 )
 
 const viewBox = computed(() => {
   const def = getSldSymbol(props.symbol)
   // 未知图元的占位框不旋转(与 <SldSymbol> 一致)
-  const { w, h } = def ? symbolBoxSize(def, props.rot) : unknownSldSymbol
+  const free = def && isFreeSizeSymbol(def) && props.size ? props.size : undefined
+  const local = free ?? (def ? { w: def.w, h: def.h } : unknownSldSymbol)
+  const { w, h } = def ? (props.rot === 90 || props.rot === 270 ? { w: local.h, h: local.w } : local) : unknownSldSymbol
   return `0 0 ${w} ${h}`
 })
 </script>
@@ -39,6 +43,6 @@ const viewBox = computed(() => {
     preserveAspectRatio="xMidYMid meet"
     style="display: block; overflow: visible"
   >
-    <SldSymbol :symbol="symbol" :state="state" :rot="rot" :flip="flip" />
+    <SldSymbol :symbol="symbol" :state="state" :rot="rot" :flip="flip" :size="size" />
   </svg>
 </template>
