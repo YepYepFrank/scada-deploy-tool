@@ -25,6 +25,7 @@ import {
   type SldStateRef,
   type SldSwitchState,
   type SldSwitchStyle,
+  type SldValueLook,
 } from '../../sld'
 import { SLD_CONTEXT_KEY } from './context'
 import { sldCoords, type SldScreenMapper } from './coords'
@@ -50,6 +51,11 @@ const props = withDefaults(
     staleSeconds?: number
     /** 开关画法(2026-09-23):state = 合闸红 / 分闸绿 / 通信异常灰(缺省);classic = 国标图形 + 带电着色 */
     switchStyle?: SldSwitchStyle
+    /**
+     * 数值标签的样式(2026-09-23):meter = 数码框(黑底七段数码管、右对齐,小数点对成一列,缺省);
+     * plain = 纯文字。标签自己设了 look 的以标签为准
+     */
+    valueStyle?: SldValueLook
     /** 画图元名称(SldNode.name)与母线名称 */
     showNames?: boolean
     /** 带电着色;关掉后全部用主题强调色 */
@@ -68,6 +74,7 @@ const props = withDefaults(
     doc: undefined,
     staleSeconds: 600,
     switchStyle: 'state',
+    valueStyle: 'meter',
     showNames: true,
     energizeColoring: true,
     interactive: true,
@@ -344,6 +351,7 @@ function onDblClick() {
           :show-names="showNames"
           :clickable="!design"
           :switch-style="switchStyle"
+          :value-style="valueStyle"
         />
       </svg>
       <div v-if="hints.length" class="sr-sld-hints">
@@ -457,6 +465,37 @@ function onDblClick() {
 .sr-sld-node-symbol.sr-sld-e-dead .sr-sld-symbol-state:not(.sr-sld-sw),
 .sr-sld-node-symbol.sr-sld-e-dead .sr-sld-symbol-text {
   opacity: 0.45;
+}
+
+/* 数码框(2026-09-23):黑底细边框,七段数码管;没亮的段淡淡垫一层,像真表头。
+   颜色可在 .sr-page 或任意祖先上覆盖 --sr-sld-meter-bg / --sr-sld-meter-line / --sr-sld-meter-ink */
+.sr-sld-meter-box {
+  fill: var(--sr-sld-meter-bg, #01040b);
+  stroke: var(--sr-sld-meter-line, rgba(143, 188, 232, 0.4));
+  stroke-width: 1;
+  stroke-dasharray: none;
+}
+.sr-sld-meter-ghost,
+.sr-sld-meter-digits {
+  fill: var(--sr-sld-meter-ink, #f2f8ff);
+  stroke: none;
+}
+.sr-sld-meter-ghost {
+  opacity: 0.07;
+}
+.sr-sld-meter-text {
+  fill: var(--sr-sld-meter-ink, #f2f8ff);
+  font-family: var(--sr-font-body, sans-serif);
+}
+.sr-sld-meter.sr-sld-label-empty .sr-sld-meter-digits,
+.sr-sld-meter.sr-sld-stale .sr-sld-meter-digits,
+.sr-sld-meter.sr-sld-stale .sr-sld-meter-text {
+  fill: var(--sr-ink-2, #8fbce8);
+  opacity: 0.6;
+}
+.sr-sld-meter.sr-sld-label-error .sr-sld-meter-digits,
+.sr-sld-meter.sr-sld-label-error .sr-sld-meter-text {
+  fill: var(--sr-bad, #ff5f7a);
 }
 
 /* 文字:深色描边垫底,压在线上也看得清 */

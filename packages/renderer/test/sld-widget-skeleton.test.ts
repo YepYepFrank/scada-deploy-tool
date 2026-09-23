@@ -73,7 +73,7 @@ describe('sld 骨架组件', () => {
     expect(closed.findAll('.sr-sld-wire')).toHaveLength(2)
     expect(closed.findAll('.sr-sld-node')).toHaveLength(2)
     expect(closed.find('[data-id="qf1"] .sr-sld-symbol').attributes('data-state')).toBe('closed')
-    expect(closed.find('[data-id="l1"]').text()).toBe('P 12.3 kW')
+    expect(closed.find('[data-id="l1"]').attributes('aria-label')).toBe('P 12.3 kW')
     const open = mount(ScadaWidget, { props: { config: cfg(0), design: true } })
     await nextTick()
     expect(open.find('[data-id="qf1"] .sr-sld-symbol').attributes('data-state')).toBe('open')

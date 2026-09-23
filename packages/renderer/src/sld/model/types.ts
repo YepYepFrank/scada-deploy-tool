@@ -194,6 +194,13 @@ export type SldLabel =
        * 不给则照旧「前缀 数值 单位」直接拼接。
        */
       colW?: number
+      /**
+       * 显示样式(2026-09-23):`meter` = 数码框(黑底七段数码管、数字右对齐,前缀在框左、单位在框右),
+       * `plain` = 纯文字。不设随组件的 `valueStyle`(缺省数码框)。
+       */
+      look?: SldValueLook
+      /** 数码框的位数(不含小数点,1–12),缺省 5;值更长时框向左加宽 */
+      cells?: number
       format?: SldValueFormat
       size?: number
       color?: SldLabelColor
@@ -291,6 +298,13 @@ export interface SldFreeBodyStyle {
  * - `classic`:国标图形 + 带电着色(0.10.0 及以前的样子)。
  */
 export type SldSwitchStyle = 'state' | 'classic'
+
+/**
+ * 数值标签的显示样式(2026-09-23):
+ * - `meter`(组件缺省):数码框,位数相同的数值小数点对成一列;
+ * - `plain`:纯文字「前缀 数值 单位」(0.11.0 及以前的样子)。
+ */
+export type SldValueLook = 'meter' | 'plain'
 
 export interface SldSymbolDefinition {
   id: string

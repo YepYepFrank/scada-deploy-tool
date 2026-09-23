@@ -16,11 +16,13 @@ import {
   type SldEnergy,
   type SldSwitchState,
   type SldSwitchStyle,
+  type SldValueLook,
 } from '../../sld'
 import { entityKey, kvColor, type SldAlarmLevel, type SldKvColor } from './format'
 import SldBusView from './SldBusView.vue'
 import SldNodeView from './SldNodeView.vue'
 import SldLabelView from './SldLabelView.vue'
+import { autoMeterColumns } from './meter'
 
 const props = defineProps<{
   doc: SldDoc
@@ -35,7 +37,20 @@ const props = defineProps<{
   clickable: boolean
   /** 开关画法(2026-09-23),缺省 state */
   switchStyle?: SldSwitchStyle
+  /** 数值标签没设 look 时的样式(2026-09-23),缺省数码框 */
+  valueStyle?: SldValueLook
 }>()
+
+/** 叠在一起的数码框自动对成一列(2026-09-23);配了 colW 的、纯文字的不参与 */
+const autoCols = computed(() =>
+  autoMeterColumns(
+    props.doc.labels.flatMap(l =>
+      l.kind === 'value' && !l.colW && (l.look ?? props.valueStyle ?? 'meter') === 'meter'
+        ? [{ id: l.id, x: l.x, y: l.y, size: l.size ?? 12, title: l.title, cells: l.cells }]
+        : []
+    )
+  )
+)
 
 const wirePaths = computed(() =>
   props.doc.wires.flatMap(w => {
@@ -207,7 +222,13 @@ const horizontal = (b: { x1: number; y1: number; x2: number; y2: number }): bool
       </template>
     </g>
     <g class="sr-sld-layer-labels">
-      <SldLabelView v-for="l in doc.labels" :key="l.id" :label="l" />
+      <SldLabelView
+        v-for="l in doc.labels"
+        :key="l.id"
+        :label="l"
+        :value-style="valueStyle ?? 'meter'"
+        :auto-col-w="autoCols.get(l.id)"
+      />
     </g>
   </g>
 </template>

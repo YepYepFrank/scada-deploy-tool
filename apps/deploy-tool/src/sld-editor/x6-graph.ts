@@ -28,6 +28,10 @@ import {
   PORT_GROUP,
   SHAPE_BUS,
   SHAPE_FRAME,
+  METER_BG,
+  METER_EMPTY_INK,
+  METER_INK,
+  METER_LINE,
   SHAPE_LABEL,
   SHAPE_NODE,
   busAttrs,
@@ -110,9 +114,25 @@ function registerOnce(): void {
       markup: [
         { tagName: 'rect', selector: 'hit' },
         { tagName: 'text', selector: 'text' },
+        // 数码框(2026-09-23):框 + 垫底的「8」+ 亮的段 + 单位;纯文字标签把这四个藏起来
+        { tagName: 'rect', selector: 'box' },
+        { tagName: 'path', selector: 'ghost' },
+        { tagName: 'path', selector: 'digits' },
+        { tagName: 'text', selector: 'unit' },
       ],
       attrs: {
         hit: { refWidth: '100%', refHeight: '100%', fill: 'transparent', stroke: 'none' },
+        box: { display: 'none', rx: 1.5, fill: METER_BG, stroke: METER_LINE, strokeWidth: 1 },
+        ghost: { display: 'none', fill: METER_INK, fillOpacity: 0.07, stroke: 'none' },
+        digits: { display: 'none', fill: METER_EMPTY_INK, stroke: 'none' },
+        unit: {
+          display: 'none',
+          refY: '50%',
+          fontSize: 12,
+          fill: '#c9d8ee',
+          textAnchor: 'start',
+          textVerticalAnchor: 'middle',
+        },
         text: {
           text: '',
           refX: 0,

@@ -207,8 +207,10 @@ describe('画图', () => {
     expect(w.findAll('.sr-sld-node')).toHaveLength(8)
     expect(w.find('.sr-sld-node[data-id="qf1"] .sr-sld-node-name').text()).toBe('1# 出线柜')
     expect(w.find('.sr-sld-bus-name').text()).toBe('10kV I 段')
-    expect(w.find('[data-id="l1"]').text()).toBe('P 12.3 kW')
-    expect(w.find('[data-id="l1"]').attributes('style')).toMatch(/fill/)
+    // 数值标签缺省是数码框(2026-09-23),数码管是 path,读数挂在 aria-label 上
+    expect(w.find('[data-id="l1"]').attributes('aria-label')).toBe('P 12.3 kW')
+    // 标签色落在前缀 / 单位上(数码框里的数字用表头色)
+    expect(w.find('[data-id="l1"] .sr-sld-label-title').attributes('style')).toMatch(/fill/)
     expect(w.find('[data-id="l2"]').text()).toBe('瓜州站')
   })
 

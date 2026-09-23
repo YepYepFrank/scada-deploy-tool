@@ -12,7 +12,10 @@ import {
   SLD_BUS_WIDTH,
   SLD_GRID,
   freeSizeStep,
+  METER_CELLS_MAX,
+  METER_CELLS_MIN,
   isFreeSizeSymbol,
+  meterNaturalColW,
   nodeBox,
   nodeBoxSize,
   snapFreeSize,
@@ -25,7 +28,7 @@ import {
   type SldSwitchState,
   type SldSymbolLookup,
 } from '@grid/scada-renderer'
-import { estimateTextWidth } from '../../x6-adapter'
+import { estimateTextWidth, isMeterLabel } from '../../x6-adapter'
 
 const validKv = (kv: number | undefined): kv is number => typeof kv === 'number' && Number.isFinite(kv) && kv > 0
 
@@ -339,10 +342,14 @@ export interface LabelStylePatch {
   bold?: boolean
   /** 数值列起点(仅数值标签);0 / undefined = 不分列,照旧直接拼接 */
   colW?: number
+  /** 显示样式(仅数值标签,2026-09-23):'' = 随组件设置(缺省数码框) */
+  look?: '' | 'meter' | 'plain'
+  /** 数码框位数(仅数值标签);0 = 恢复缺省(4 位) */
+  cells?: number
 }
 
 const labelStyleOf = (l: SldLabel): string =>
-  JSON.stringify([l.size, l.color, l.bold, l.kind === 'value' ? l.colW : undefined])
+  JSON.stringify([l.size, l.color, l.bold, ...(l.kind === 'value' ? [l.colW, l.look, l.cells] : [])])
 
 export function setLabelStyle(doc: SldDoc, ids: readonly string[], patch: LabelStylePatch): boolean {
   // 先校验,免得一组标签只改了一半
@@ -357,6 +364,11 @@ export function setLabelStyle(doc: SldDoc, ids: readonly string[], patch: LabelS
     !HEX.test(patch.color)
   )
     return false
+  if (patch.look !== undefined && !['', 'meter', 'plain'].includes(patch.look)) return false
+  if (patch.cells !== undefined && patch.cells !== 0) {
+    const c = Math.round(patch.cells)
+    if (!Number.isFinite(c) || c < METER_CELLS_MIN || c > METER_CELLS_MAX) return false
+  }
   let changed = false
   for (const l of pick(doc.labels, ids)) {
     const before = labelStyleOf(l)
@@ -378,6 +390,14 @@ export function setLabelStyle(doc: SldDoc, ids: readonly string[], patch: LabelS
       if (!Number.isFinite(c) || c <= 0) delete l.colW
       else l.colW = c
     }
+    if (patch.look !== undefined && l.kind === 'value') {
+      if (patch.look === '') delete l.look
+      else l.look = patch.look
+    }
+    if (patch.cells !== undefined && l.kind === 'value') {
+      if (!patch.cells) delete l.cells
+      else l.cells = Math.round(patch.cells)
+    }
     if (labelStyleOf(l) !== before) changed = true
   }
   return changed
@@ -390,13 +410,22 @@ const numberWidth = (size: number, digits: number): number => Math.ceil(size * 0
  * 把选中的数值标签对齐成一列(2026-09-22 现场反馈「数据没有对齐」):
  * 取这一组里最宽的前缀,加上数值列的宽度,作为所有标签共同的 `colW`——
  * 于是「Uab 388.7 V」与「P 0.4 kW」的数字右对齐、单位也对齐。数值标签少于 2 个时不做。
+ * 数码框(2026-09-23)按框宽算:colW 就是框的右边界,位数相同的数值小数点落在一条线上。
  */
 export function alignLabelColumns(doc: SldDoc, ids: readonly string[], digits = 5): boolean {
   const labels = pick(doc.labels, ids).filter(l => l.kind === 'value')
   if (labels.length < 2) return false
   const titleW = Math.max(...labels.map(l => (l.title ? estimateTextWidth(l.title, l.size ?? LABEL_SIZE_DEFAULT) : 0)))
-  const numW = Math.max(...labels.map(l => numberWidth(l.size ?? LABEL_SIZE_DEFAULT, digits)))
-  const colW = Math.round(titleW + numW)
+  const colW = Math.round(
+    Math.max(
+      ...labels.map(l => {
+        const size = l.size ?? LABEL_SIZE_DEFAULT
+        return l.kind === 'value' && isMeterLabel(l)
+          ? meterNaturalColW({ size, title: l.title, cells: l.cells })
+          : titleW + numberWidth(size, digits)
+      })
+    )
+  )
   return setLabelStyle(
     doc,
     labels.map(l => l.id),

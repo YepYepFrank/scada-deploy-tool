@@ -160,8 +160,14 @@ describe('母线与连线 cell', () => {
     expect(cell.y + cell.height / 2).toBe(60)
     expect(cell.height % 20).toBe(0)
     expect(
-      labelToCell({ id: 'l', x: 0, y: 0, kind: 'value', pt: 'p', title: 'P', format: { unit: 'kW' } }).attrs.text!.text
+      labelToCell({ id: 'l', x: 0, y: 0, kind: 'value', pt: 'p', title: 'P', format: { unit: 'kW' }, look: 'plain' })
+        .attrs.text!.text
     ).toBe('P -- kW')
+    // 缺省数码框(2026-09-23):文字只剩前缀,框和单位另画
+    const meter = labelToCell({ id: 'l', x: 0, y: 0, kind: 'value', pt: 'p', title: 'P', format: { unit: 'kW' } })
+    expect(meter.attrs.text!.text).toBe('P')
+    expect(meter.attrs.box!.display).toBe('block')
+    expect(meter.attrs.unit!.text).toBe('kW')
   })
 })
 

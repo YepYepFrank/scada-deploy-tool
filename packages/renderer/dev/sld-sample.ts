@@ -102,7 +102,8 @@ for (const [k, x, b, d, entity] of [
 /* ── 0.4 kV 出线 ×6 ── */
 const FEEDERS = ['办公照明', '通讯机组', 'UPS', '本所空调', '路灯', '备用']
 FEEDERS.forEach((name, i) => {
-  const x = [90, 170, 370, 460, 650, 740][i]!
+  // 间隔拉开一点:数值缺省是数码框(2026-09-23),比纯文字宽
+  const x = [80, 190, 330, 440, 640, 740][i]!
   const id = `f${i + 1}`
   sw(`qf_${id}`, 'switch-simple', x - 10, 470, undefined, i === 2 ? 'PDR4_LP1_ATS1' : `PDR4_LP3_${id.toUpperCase()}`)
   node({ id: `arr_${id}`, symbol: 'feeder-arrow', x: x - 10, y: 530, rot: 0, name })
@@ -208,7 +209,7 @@ export const SLD_SAMPLE_DOC: SldDoc = {
     { id: 'fr_lp3', x: 40, y: 455, w: 500, h: 130, title: 'LP3' },
     { id: 'fr_lp4', x: 600, y: 455, w: 220, h: 130, title: 'LP4' },
     { id: 'fr_pv', x: 930, y: 455, w: 90, h: 260, title: '光伏系统' },
-    { id: 'fr_bess', x: 1030, y: 455, w: 140, h: 220, title: '储能系统' },
+    { id: 'fr_bess', x: 1030, y: 455, w: 160, h: 220, title: '储能系统' },
     // 边框颜色 / 粗细 / 实线(2026-09-22)
     { id: 'fr_prot', x: 550, y: 580, w: 260, h: 140, title: '保护柜', color: '#ff9f43', width: 2, solid: true },
   ],

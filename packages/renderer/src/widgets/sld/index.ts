@@ -36,6 +36,15 @@ export const sldWidget: WidgetDefinition = {
         enumNames: ['状态色(红合绿分)', '国标图形'],
         default: 'state',
       },
+      valueStyle: {
+        type: 'string',
+        title: '数值样式',
+        description:
+          '数码框:黑底数码管数字右对齐,小数点对成一列;纯文字:「Uab 388.7 V」直接拼接。标签自己设了样式的以标签为准',
+        enum: ['meter', 'plain'],
+        enumNames: ['数码框', '纯文字'],
+        default: 'meter',
+      },
       showNames: { type: 'boolean', title: '显示设备名称', default: true },
       energizeColoring: {
         type: 'boolean',
@@ -77,6 +86,7 @@ export const sldWidget: WidgetDefinition = {
     doc: emptySldDoc(),
     staleSeconds: 600,
     switchStyle: 'state',
+    valueStyle: 'meter',
     showNames: true,
     energizeColoring: true,
     interactive: true,

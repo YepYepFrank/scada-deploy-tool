@@ -7,7 +7,16 @@
  * 输入框在 change(回车 / 失焦)时提交,一次提交 = 撤销栈里的一步。
  */
 import { computed, inject } from 'vue'
-import { SLD_BUS_WIDTH, busLength, getSldSymbol, isFreeSizeSymbol, validNodeScales } from '@grid/scada-renderer'
+import {
+  METER_CELLS_DEFAULT,
+  METER_CELLS_MAX,
+  METER_CELLS_MIN,
+  SLD_BUS_WIDTH,
+  busLength,
+  getSldSymbol,
+  isFreeSizeSymbol,
+  validNodeScales,
+} from '@grid/scada-renderer'
 import type { SldSwitchState } from '@grid/scada-renderer'
 import { SLD_EDITOR_CTX } from '../../ext'
 import ColorField from './ColorField.vue'
@@ -235,6 +244,25 @@ const colW = computed(() => {
   const l = valueLabels.value[0]
   return l && l.kind === 'value' ? (l.colW ?? 0) : 0
 })
+/** 数值样式(2026-09-23):'' = 随组件设置(缺省数码框) */
+const labelLook = computed(() => {
+  const l = valueLabels.value[0]
+  return l && l.kind === 'value' ? (l.look ?? '') : ''
+})
+const labelCells = computed(() => {
+  const l = valueLabels.value[0]
+  return l && l.kind === 'value' ? (l.cells ?? 0) : 0
+})
+function setLabelLook(e: Event): void {
+  const list = ids(valueLabels.value)
+  const look = valueOf(e) as '' | 'meter' | 'plain'
+  ctx!.apply(d => (setLabelStyle(d.doc, list, { look }) ? undefined : false), '改数值样式')
+}
+function setLabelCells(e: Event): void {
+  const list = ids(valueLabels.value)
+  const cells = Number(valueOf(e)) || 0
+  ctx!.apply(d => (setLabelStyle(d.doc, list, { cells }) ? undefined : false), '改数码框位数')
+}
 function alignColumns(): void {
   const list = ids(valueLabels.value)
   ctx!.apply(d => (alignLabelColumns(d.doc, list) ? undefined : false), '对齐数值列')
@@ -563,6 +591,36 @@ const endText = (e: { node: string; port: string } | { bus: string; d: number })
           @change="styleLabel({ color: $event ?? '' }, '改文字颜色')"
         />
       </div>
+      <label
+        v-if="valueLabels.length"
+        class="sld-insp-row"
+        title="数码框:黑底数码管数字右对齐,叠在一起的自动对成一列、小数点在一条线上;纯文字:「Uab 388.7 V」直接拼接。随组件 = 按页面里接线图组件的「数值样式」(缺省数码框)"
+      >
+        <span>数值样式{{ many(valueLabels.length) }}</span>
+        <select data-field="label-look" :value="labelLook" :disabled="ctx.readonly.value" @change="setLabelLook">
+          <option value="">随组件(缺省数码框)</option>
+          <option value="meter">数码框</option>
+          <option value="plain">纯文字</option>
+        </select>
+      </label>
+      <label
+        v-if="valueLabels.length && labelLook !== 'plain'"
+        class="sld-insp-row"
+        title="数码框能放几位数字(不含小数点),缺省 4;值更长时框向左加宽,数字照样右对齐"
+      >
+        <span>位数</span>
+        <input
+          type="number"
+          data-field="label-cells"
+          :min="METER_CELLS_MIN"
+          :max="METER_CELLS_MAX"
+          step="1"
+          :placeholder="String(METER_CELLS_DEFAULT)"
+          :value="labelCells || ''"
+          :disabled="ctx.readonly.value"
+          @change="setLabelCells"
+        />
+      </label>
       <div
         v-if="valueLabels.length"
         class="sld-insp-row"

@@ -125,7 +125,8 @@ describe('100 个间隔的图', () => {
     // 一个数值标签变化
     values['pt.p5'] = { v: 999, ts: ts + 1 }
     await nextTick()
-    expect(w.find('[data-id="lp5"]').text()).toContain('999.0')
+    // 数值标签缺省是数码框(2026-09-23),数码管是 path,读数挂在 aria-label 上
+    expect(w.find('[data-id="lp5"]').attributes('aria-label')).toContain('999.0')
     expect(spies.wirePoints).toBe(doc.wires.length)
     expect(spies.energize).toBe(1)
     expect(updated.SldNodeView ?? 0).toBe(0)

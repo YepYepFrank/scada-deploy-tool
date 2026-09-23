@@ -1,5 +1,5 @@
 // @grid/scada-renderer 公共入口。
-export const version = '0.11.0'
+export const version = '0.12.0'
 export * from './schema'
 export { default as ScadaPage } from './ScadaPage.vue'
 /** 单张卡片入口(0.3.0):把页面里的某张卡单独嵌进宿主自己的页面;配 pickWidget 按「页面 id + 组件 id」取卡 */
@@ -70,6 +70,20 @@ export { statusLightWidget } from './widgets/status-light'
 export { tableWidget } from './widgets/table'
 export { imageWidget } from './widgets/image'
 export { sldWidget } from './widgets/sld'
+/** 数码框的几何(2026-09-23):部署工具画布上画同样的框、「对齐成列」算列宽用 */
+export {
+  METER_CELLS_DEFAULT,
+  METER_CELLS_MAX,
+  METER_CELLS_MIN,
+  autoMeterColumns,
+  meterBoxWidth,
+  meterCells,
+  meterLayout,
+  meterNaturalColW,
+  sevenSegPaths,
+  type MeterCell,
+  type MeterLayout,
+} from './widgets/sld/meter'
 /** 一次接线图:文档模型与纯函数、图元注册表、共享图元组件(ADR-005);部署工具的接线图编辑器从这里取 */
 export * from './sld'
 export { overviewA, monitor3col, grid3x3, cards, builtinTemplates, CARDS_TEMPLATE_ID } from './templates'

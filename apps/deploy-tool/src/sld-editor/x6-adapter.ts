@@ -20,13 +20,16 @@ import type { Cell, Edge, Graph, Node } from '@antv/x6'
 import {
   SLD_BUS_WIDTH,
   SLD_GRID,
+  autoMeterColumns,
   busLength,
   busOffset,
   busPoint,
   lookupSldSymbol,
+  meterLayout,
   nodeBox,
   portDirection,
   portPosition,
+  sevenSegPaths,
   unknownSldSymbol,
   type SldBus,
   type SldDoc,
@@ -264,11 +267,80 @@ const l_bold = (l: SldLabel): boolean => !!l.bold
 
 const labelHeight = (size: number): number => Math.max(1, Math.ceil((size * 1.4) / (2 * SLD_GRID))) * 2 * SLD_GRID
 
-export function labelToCell(label: SldLabel): SldLabelCell {
+/** 数码框的画布颜色(与渲染器缺省的 --sr-sld-meter-* 一致) */
+export const METER_BG = '#01040b'
+export const METER_LINE = 'rgba(143, 188, 232, 0.4)'
+export const METER_INK = '#f2f8ff'
+export const METER_EMPTY_INK = '#8fbce8'
+
+/**
+ * 数值标签在画布上按不按数码框画(2026-09-23):标签自己设了 look 以标签为准;没设按组件缺省(数码框)。
+ * 编辑器不知道页面里这个组件的「数值样式」改没改成纯文字——改了的话,以预览 / 大屏为准。
+ */
+export const isMeterLabel = (l: SldLabel): boolean => l.kind === 'value' && (l.look ?? 'meter') === 'meter'
+
+/** 叠在一起、没配 colW 的数码框自动对成一列(与渲染器 SldScene 同一个算法) */
+export function autoLabelColumns(labels: readonly SldLabel[]): Map<string, number> {
+  return autoMeterColumns(
+    labels.flatMap(l =>
+      l.kind === 'value' && isMeterLabel(l) && !l.colW
+        ? [{ id: l.id, x: l.x, y: l.y, size: l.size ?? 12, title: l.title, cells: l.cells }]
+        : []
+    )
+  )
+}
+
+/** 各层 attrs 每次都全给(setAttrs 是合并语义,不给就清不掉上一次的样子) */
+const HIDDEN = { display: 'none' } as const
+
+export function labelToCell(label: SldLabel, autoColW?: number): SldLabelCell {
   const size = label.size ?? 12
-  const text = labelDisplayText(label)
   const height = labelHeight(size) // 偶数格:半高也是栅格整数倍,y 落栅格的标签其节点左上角也落栅格
   const color = labelColor(label)
+  if (label.kind === 'value' && isMeterLabel(label)) {
+    // 数码框:前缀 + 黑底框(没值,亮「--」)+ 单位;坐标换成节点本地的(节点左上角 = (x, y - 半高))
+    const lay = meterLayout({
+      x: 0,
+      y: height / 2,
+      size,
+      title: label.title,
+      colW: label.colW || autoColW,
+      cells: label.cells,
+      text: '--',
+    })
+    const segs = sevenSegPaths(lay.cells!, lay.slots, lay.right, height / 2, size)
+    const unit = label.format?.unit ?? ''
+    const width = Math.max(
+      SLD_GRID,
+      Math.ceil(unit ? lay.unitX + estimateTextWidth(unit, size) : lay.box.x + lay.box.w)
+    )
+    const fill = color ?? LABEL_FILL
+    const weight = l_bold(label) ? 700 : 400
+    return {
+      id: label.id,
+      shape: SHAPE_LABEL,
+      x: label.x,
+      y: label.y - height / 2,
+      width,
+      height,
+      zIndex: Z.label,
+      data: { kind: 'label', label: clone(label) },
+      attrs: {
+        text: { text: label.title ?? '', fontSize: size, fill, fontWeight: weight },
+        box: {
+          display: 'block',
+          x: round2(lay.box.x),
+          y: round2(lay.box.y),
+          width: round2(lay.box.w),
+          height: round2(lay.box.h),
+        },
+        ghost: { display: 'block', d: segs.ghost },
+        digits: { display: 'block', d: segs.lit },
+        unit: { display: 'block', text: unit, x: round2(lay.unitX), fontSize: size, fill, fontWeight: weight },
+      },
+    }
+  }
+  const text = labelDisplayText(label)
   // 分了列的数值标签(colW,2026-09-22)实际占到「列宽 + 单位」那么远;画布上的盒子照这个给,
   // 不然选中框比字窄。列对齐的样子以预览 / 大屏为准,X6 的单行文本画不出三列。
   const colW = label.kind === 'value' && label.colW ? label.colW : 0
@@ -286,9 +358,15 @@ export function labelToCell(label: SldLabel): SldLabelCell {
     attrs: {
       // setAttrs 是合并语义:颜色 / 粗细每次都给,清掉自定义值时才回得到缺省
       text: { text, fontSize: size, fill: color ?? LABEL_FILL, fontWeight: l_bold(label) ? 700 : 400 },
+      box: HIDDEN,
+      ghost: HIDDEN,
+      digits: HIDDEN,
+      unit: HIDDEN,
     },
   }
 }
+
+const round2 = (n: number): number => Math.round(n * 100) / 100
 
 /** 分组框缺省边框(与 x6-graph 注册的一致;setAttrs 是合并语义,每次都显式给值才复位得掉) */
 export const FRAME_STROKE = '#5b7aa8'
@@ -348,11 +426,12 @@ export function wireToCell(wire: SldWire): SldWireCell {
 
 /** 文档 → cell 描述。顺序:分组框、母线、节点、标签(都是 X6 节点),最后连线——连线引用的节点必须先建 */
 export function docToCells(doc: SldDoc, symbols: SldSymbolLookup = lookupSldSymbol): SldCell[] {
+  const cols = autoLabelColumns(doc.labels)
   return [
     ...(doc.frames ?? []).map(frameToCell),
     ...doc.buses.map(busToCell),
     ...doc.nodes.map(n => nodeToCell(n, symbols)),
-    ...doc.labels.map(labelToCell),
+    ...doc.labels.map(l => labelToCell(l, cols.get(l.id))),
     ...doc.wires.map(wireToCell),
   ]
 }
@@ -648,11 +727,18 @@ function updateNode(cell: Node, desc: SldBoxCell): void {
   if (cell.getZIndex() !== desc.zIndex) cell.setZIndex(desc.zIndex, SYNC)
   const dataChanged = !same(cell.getData(), desc.data)
   if (dataChanged) cell.replaceData(clone(desc.data), SYNC)
-  if (!dataChanged && !resized) return
+  // 标签的样子还取决于邻居(数码框自动对成一列):数据、尺寸都没变也要比一下 attrs
+  if (!dataChanged && !resized && (desc.shape === SHAPE_NODE || !attrsDiffer(cell, desc.attrs))) return
   if (desc.shape === SHAPE_NODE) {
     const items = cell.getPorts().map(p => ({ id: p.id, group: p.group, args: p.args }))
     if (!same(items, desc.ports.items)) cell.prop('ports/items', clone(desc.ports.items), { ...SYNC, rewrite: true })
   } else cell.setAttrs(clone(desc.attrs), SYNC)
+}
+
+/** 描述里给的 attrs 与画布上的是否有不一样的(只比描述里出现的 selector / 键) */
+function attrsDiffer(cell: Node, attrs: SldCellAttrs): boolean {
+  const now = cell.getAttrs() as Record<string, Record<string, unknown> | undefined>
+  return Object.entries(attrs).some(([sel, kv]) => Object.entries(kv).some(([k, v]) => now[sel]?.[k] !== v))
 }
 
 function updateEdge(cell: Edge, desc: SldWireCell): void {
