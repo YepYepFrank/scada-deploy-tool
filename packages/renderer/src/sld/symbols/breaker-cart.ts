@@ -47,6 +47,38 @@ export const breakerCartSymbol: SldSymbolDefinition = {
     open: line(20, 50, 8, 34),
     unknown: line(20, 32, 20, 50, { dashed: true }),
   },
+  // 状态色:手车的上下插头保留,中间换成方块
+  stateBlock: {
+    body:
+      line(20, 0, 20, 6) +
+      polyline([
+        [12, 12],
+        [20, 6],
+        [28, 12],
+      ]) +
+      polyline([
+        [12, 18],
+        [20, 12],
+        [28, 18],
+      ]) +
+      line(20, 12, 20, 32) +
+      line(20, 50, 20, 68) +
+      polyline([
+        [12, 62],
+        [20, 68],
+        [28, 62],
+      ]) +
+      polyline([
+        [12, 68],
+        [20, 74],
+        [28, 68],
+      ]) +
+      line(20, 74, 20, 80),
+    x: 12,
+    y: 32,
+    w: 16,
+    h: 18,
+  },
   labelSlots: [
     { dx: 50, dy: 20 },
     { dx: 50, dy: 40 },

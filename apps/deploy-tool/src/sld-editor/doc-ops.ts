@@ -25,6 +25,59 @@ import {
 
 export const snapGrid = (v: number, grid: number = SLD_GRID): number => Math.round(v / grid) * grid
 
+/** 端口离母线多近就吸过去(画布像素):两格。节点本身落栅格,端口到母线的距离总是栅格的整数倍 */
+export const BUS_ATTACH_TOLERANCE = 2 * SLD_GRID
+
+/**
+ * 把节点吸到母线上(2026-09-23 现场反馈「开关能否像母线一样直接附着」):
+ * 节点任一端口离某条母线(垂直方向)不超过 tol、且落在母线两端之间,就把整个节点沿垂直母线的方向挪过去,
+ * 让端口正好压在母线上——渲染器把「端口压在母线上」算作连通(topology 的 attach 边),不用再画连线。
+ * 已经有端口压在母线上的节点不动;几个候选取挪动最少的那个。依附的标签跟着走。返回吸附了的节点 id。
+ */
+export function snapNodesToBuses(
+  doc: SldDoc,
+  ids: readonly string[],
+  symbols: SldSymbolLookup,
+  tol: number = BUS_ATTACH_TOLERANCE
+): string[] {
+  const snapped: string[] = []
+  for (const n of doc.nodes) {
+    if (!ids.includes(n.id)) continue
+    const def = symbols(n.symbol)
+    if (!def || !def.ports.length) continue
+    let best: { dx: number; dy: number; d: number } | undefined
+    let touching = false
+    for (const p of def.ports) {
+      const at = portPosition(n, def, p.id)
+      if (!at) continue
+      for (const b of doc.buses) {
+        const horizontal = b.y1 === b.y2
+        const vertical = b.x1 === b.x2
+        if (!horizontal && !vertical) continue
+        const [lo, hi] = horizontal
+          ? [Math.min(b.x1, b.x2), Math.max(b.x1, b.x2)]
+          : [Math.min(b.y1, b.y2), Math.max(b.y1, b.y2)]
+        const along = horizontal ? at.x : at.y
+        if (along < lo || along > hi) continue
+        const gap = horizontal ? b.y1 - at.y : b.x1 - at.x
+        if (gap === 0) touching = true
+        else if (Math.abs(gap) <= tol && (!best || Math.abs(gap) < best.d))
+          best = { dx: horizontal ? 0 : gap, dy: horizontal ? gap : 0, d: Math.abs(gap) }
+      }
+    }
+    if (touching || !best) continue
+    n.x += best.dx
+    n.y += best.dy
+    for (const l of doc.labels)
+      if (l.attach === n.id) {
+        l.x += best.dx
+        l.y += best.dy
+      }
+    snapped.push(n.id)
+  }
+  return snapped
+}
+
 const DIR_VEC: Record<SldPortDir, [number, number]> = { n: [0, -1], e: [1, 0], s: [0, 1], w: [-1, 0] }
 
 /** 母线是否水平(斜的按主方向算,与 model 的 busDirection 一致) */

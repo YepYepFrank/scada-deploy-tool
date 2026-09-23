@@ -15,6 +15,7 @@ import {
   type SldEnergizeResult,
   type SldEnergy,
   type SldSwitchState,
+  type SldSwitchStyle,
 } from '../../sld'
 import { entityKey, kvColor, type SldAlarmLevel, type SldKvColor } from './format'
 import SldBusView from './SldBusView.vue'
@@ -32,6 +33,8 @@ const props = defineProps<{
   alarms: Map<string, SldAlarmLevel>
   showNames: boolean
   clickable: boolean
+  /** 开关画法(2026-09-23),缺省 state */
+  switchStyle?: SldSwitchStyle
 }>()
 
 const wirePaths = computed(() =>
@@ -144,6 +147,7 @@ const horizontal = (b: { x1: number; y1: number; x2: number; y2: number }): bool
         :key="n.id"
         :node="n"
         :state="nodeStates[n.id]"
+        :switch-style="switchStyle ?? 'state'"
         :color="nodePaint[n.id]?.color"
         :energy-class="nodePaint[n.id]?.cls ?? ''"
         :alarm="nodeAlarm[n.id] ?? ''"
@@ -193,6 +197,7 @@ const horizontal = (b: { x1: number; y1: number; x2: number; y2: number }): bool
           v-else-if="it.node"
           :node="it.node"
           :state="nodeStates[it.node.id]"
+          :switch-style="switchStyle ?? 'state'"
           :color="nodePaint[it.node.id]?.color"
           :energy-class="nodePaint[it.node.id]?.cls ?? ''"
           :alarm="nodeAlarm[it.node.id] ?? ''"

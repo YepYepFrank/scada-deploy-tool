@@ -3,7 +3,8 @@
  *
  * 图的顶点 = 每个「节点端口」+ 每条「母线」(母线上所有接点互通,所以整条母线只算一个顶点);
  * 边 = 连线(两端顶点连通)+ 图元内部的端口对(是否导通在传播时按 conduct / 开关状态判)
- *    + 搭在一起的两条母线(一条的端头落在另一条上,见 busesTouch;2026-09-20)。
+ *    + 搭在一起的两条母线(一条的端头落在另一条上,见 busesTouch;2026-09-20)
+ *    + 端口压在母线上的图元(端口坐标正好落在母线线段上,不用再画连线;2026-09-23 现场反馈)。
  * 容错:悬空线、未知图元、未知端口都不抛异常——悬空的一端不建边,未知图元按 conduct = 'none' 处理。
  */
 import type {
@@ -16,6 +17,7 @@ import type {
   SldSymbolLookup,
   SldWireEnd,
 } from './types'
+import { portPosition } from './geometry'
 
 /** 连通图的顶点:节点端口,或一整条母线 */
 export type SldGraphVertex = { kind: 'port'; node: string; port: string } | { kind: 'bus'; bus: string }
@@ -30,6 +32,8 @@ export type SldGraphEdge =
   | { a: number; b: number; kind: 'node'; node: string; conduct: SldConduct }
   /** 两条母线搭在一起(一条的端头落在另一条上,T 形 / L 形),恒通;十字交叉不算(没有端头落在对方身上) */
   | { a: number; b: number; kind: 'joint' }
+  /** 图元端口直接压在母线上(2026-09-23),恒通,等同一根零长度的连线 */
+  | { a: number; b: number; kind: 'attach'; node: string; port: string; bus: string }
 
 /**
  * 连通图(中间结构,energize 用;将来拓扑着色 / 找回路 / 「这条线挂在哪段母线上」也可以复用)。
@@ -48,7 +52,7 @@ export interface SldGraph {
 }
 
 /** 点 (x, y) 是否落在母线这条线段上(含两端);母线约定水平或垂直,斜的不判 */
-function onBus(bus: SldBus, x: number, y: number): boolean {
+export function onBus(bus: SldBus, x: number, y: number): boolean {
   if (bus.y1 === bus.y2) return y === bus.y1 && x >= Math.min(bus.x1, bus.x2) && x <= Math.max(bus.x1, bus.x2)
   if (bus.x1 === bus.x2) return x === bus.x1 && y >= Math.min(bus.y1, bus.y2) && y <= Math.max(bus.y1, bus.y2)
   return false
@@ -121,6 +125,23 @@ export function buildSldGraph(doc: SldDoc, symbols: SldSymbolLookup): SldGraph {
       const b = busVertex.get(q.id)
       if (a !== undefined && b !== undefined && a !== b) addEdge({ a, b, kind: 'joint' })
     }
+
+  // 端口压在母线上(2026-09-23):开关 / 电表拖到母线上、端口正好落在母线上,就是要它连上,不该再逼人补一根线
+  for (const node of doc.nodes) {
+    const def = symbols(node.symbol)
+    if (!def || !def.ports.length) continue
+    for (const p of def.ports) {
+      const at = portPosition(node, def, p.id)
+      if (!at) continue
+      for (const bus of doc.buses) {
+        if (!onBus(bus, at.x, at.y)) continue
+        const a = portOf(node.id, p.id)
+        const b = busVertex.get(bus.id)
+        if (a !== undefined && b !== undefined)
+          addEdge({ a, b, kind: 'attach', node: node.id, port: p.id, bus: bus.id })
+      }
+    }
+  }
 
   const endVertex = (end: SldWireEnd): number | undefined =>
     'bus' in end ? busVertex.get(end.bus) : portOf(end.node, end.port)
@@ -195,7 +216,7 @@ export function energize(
         const e = graph.edges[ei]
         if (!e) continue
         const other = e.a === v ? e.b : e.a
-        if (e.kind === 'wire' || e.kind === 'joint' || e.conduct === 'always') visit(other, kv)
+        if (e.kind === 'wire' || e.kind === 'joint' || e.kind === 'attach' || e.conduct === 'always') visit(other, kv)
         else if (e.conduct === 'switch') {
           const s = switchState(e.node)
           if (s === 'closed' || (s === 'unknown' && unknownAsClosed)) visit(other, kv)

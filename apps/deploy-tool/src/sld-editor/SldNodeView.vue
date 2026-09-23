@@ -49,7 +49,17 @@ const color = computed(() => node.value?.color)
     :style="color ? { color } : undefined"
     :title="title"
   >
-    <SldSymbolBox :symbol="node.symbol" :state="state" :rot="node.rot" :flip="!!node.flip" :size="size" />
+    <!-- 开关按状态色画(合闸红 / 分闸绿),与大屏上的样子一致;编辑器里没有实时值,按「没数据时」的设置 -->
+    <SldSymbolBox
+      :symbol="node.symbol"
+      :state="state"
+      :rot="node.rot"
+      :flip="!!node.flip"
+      :size="size"
+      :line-width="node.lineWidth"
+      :dashed="!!node.dashed"
+      switch-style="state"
+    />
     <!-- 在线状态灯的占位(编辑器里没有实时值,按「在线」画;位置与运行时一致) -->
     <i v-if="node.online" class="sld-node-online" :data-at="node.online.at ?? 'tr'" />
   </div>

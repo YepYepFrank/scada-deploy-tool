@@ -43,6 +43,7 @@ import {
   addNode,
   addWire,
   applyGeometry,
+  snapNodesToBuses,
   busFromDrag,
   copyFragment,
   deleteSelection,
@@ -601,7 +602,11 @@ function onDropSymbol(symbolId: string, at: SldPoint): void {
   const id = store.newId('n')
   // Dnd 在对齐线吸附生效时不再吸栅格(落点可能是 983 这种数),这里统一吸回栅格
   const [x, y] = [snapGrid(at.x), snapGrid(at.y)]
-  if (apply(d => void addNode(d.doc, id, def, x, y), `放置${def.name}`)) store.select({ nodes: [id] })
+  const placed = apply(d => {
+    addNode(d.doc, id, def, x, y)
+    snapNodesToBuses(d.doc, [id], lookupSldSymbol)
+  }, `放置${def.name}`)
+  if (placed) store.select({ nodes: [id] })
 }
 
 function geometryLabel(p: SldGeometryPatch): string {
@@ -616,7 +621,13 @@ function commitGeometry(): void {
   const g = graph()
   if (!g || isReadonly.value) return
   const patch = readNodeMove(g, doc.value)
-  if (patchSize(patch)) apply(d => applyGeometry(d.doc, patch), geometryLabel(patch))
+  if (!patchSize(patch)) return
+  const moved = patch.nodes.map(n => n.id)
+  apply(d => {
+    applyGeometry(d.doc, patch)
+    // 拖到母线附近就把端口吸上去(压在母线上即连通,2026-09-23)
+    if (moved.length) snapNodesToBuses(d.doc, moved, lookupSldSymbol)
+  }, geometryLabel(patch))
 }
 let pointerDown = false
 let commitTimer: ReturnType<typeof setTimeout> | undefined

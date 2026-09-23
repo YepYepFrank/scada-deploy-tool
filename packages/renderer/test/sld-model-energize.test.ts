@@ -72,11 +72,12 @@ const custom: Record<string, SldSymbolDefinition> = {
 }
 const lookup: SldSymbolLookup = id => custom[id] ?? lookupSldSymbol(id)
 
-/* ── 搭图小工具(带电计算不看坐标,一律放原点) ── */
+/* ── 搭图小工具:节点一律放在母线(x 0–400)右边远处 ——
+   2026-09-23 起「端口压在母线上」算连通,放原点的话端口正好落在第一条母线上,测的就不是连线了 ── */
 const node = (id: string, symbol: string, extra: Partial<SldNode> = {}): SldNode => ({
   id,
   symbol,
-  x: 0,
+  x: 1000,
   y: 0,
   rot: 0,
   ...extra,

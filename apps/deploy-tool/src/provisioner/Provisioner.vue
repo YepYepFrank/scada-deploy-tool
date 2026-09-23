@@ -1,5 +1,5 @@
 <script setup>
-import { computed, h, reactive, ref, watch } from 'vue'
+import { computed, h, reactive, ref, shallowRef, toRaw, watch } from 'vue'
 import {
   TEMPLATES,
   CATEGORIES,
@@ -12,6 +12,7 @@ import {
   SWITCH_DIRECTIONS,
   switchDirText,
   sevLabel,
+  inferPresetProfiles,
 } from './templates.js'
 import { createTbSession } from '../api/tb-session'
 import EditorApp from '../editor/EditorApp.vue'
@@ -1109,20 +1110,36 @@ async function savePrices() {
   }
 }
 
-/* ── 常用方案一键添加 ── */
+/* ── 常用方案一键添加 ──
+   2026-09-23 现场反馈:提示说「没有匹配的已认领设备」,下面卡片却写「匹配 6 台」。两处原因:
+   ① 方案的选择器写死设备类型 IED,有的站设备类型是 default,点下去那一刻确实 0 台;工程人员改了选择器后卡片变成 6 台,
+     但提示是点击那一刻存下的一句死文字,不会跟着变;
+   ② 所以:先按方案要的测点(如 Ua/Ub/Uc)在已认领设备里找它们实际的设备类型,找得到就用那些类型;
+     提示改成跟着卡片实时算(同一个 tplMatched),卡片删了提示也收起。 */
+const presetProfiles = p => inferPresetProfiles(p, claimedDevices.value, presetKeysOf)
 function applyPreset(p) {
+  const { profiles, inferred } = presetProfiles(p)
   const t = {
     name: p.tplName,
-    selector: JSON.parse(JSON.stringify(p.selector)),
+    selector: { ...JSON.parse(JSON.stringify(p.selector)), profiles },
     items: JSON.parse(JSON.stringify(p.items)),
   }
   deviceTemplates.value.push(t)
-  const matched = tplMatched(t)
-  presetMsg.value = matched.length
-    ? `已添加「${p.name}」,匹配 ${matched.length} 台设备;可在下方卡片里微调阈值`
-    : `已添加「${p.name}」,但当前没有匹配的已认领设备——请先在第 2 步认领 IED 类设备,或编辑选择器`
+  presetNote.value = { tpl: deviceTemplates.value[deviceTemplates.value.length - 1], name: p.name, inferred }
 }
-const presetMsg = ref('')
+/** 最近一次「常用方案」的提示:存模板本身,文字每次按当前匹配现算 */
+const presetNote = shallowRef(null)
+const presetMsg = computed(() => {
+  const note = presetNote.value
+  if (!note) return ''
+  const t = deviceTemplates.value.find(x => x === note.tpl || toRaw(x) === toRaw(note.tpl))
+  if (!t) return '' // 卡片删了,提示跟着收起
+  const n = tplMatched(t).length
+  if (!n)
+    return `已添加「${note.name}」,但按选择器(设备类型 ${t.selector.profiles.join(' / ') || '不限'})还没匹配到已认领设备——请先在第 2 步认领设备,或点卡片上的「编辑选择器」`
+  const how = note.inferred ? `(按方案需要的测点找到设备类型 ${t.selector.profiles.join(' / ')})` : ''
+  return `已添加「${note.name}」,匹配 ${n} 台设备${how};可在下方卡片里微调阈值`
+})
 
 /* ── 常用方案用到单台设备(2026-09-11 现场反馈:一个站点只给低压进线设电压越限)──
    方式一的常用方案按设备类型批量套用;这里选一台设备,把方案里的条目按这台设备实际有的测点展开成方式二的

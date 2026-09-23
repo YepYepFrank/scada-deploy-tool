@@ -22,6 +22,8 @@ export const loadSwitchSymbol: SldSymbolDefinition = {
     open: line(20, 40, 8, 22),
     unknown: line(20, 24, 20, 40, { dashed: true }),
   },
+  // 状态色:保留顶上的短横(负荷开关的记号),方块在下
+  stateBlock: { body: line(20, 0, 20, 16) + line(14, 16, 26, 16) + line(20, 40, 20, 60), x: 12, y: 20, w: 16, h: 20 },
   labelSlots: [
     { dx: 50, dy: 20 },
     { dx: 50, dy: 40 },

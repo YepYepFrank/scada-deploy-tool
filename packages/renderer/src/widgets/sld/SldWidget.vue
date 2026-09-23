@@ -17,11 +17,14 @@ import {
   energize,
   isSldDoc,
   lookupSldSymbol,
+  resolveOnlineState,
   resolveSwitchState,
   sldPointSlot,
   type SldDoc,
+  type SldOnlineRef,
   type SldStateRef,
   type SldSwitchState,
+  type SldSwitchStyle,
 } from '../../sld'
 import { SLD_CONTEXT_KEY } from './context'
 import { sldCoords, type SldScreenMapper } from './coords'
@@ -39,8 +42,14 @@ import SldScene from './SldScene.vue'
 const props = withDefaults(
   defineProps<{
     doc?: SldDoc
-    /** 测点数据时间戳早于这么久:开关按 unknown 画、数值变灰;0 不判 */
+    /**
+     * 数值测点的时间戳早于这么久就变灰;0 不判。
+     * **开关位置不看它**(2026-09-23):开关只在变位时上报,T2_CB 一周没变过是常态,不能因此画成「未知」;
+     * 开关的「通信异常(灰)」只看设备在线灯(active)是否离线、或测点从没收到过值。
+     */
     staleSeconds?: number
+    /** 开关画法(2026-09-23):state = 合闸红 / 分闸绿 / 通信异常灰(缺省);classic = 国标图形 + 带电着色 */
+    switchStyle?: SldSwitchStyle
     /** 画图元名称(SldNode.name)与母线名称 */
     showNames?: boolean
     /** 带电着色;关掉后全部用主题强调色 */
@@ -58,6 +67,7 @@ const props = withDefaults(
   {
     doc: undefined,
     staleSeconds: 600,
+    switchStyle: 'state',
     showNames: true,
     energizeColoring: true,
     interactive: true,
@@ -133,6 +143,8 @@ provide(SLD_CONTEXT_KEY, { values: () => props.values, errors: () => props.error
 interface Stateful {
   id: string
   ref?: SldStateRef
+  /** 设备在线灯:离线时开关算「通信异常」 */
+  online?: SldOnlineRef
   /** conduct = 'switch':参与带电计算 */
   isSwitch: boolean
 }
@@ -141,15 +153,18 @@ const stateful = computed<Stateful[]>(() =>
   (doc.value?.nodes ?? []).flatMap(n => {
     const def = lookupSldSymbol(n.symbol)
     const isSwitch = def?.conduct === 'switch'
-    return isSwitch || def?.stateBody ? [{ id: n.id, ref: n.state, isSwitch }] : []
+    return isSwitch || def?.stateBody ? [{ id: n.id, ref: n.state, online: n.online, isSwitch }] : []
   })
 )
 function resolve(s: Stateful): SldSwitchState {
   // 没配 state:开关视为常合(ADR-005 契约修订);接地刀 / 状态灯按分位画
   if (!s.ref) return s.isSwitch ? 'closed' : 'open'
-  const value = asPointValue(props.values[sldPointSlot(s.ref.pt)])
-  const ms = staleMs.value
-  return resolveSwitchState(s.ref, value, ms === undefined ? undefined : { now: now.value, staleMs: ms })
+  // 通信异常(2026-09-23 现场约定):设备在线灯明确是「离线」→ 按没数据处理(灰;配了 fallback 按 fallback)。
+  // 在线灯没数据(unknown)不算离线——那只说明没配 / 没收到 active,不能据此把开关抹灰
+  if (s.online && resolveOnlineState(asPointValue(props.values[sldPointSlot(s.online.pt)])) === 'offline')
+    return s.ref.fallback ?? 'unknown'
+  // 不判过期:开关只在变位时上报,值旧是常态
+  return resolveSwitchState(s.ref, asPointValue(props.values[sldPointSlot(s.ref.pt)]))
 }
 const stateSig = computed(() => stateful.value.map(resolve).join(','))
 const nodeStates = computed<Record<string, SldSwitchState>>(() => {
@@ -328,6 +343,7 @@ function onDblClick() {
           :alarms="alarms"
           :show-names="showNames"
           :clickable="!design"
+          :switch-style="switchStyle"
         />
       </svg>
       <div v-if="hints.length" class="sr-sld-hints">
@@ -422,6 +438,24 @@ function onDblClick() {
 }
 .sr-sld-e-dead {
   color: var(--sr-ink-2, #8fbce8);
+  opacity: 0.45;
+}
+/* 图元上(2026-09-23):变暗 / 变虚落到图形本身,开关的状态色块不跟着变——
+   合闸就是红、分闸就是绿,跟上游有没有电无关(现场约定)。母线 / 连线仍按上面两条 */
+.sr-sld-node-symbol.sr-sld-e-uncertain,
+.sr-sld-node-symbol.sr-sld-e-dead {
+  opacity: 1;
+  stroke-dasharray: none;
+}
+.sr-sld-node-symbol.sr-sld-e-uncertain .sr-sld-symbol-body,
+.sr-sld-node-symbol.sr-sld-e-uncertain .sr-sld-symbol-state:not(.sr-sld-sw),
+.sr-sld-node-symbol.sr-sld-e-uncertain .sr-sld-symbol-text {
+  opacity: 0.6;
+  stroke-dasharray: 5 4;
+}
+.sr-sld-node-symbol.sr-sld-e-dead .sr-sld-symbol-body,
+.sr-sld-node-symbol.sr-sld-e-dead .sr-sld-symbol-state:not(.sr-sld-sw),
+.sr-sld-node-symbol.sr-sld-e-dead .sr-sld-symbol-text {
   opacity: 0.45;
 }
 

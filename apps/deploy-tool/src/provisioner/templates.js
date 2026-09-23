@@ -137,6 +137,20 @@ export const TEMPLATES = {
   },
 }
 
+/**
+ * 常用方案该用哪些设备类型(2026-09-23 现场反馈):方案默认写 IED,有的站设备类型是 default,点下去一台都匹配不上。
+ * 默认类型下有带方案所需测点的已认领设备 → 照旧;否则改用「实际带这些测点的已认领设备」的类型;都没有就照旧(提示里说清楚)。
+ * keysOf(item) 给出一条方案条目要的测点。
+ */
+export function inferPresetProfiles(preset, claimedDevices, keysOf) {
+  const wanted = new Set(preset.items.flatMap(keysOf))
+  const byKey = claimedDevices.filter(d => d.keys.some(k => k.claimed && wanted.has(k.key)))
+  const preferred = preset.selector.profiles || []
+  if (!preferred.length || byKey.some(d => preferred.includes(d.profile))) return { profiles: preferred, inferred: false }
+  const found = [...new Set(byKey.map(d => d.profile))].sort()
+  return found.length ? { profiles: found, inferred: true } : { profiles: preferred, inferred: false }
+}
+
 // 常用方案:一键生成设备模板(选择器 + 条目),现场只需微调阈值
 export const PRESETS = [
   {

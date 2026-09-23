@@ -210,7 +210,7 @@ export const SLD_SAMPLE_DOC: SldDoc = {
     { id: 'fr_pv', x: 930, y: 455, w: 90, h: 260, title: '光伏系统' },
     { id: 'fr_bess', x: 1030, y: 455, w: 140, h: 220, title: '储能系统' },
     // 边框颜色 / 粗细 / 实线(2026-09-22)
-    { id: 'fr_prot', x: 550, y: 600, w: 260, h: 120, title: '保护柜', color: '#ff9f43', width: 2, solid: true },
+    { id: 'fr_prot', x: 550, y: 580, w: 260, h: 140, title: '保护柜', color: '#ff9f43', width: 2, solid: true },
   ],
 }
 

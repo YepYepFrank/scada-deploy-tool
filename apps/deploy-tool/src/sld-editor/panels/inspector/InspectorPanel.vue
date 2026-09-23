@@ -10,6 +10,7 @@ import { computed, inject } from 'vue'
 import { SLD_BUS_WIDTH, busLength, getSldSymbol, isFreeSizeSymbol, validNodeScales } from '@grid/scada-renderer'
 import type { SldSwitchState } from '@grid/scada-renderer'
 import { SLD_EDITOR_CTX } from '../../ext'
+import ColorField from './ColorField.vue'
 import {
   BUS_WIDTH_MAX,
   BUS_WIDTH_MIN,
@@ -19,6 +20,9 @@ import {
   LABEL_SIZE_DEFAULT,
   LABEL_SIZE_MAX,
   LABEL_SIZE_MIN,
+  NODE_LINE_DEFAULT,
+  NODE_LINE_MAX,
+  NODE_LINE_MIN,
   alignLabelColumns,
   freeSizeOf,
   parseKv,
@@ -28,6 +32,7 @@ import {
   setFrameStyle,
   setLabelStyle,
   setNodeColor,
+  setNodeLine,
   setNodeScale,
   setNodeSize,
   setNodeSource,
@@ -183,6 +188,10 @@ function setSize(which: 'w' | 'h', e: Event): void {
   const v = Number(valueOf(e))
   ctx!.apply(d => (setNodeSize(d.doc, list, { [which]: v }, getSldSymbol) ? undefined : false), '改图元宽高')
 }
+function lineNodes(patch: { width?: number; dashed?: boolean }, what: string): void {
+  const list = nodeIds.value
+  ctx!.apply(d => (setNodeLine(d.doc, list, patch, getSldSymbol) ? undefined : false), what)
+}
 function colorNodes(color: string | undefined): void {
   const list = nodeIds.value
   ctx!.apply(d => (setNodeColor(d.doc, list, color) ? undefined : false), '改图元颜色')
@@ -321,6 +330,29 @@ const endText = (e: { node: string; port: string } | { bus: string; d: number })
             @change="setSize('h', $event)"
           />
         </label>
+        <label class="sld-insp-row" title="设备框的边框线宽(1–8),缺省 2">
+          <span>线宽{{ many(nodes.length) }}</span>
+          <input
+            type="number"
+            data-field="node-line-width"
+            :min="NODE_LINE_MIN"
+            :max="NODE_LINE_MAX"
+            step="1"
+            :value="nodes[0]?.lineWidth ?? NODE_LINE_DEFAULT"
+            :disabled="ctx.readonly.value"
+            @change="lineNodes({ width: Number(valueOf($event)) }, '改设备框线宽')"
+          />
+        </label>
+        <label class="sld-insp-row">
+          <span>虚线边框</span>
+          <input
+            type="checkbox"
+            data-field="node-dashed"
+            :checked="!!nodes[0]?.dashed"
+            :disabled="ctx.readonly.value"
+            @change="lineNodes({ dashed: checkedOf($event) }, '改设备框虚实')"
+          />
+        </label>
       </template>
       <label
         v-else
@@ -335,16 +367,15 @@ const endText = (e: { node: string; port: string } | { bus: string; d: number })
 
       <div class="sld-insp-row" title="自定义颜色盖过电压等级色;图元失电时照样变灰">
         <span>颜色{{ many(nodes.length) }}</span>
-        <input
-          type="color"
-          data-field="node-color"
-          :value="nodes[0]?.color ?? '#19b7ff'"
+        <ColorField
+          field="node-color"
+          :model-value="nodes[0]?.color"
+          placeholder="随带电着色"
           :disabled="ctx.readonly.value"
-          @change="colorNodes(valueOf($event))"
+          @change="colorNodes"
         />
-        <b v-if="!nodes[0]?.color" class="sld-insp-dim">随带电着色</b>
         <button
-          v-else
+          v-if="nodes[0]?.color"
           type="button"
           class="sld-insp-mini"
           :disabled="ctx.readonly.value"
@@ -441,16 +472,15 @@ const endText = (e: { node: string; port: string } | { bus: string; d: number })
       </label>
       <div class="sld-insp-row" title="自定义颜色盖过电压等级色;母线失电时照样变灰">
         <span>颜色{{ many(buses.length) }}</span>
-        <input
-          type="color"
-          data-field="bus-color"
-          :value="buses[0]?.color ?? '#19b7ff'"
+        <ColorField
+          field="bus-color"
+          :model-value="buses[0]?.color"
+          placeholder="按电压等级"
           :disabled="ctx.readonly.value"
-          @change="setBusColorInput(valueOf($event))"
+          @change="setBusColorInput"
         />
-        <b v-if="!buses[0]?.color" class="sld-insp-dim">按电压等级</b>
         <button
-          v-else
+          v-if="buses[0]?.color"
           type="button"
           class="sld-insp-mini"
           :disabled="ctx.readonly.value"
@@ -525,13 +555,12 @@ const endText = (e: { node: string; port: string } | { bus: string; d: number })
           <option value="c">C 相 · 红</option>
           <option value="custom">自定义…</option>
         </select>
-        <input
+        <ColorField
           v-if="labelColorMode === 'custom'"
-          type="color"
-          data-field="label-color-hex"
-          :value="labelFirst?.color"
+          field="label-color-hex"
+          :model-value="labelFirst?.color"
           :disabled="ctx.readonly.value"
-          @change="styleLabel({ color: valueOf($event) }, '改文字颜色')"
+          @change="styleLabel({ color: $event ?? '' }, '改文字颜色')"
         />
       </div>
       <div
@@ -599,16 +628,16 @@ const endText = (e: { node: string; port: string } | { bus: string; d: number })
       </label>
       <div class="sld-insp-row">
         <span>边框颜色{{ many(frames.length) }}</span>
-        <input
-          type="color"
-          data-field="frame-color"
-          :value="frameFirst?.color ?? '#5b7aa8'"
+        <ColorField
+          field="frame-color"
+          :model-value="frameFirst?.color"
+          fallback="#5b7aa8"
+          placeholder="随主题"
           :disabled="ctx.readonly.value"
-          @change="styleFrame({ color: valueOf($event) }, '改分组框边框颜色')"
+          @change="styleFrame({ color: $event ?? '' }, '改分组框边框颜色')"
         />
-        <b v-if="!frameFirst?.color" class="sld-insp-dim">随主题</b>
         <button
-          v-else
+          v-if="frameFirst?.color"
           type="button"
           class="sld-insp-mini"
           :disabled="ctx.readonly.value"

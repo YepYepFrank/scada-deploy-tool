@@ -14,6 +14,7 @@ import {
   portDirection,
   type SldNode,
   type SldSwitchState,
+  type SldSwitchStyle,
 } from '../../sld'
 import SldOnlineDot from './SldOnlineDot.vue'
 import type { SldAlarmLevel } from './format'
@@ -29,8 +30,18 @@ const props = withDefaults(
     alarm?: SldAlarmLevel | ''
     showName?: boolean
     clickable?: boolean
+    /** 开关画法(2026-09-23) */
+    switchStyle?: SldSwitchStyle
   }>(),
-  { state: 'closed', color: undefined, energyClass: '', alarm: '', showName: true, clickable: false }
+  {
+    state: 'closed',
+    color: undefined,
+    energyClass: '',
+    alarm: '',
+    showName: true,
+    clickable: false,
+    switchStyle: 'state',
+  }
 )
 
 const def = computed(() => getSldSymbol(props.node.symbol))
@@ -88,6 +99,9 @@ const namePos = computed(() => {
         :flip="node.flip"
         :scale="scale"
         :size="freeSize"
+        :line-width="node.lineWidth"
+        :dashed="!!node.dashed"
+        :switch-style="switchStyle"
       />
     </g>
     <!-- 在线灯不吃带电着色:设备离线和线路失电是两回事 -->

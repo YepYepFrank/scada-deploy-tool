@@ -20,7 +20,7 @@ export const deviceBoxSymbol: SldSymbolDefinition = {
   ],
   conduct: 'none',
   body: rect(0, 0, 80, 40),
-  freeBody: (w, h) => rect(0, 0, w, h),
+  freeBody: (w, h, style) => rect(0, 0, w, h, { width: style?.width, dashed: style?.dashed }),
   labelSlots: [
     { dx: 90, dy: 0 },
     { dx: 90, dy: 20 },

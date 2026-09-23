@@ -22,6 +22,7 @@ export const breakerSymbol: SldSymbolDefinition = {
     open: line(20, 40, 8, 22),
     unknown: line(20, 20, 20, 40, { dashed: true }),
   },
+  stateBlock: { body: line(20, 0, 20, 20) + line(20, 40, 20, 60), x: 12, y: 20, w: 16, h: 20 },
   labelSlots: [
     { dx: 50, dy: 20 },
     { dx: 50, dy: 40 },

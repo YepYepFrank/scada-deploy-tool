@@ -200,6 +200,43 @@ export function resizeNodeByBox(
   return true
 }
 
+/** 设备框边框线宽范围(2026-09-23);缺省 2 不落进 JSON */
+export const NODE_LINE_MIN = 1
+export const NODE_LINE_MAX = 8
+export const NODE_LINE_DEFAULT = 2
+
+/**
+ * 设备框这类图元的边框线宽 / 虚线(2026-09-23 现场反馈「设备框线条粗细无法修改,最好支持虚线」)。
+ * 只对 freeBody 图元生效(它们按参数重画,线宽不会被 scale 放大);其余图元跳过。
+ */
+export function setNodeLine(
+  doc: SldDoc,
+  ids: readonly string[],
+  patch: { width?: number; dashed?: boolean },
+  symbols: SldSymbolLookup
+): boolean {
+  if (patch.width !== undefined) {
+    const w = Math.round(patch.width)
+    if (!Number.isFinite(w) || w < NODE_LINE_MIN || w > NODE_LINE_MAX) return false
+  }
+  let changed = false
+  for (const n of pick(doc.nodes, ids)) {
+    if (!isFreeSizeSymbol(symbols(n.symbol))) continue
+    const before = JSON.stringify([n.lineWidth, n.dashed])
+    if (patch.width !== undefined) {
+      const w = Math.round(patch.width)
+      if (w === NODE_LINE_DEFAULT) delete n.lineWidth
+      else n.lineWidth = w
+    }
+    if (patch.dashed !== undefined) {
+      if (patch.dashed) n.dashed = true
+      else delete n.dashed
+    }
+    if (JSON.stringify([n.lineWidth, n.dashed]) !== before) changed = true
+  }
+  return changed
+}
+
 /** 这个图元能不能自由改宽高,以及宽高的步长(检视面板用) */
 export function freeSizeOf(
   doc: SldDoc,

@@ -24,9 +24,17 @@ export const sldWidget: WidgetDefinition = {
       staleSeconds: {
         type: 'integer',
         title: '数据过期(秒)',
-        description: '测点数据时间戳早于这么久:开关按「未知」画、数值变灰;0 为不判',
+        description: '数值测点的时间戳早于这么久就变灰;0 为不判。开关位置不看这个(只在变位时上报,值旧不代表异常)',
         default: 600,
         minimum: 0,
+      },
+      switchStyle: {
+        type: 'string',
+        title: '开关画法',
+        description: '状态色:合闸红色、分闸绿色、通信异常灰色(断路器画实心方块);国标图形:竖线合、斜线分,按带电着色',
+        enum: ['state', 'classic'],
+        enumNames: ['状态色(红合绿分)', '国标图形'],
+        default: 'state',
       },
       showNames: { type: 'boolean', title: '显示设备名称', default: true },
       energizeColoring: {
@@ -68,6 +76,7 @@ export const sldWidget: WidgetDefinition = {
   defaults: {
     doc: emptySldDoc(),
     staleSeconds: 600,
+    switchStyle: 'state',
     showNames: true,
     energizeColoring: true,
     interactive: true,

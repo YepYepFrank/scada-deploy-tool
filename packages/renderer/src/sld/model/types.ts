@@ -104,6 +104,10 @@ export interface SldNode {
    * 图元局部坐标(未旋转),必须是 `geometry.freeSizeStep()` 的整数倍——否则端口离开栅格,连线就对不齐。
    */
   size?: { w: number; h: number }
+  /** 边框线宽(2026-09-23,只对 `freeBody` 图元 / 设备框有效),缺省 2 */
+  lineWidth?: number
+  /** 虚线边框(2026-09-23,只对 `freeBody` 图元 / 设备框有效) */
+  dashed?: boolean
   /** 在线 / 离线状态灯;不配不画 */
   online?: SldOnlineRef
   /** 叠放层次,缺省 0;见 SldBus.z 的说明 */
@@ -274,6 +278,20 @@ export interface SldSymbolText {
   size?: number
 }
 
+/** 设备框这类图元重画时的线条样式(2026-09-23) */
+export interface SldFreeBodyStyle {
+  /** 线宽,缺省 2 */
+  width?: number
+  dashed?: boolean
+}
+
+/**
+ * 开关的画法(2026-09-23):
+ * - `state`(缺省):合闸红色、分闸绿色、通信异常灰色;断路器类画实心方块,刀闸类只给动触头上色;
+ * - `classic`:国标图形 + 带电着色(0.10.0 及以前的样子)。
+ */
+export type SldSwitchStyle = 'state' | 'classic'
+
 export interface SldSymbolDefinition {
   id: string
   name: string
@@ -292,7 +310,13 @@ export interface SldSymbolDefinition {
    * 而不是把 `body` 拉伸——拉伸会把线宽也拉扁(横 3 倍宽的框,竖边 6px、横边 2px)。
    * 端口坐标仍按 w / h 的比例缩放(边中点还是边中点),所以端口逻辑不用另写一套。
    */
-  freeBody?: (w: number, h: number) => string
+  freeBody?: (w: number, h: number, style?: SldFreeBodyStyle) => string
+  /**
+   * 开关的「状态色」画法(2026-09-23,现场要求合闸红色实心 / 分闸绿色实心 / 灰色 = 通信异常):
+   * 断路器类给了这个,状态色模式下改画 `body`(只剩引线等不动的部分)+ 一块实心方块 `block`,方块按状态上色;
+   * 没给的开关(隔离刀、接地刀)保持刀闸形状,只把动触头(stateBody)按状态上色。
+   */
+  stateBlock?: { body: string; x: number; y: number; w: number; h: number }
   texts?: SldSymbolText[]
   /** 随开关状态追加的片段(如刀闸的动触头);conduct = 'switch' 的图元必须三态齐全 */
   stateBody?: Record<SldSwitchState, string>

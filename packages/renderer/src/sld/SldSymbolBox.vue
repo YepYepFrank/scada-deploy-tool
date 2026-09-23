@@ -6,7 +6,7 @@
  * (模板里 <svg> 前面不要放注释:开发态注释也算一个根节点,组件就成了多根,class / style 透传会失效。)
  */
 import { computed } from 'vue'
-import type { SldRotation, SldSwitchState } from './model/types'
+import type { SldRotation, SldSwitchState, SldSwitchStyle } from './model/types'
 import { isFreeSizeSymbol } from './model/geometry'
 import { getSldSymbol } from './symbols/registry'
 import { unknownSldSymbol } from './symbols/placeholder'
@@ -20,8 +20,11 @@ const props = withDefaults(
     flip?: boolean
     /** 自由宽高(设备框,2026-09-22):viewBox 跟着变,盒子里的图形按实际宽高重画 */
     size?: { w: number; h: number }
+    lineWidth?: number
+    dashed?: boolean
+    switchStyle?: SldSwitchStyle
   }>(),
-  { state: 'open', rot: 0, flip: false, size: undefined }
+  { state: 'open', rot: 0, flip: false, size: undefined, lineWidth: undefined, dashed: false, switchStyle: 'classic' }
 )
 
 const viewBox = computed(() => {
@@ -43,6 +46,15 @@ const viewBox = computed(() => {
     preserveAspectRatio="xMidYMid meet"
     style="display: block; overflow: visible"
   >
-    <SldSymbol :symbol="symbol" :state="state" :rot="rot" :flip="flip" :size="size" />
+    <SldSymbol
+      :symbol="symbol"
+      :state="state"
+      :rot="rot"
+      :flip="flip"
+      :size="size"
+      :line-width="lineWidth"
+      :dashed="dashed"
+      :switch-style="switchStyle"
+    />
   </svg>
 </template>

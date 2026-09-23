@@ -8,6 +8,7 @@ import type { MetaNode } from '../../../meta/MetaNode'
 import { defaultPoints, pickSymbol, type DefaultPoints } from '../../device-defaults'
 import type { SldEditorContext } from '../../ext'
 import { dropEntity, findEntityByName } from './ops'
+import { snapNodesToBuses } from '../../doc-ops'
 
 export const ENTITY_DRAG_TYPE = 'application/x-grid-entity'
 
@@ -74,6 +75,8 @@ export async function placeEntity(
       kind => ctx.newId(kind),
       getSldSymbol
     )
+    // 设备树拖进来的同样吸到附近的母线上(2026-09-23)
+    if (id) snapNodesToBuses(d.doc, [id], getSldSymbol)
   }, `放置设备 ${data.name}`)
   if (!ok || !id) return undefined
   ctx.select({ nodes: [id] })

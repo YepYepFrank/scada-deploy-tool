@@ -294,7 +294,7 @@ describe('带电着色', () => {
 })
 
 describe('数据过期(按数据时间戳)', () => {
-  it('10 秒一跳的时钟:过期后数值变灰并挂「数据时间」,开关变 unknown;卸载清定时器', async () => {
+  it('10 秒一跳的时钟:过期后数值变灰并挂「数据时间」;开关位置不判过期(2026-09-23);卸载清定时器', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(T0)
     const { host, w } = mountSld({ doc: DOC, staleSeconds: 60, values: vals(1) })
@@ -306,7 +306,8 @@ describe('数据过期(按数据时间戳)', () => {
     const l1 = w.find('[data-id="l1"]')
     expect(l1.classes()).toContain('sr-sld-stale')
     expect(l1.find('title').text()).toMatch(/^数据时间 2026-09-18 /)
-    expect(stateOf(w, 'qf1')).toBe('unknown')
+    // 开关只在变位时上报,一周没变是常态:值旧照样按值画(现场 T2_CB=1 停在 09-15,以前被画成虚线)
+    expect(stateOf(w, 'qf1')).toBe('closed')
     host.unmount()
     expect(vi.getTimerCount()).toBe(0)
   })

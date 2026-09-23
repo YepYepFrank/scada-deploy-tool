@@ -41,16 +41,34 @@ const dirty = computed(() => !sameSldContent(saved.value, draft.value))
 /** 自打开以来有没有改过(「放弃修改」要不要二次确认看它——中途保存过的也算改过) */
 const changed = computed(() => !sameSldContent(props.initial, draft.value))
 const savedAt = ref('')
+/**
+ * 保存的反馈(2026-09-23 现场反馈「保存无反馈」):以前没改动时按钮是灰的、点了没反应,
+ * 保存后只有左边一行淡淡的小字。现在按钮一直能点,每次保存(手动或自动)按钮变「已保存 ✓」,
+ * 手动保存再在按钮下面冒一条提示,说清楚存到了哪里。
+ */
+const flash = ref<'' | 'saved' | 'uptodate'>('')
+let flashTimer: ReturnType<typeof setTimeout> | undefined
+function showFlash(kind: 'saved' | 'uptodate'): void {
+  flash.value = kind
+  clearTimeout(flashTimer)
+  flashTimer = setTimeout(() => (flash.value = ''), 3000)
+}
+const now = () => new Date().toLocaleTimeString('zh-CN', { hour12: false })
 
 /** 停手这么久就自动保存一次 */
 const AUTOSAVE_MS = 2000
 let timer: ReturnType<typeof setTimeout> | undefined
-function save(): void {
+/** manual:用户点「保存」/ Ctrl+S —— 没改动也给反馈;自动保存与卸载兜底不弹提示 */
+function save(manual = false): void {
   clearTimeout(timer)
-  if (!dirty.value) return
+  if (!dirty.value) {
+    if (manual) showFlash('uptodate')
+    return
+  }
   saved.value = draft.value
-  savedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  savedAt.value = now()
   emit('save', draft.value)
+  if (manual) showFlash('saved')
 }
 function onUpdate(next: SldEditorContent) {
   draft.value = next
@@ -71,7 +89,7 @@ function discard() {
 function onKeyDown(e: KeyboardEvent): void {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault()
-    save()
+    save(true)
   }
 }
 
@@ -100,14 +118,31 @@ defineExpose({ draft, dirty, changed, save })
       <header class="sldo-bar">
         <b>编辑一次接线图</b>
         <span v-if="title" class="sldo-dim">{{ title }}</span>
-        <span class="sldo-dim" data-role="sld-dirty">{{
-          dirty ? '有未保存的修改 · 停手 2 秒自动保存' : savedAt ? `已保存到页面 ${savedAt}` : '未修改'
-        }}</span>
+        <span
+          class="sldo-state"
+          :class="dirty ? 'sldo-state-dirty' : savedAt ? 'sldo-state-saved' : 'sldo-dim'"
+          data-role="sld-dirty"
+          >{{ dirty ? '● 有未保存的修改 · 停手 2 秒自动保存' : savedAt ? `✓ 已保存到页面 ${savedAt}` : '未修改' }}</span
+        >
         <span class="sldo-grow" />
         <button type="button" class="sldo-btn" data-role="sld-discard" @click="discard">放弃修改</button>
-        <button type="button" class="sldo-btn" data-role="sld-save" :disabled="!dirty" title="Ctrl+S" @click="save">
-          保存
-        </button>
+        <span class="sldo-save-wrap">
+          <button
+            type="button"
+            class="sldo-btn"
+            :class="{ 'sldo-btn-ok': flash }"
+            data-role="sld-save"
+            title="Ctrl+S"
+            @click="save(true)"
+          >
+            {{ flash ? '已保存 ✓' : '保存' }}
+          </button>
+          <span v-if="flash" class="sldo-toast" role="status" data-role="sld-save-toast">
+            <template v-if="flash === 'saved'">已保存到页面 {{ savedAt }}</template>
+            <template v-else>没有新的修改,页面里已是最新({{ savedAt || '打开时的内容' }})</template>
+            <small>要留到下次打开浏览器,记得在第 4 步底部点「保存草稿」;上大屏走第 5 步发布</small>
+          </span>
+        </span>
         <button type="button" class="sldo-btn sldo-primary" data-role="sld-done" @click="finish">完成</button>
       </header>
       <div class="sldo-body">
@@ -146,6 +181,44 @@ defineExpose({ draft, dirty, changed, save })
   opacity: 0.6;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.sldo-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sldo-state-dirty {
+  color: #ffcf6b;
+}
+.sldo-state-saved {
+  color: #2ff0bb;
+}
+.sldo-save-wrap {
+  position: relative;
+}
+.sldo-btn-ok {
+  border-color: #2ff0bb;
+  color: #2ff0bb;
+}
+/* 按钮下方的提示:条栏 overflow: hidden,所以 fixed 定位浮在画布上 */
+.sldo-toast {
+  position: fixed;
+  top: 44px;
+  right: 12px;
+  z-index: 1200;
+  display: grid;
+  gap: 2px;
+  max-width: 420px;
+  padding: 8px 12px;
+  border: 1px solid #2ff0bb;
+  border-radius: 6px;
+  background: rgba(6, 30, 40, 0.96);
+  color: #2ff0bb;
+  white-space: normal;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+.sldo-toast small {
+  color: #bcd4ee;
+  font-size: 12px;
 }
 .sldo-grow {
   flex: 1;

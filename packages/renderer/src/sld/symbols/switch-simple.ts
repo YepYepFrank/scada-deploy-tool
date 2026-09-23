@@ -22,6 +22,7 @@ export const switchSimpleSymbol: SldSymbolDefinition = {
     open: rect(4, 10, 12, 20),
     unknown: rect(4, 10, 12, 20, { dashed: true }),
   },
+  stateBlock: { body: line(10, 0, 10, 10) + line(10, 30, 10, 40), x: 4, y: 10, w: 12, h: 20 },
   labelSlots: [
     { dx: 30, dy: 10 },
     { dx: 30, dy: 30 },

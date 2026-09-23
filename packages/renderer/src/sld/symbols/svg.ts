@@ -17,6 +17,8 @@ function int(...nums: number[]): void {
 export interface SvgStrokeOptions {
   /** 虚线(unknown 态) */
   dashed?: boolean
+  /** 线宽(只有设备框这类可调线宽的图元用;缺省 2) */
+  width?: number
 }
 
 export function line(x1: number, y1: number, x2: number, y2: number, opts: SvgStrokeOptions = {}): string {
@@ -39,7 +41,14 @@ export function dot(cx: number, cy: number, r: number): string {
 /** 空心矩形 */
 export function rect(x: number, y: number, w: number, h: number, opts: SvgStrokeOptions = {}): string {
   int(x, y, w, h)
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" ${STROKE} fill="none"${opts.dashed ? DASH : ''}></rect>`
+  const stroke = opts.width && opts.width !== 2 ? `stroke="currentColor" stroke-width="${opts.width}"` : STROKE
+  // 线宽大了虚线段也跟着拉长,不然粗线上的 4-3 虚线看着像一串点
+  const dash = opts.dashed
+    ? opts.width && opts.width > 2
+      ? ` stroke-dasharray="${opts.width * 3} ${opts.width * 2}"`
+      : DASH
+    : ''
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" ${stroke} fill="none"${dash}></rect>`
 }
 
 /** 实心矩形(简化开关的合位) */
