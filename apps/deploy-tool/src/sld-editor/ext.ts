@@ -71,7 +71,7 @@ export interface SldEditorView {
 }
 
 /**
- * 宿主服务:绑定面板(T5.6)复用现有的 EntityTree / KeyPicker / BindingRow,它们要的东西由宿主给。
+ * 宿主服务:绑定面板(T5.6)复用现有的 EntityTree / BindingRow(含数据源面板),它们要的东西由宿主给。
  * - 第 4 步编辑器(T5.8)把自己手里的 tree / client / declared / keyCn 原样传进来;
  * - 独立开发入口(sld-editor.html)给 mock:一棵假设备树 + 返回固定 key 列表的假 MetaClient。
  * 任何一项缺省时,绑定面板要能降级(tree 为空 → 提示「未连接平台,无法选设备」),不许崩。

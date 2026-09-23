@@ -629,11 +629,6 @@ const previewTitle = computed(() =>
 
 // ---------- 全屏编辑(嵌入向导时:缩略图 → 点击全屏;Esc / 返回向导 退出) ----------
 const fullscreen = ref(false)
-/** 全屏时绑定行里的实体树加高(BindingRow 注入;2026-09-18) */
-provide(
-  'pickerTall',
-  computed(() => fullscreen.value)
-)
 /** 嵌入且未全屏:只画缩略图 + 一行状态,左右栏与工具栏都不显示 */
 const compact = computed(() => !!props.embedded && !fullscreen.value)
 /** 右栏 JSON 源码默认折起(高级功能,不和「当前槽位」抢空间) */

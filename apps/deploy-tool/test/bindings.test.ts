@@ -344,7 +344,7 @@ describe('BindingRow · 第 3 步声明的输出(还没发布)', () => {
 describe('BindingRow · ext(kz)', () => {
   const tree = bigSite()
   const spec = () => getWidget('line')!.bindingSlots[0]! // series:ts-history / ext / const
-  // KeyPicker 的面板是 Teleport 出去的,测试里拉回本地才找得到
+  // 数据源面板是 Teleport 出去的,测试里拉回本地才找得到
   const mountExt = (modelValue: unknown) =>
     mount(BindingRow, {
       props: { spec: spec(), modelValue: modelValue as Binding, tree, client: fakeClient() },

@@ -582,21 +582,10 @@ function addLabel(): void {
 .sld-bd .br {
   grid-template-columns: minmax(0, 1fr);
 }
-.sld-bd .br .kp {
-  min-width: 0;
-}
-/* 复用的 BindingRow / KeyPicker 在窄面板里:长设备名 / 测点名截断,不把面板撑出横向滚动 */
-.sld-bd .br-entity,
-.sld-bd .kp-btn {
+/* 复用的 BindingRow 在窄面板里:数据源格子里的长设备名 / 测点名截断,不把面板撑出横向滚动 */
+.sld-bd .br-src {
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.sld-bd .kp-sel {
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .sld-bd-sec {
   display: grid;

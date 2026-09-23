@@ -234,9 +234,8 @@ textarea:focus {
   color: rgba(255, 255, 255, 0.75);
 }
 
-/* ── 弹窗 / 下拉面板(element-theme 弹层同款) ────────── */
-.modal,
-.kp-panel {
+/* ── 弹窗(element-theme 弹层同款) ────────── */
+.modal {
   border: 1px solid rgba(83, 196, 255, 0.34);
   background: linear-gradient(180deg, rgba(8, 39, 92, 0.96), rgba(3, 17, 45, 0.98));
   box-shadow:
@@ -795,17 +794,6 @@ html {
 }
 .step-btn:active {
   transform: translateY(0) scale(0.97);
-}
-.kp-item {
-  transition:
-    background 0.15s,
-    padding-left 0.15s;
-}
-.kp-item:hover {
-  padding-left: 32px;
-}
-.kp-item.top:hover {
-  padding-left: 14px;
 }
 .tpl-card {
   position: relative;

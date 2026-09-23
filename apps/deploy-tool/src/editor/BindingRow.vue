@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 一条绑定的编辑(T3.4):mode(受槽位 modes 限制)→ 实体(元数据树)→ key(KeyPicker,含 calc_ 结果 key)→ 附加参数。
+ * 一条绑定的编辑(T3.4):mode(受槽位 modes 限制)→ 实体 + key(数据源面板,含 calc_ 结果 key)→ 附加参数。
  *   ts:entity + key · attr:entity + scope + key · ts-history:entity + keys[] + window + agg
  *   alarm:entity + types[](可空 = 全部)· const:值(JSON 或文本)
  *   ext(kz):查询类型二选一 —— 归档历史(实体 + 测点 + 聚合)/ 收益趋势(站点 + 指标),都从元数据树点选,不再手写 JSON;
@@ -773,23 +773,6 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
   flex: 1;
   min-width: 0;
 }
-.br-entity {
-  flex: 1;
-  text-align: left;
-  background: var(--ed-bg-1, #0b1a33);
-  border: 1px solid var(--ed-line, rgba(83, 196, 255, 0.2));
-  border-radius: 6px;
-  padding: 4px 8px;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-.br-entity.empty {
-  color: #ffd27a;
-}
-.br-tree {
-  padding: 4px 0;
-}
 .br-mini {
   background: none;
   border: 1px dashed var(--ed-line, rgba(83, 196, 255, 0.3));
@@ -798,10 +781,6 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
   color: inherit;
   cursor: pointer;
   font: inherit;
-}
-.br .kp {
-  flex: 1;
-  min-width: 160px;
 }
 .br-types {
   display: flex;

@@ -7,7 +7,7 @@
  * - 两个出口:「完成」(或接线图编辑器自己的「关闭」)→ emit `done` 交回最终内容,由 EditorApp 一次性 commit;
  *   「放弃修改」→ 有改动时二次确认,emit `cancel`;
  * - 有改动时拦住浏览器刷新 / 关页(beforeunload;EditorApp 本身没有离开保护,这里只在覆盖层打开且有改动时挂)。
- * 层级 1100:盖过页面编辑器的全屏层(1000),低于 KeyPicker 浮层(1200)——接线图的绑定面板里也会弹 KeyPicker。
+ * 层级 1100:盖过页面编辑器的全屏层(1000),低于数据源面板(2000)——接线图的绑定面板里也会弹它。
  */
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import type { SldEditorContent, SldEditorHost } from '../sld-editor/ext'

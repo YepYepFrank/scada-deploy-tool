@@ -80,7 +80,7 @@ export interface KeyOption {
   kind?: string
 }
 
-/** 四则运算的「常数」项(与原 KeyPicker 的 topItems 同值) */
+/** 四则运算的「常数」项(值与旧配置里的常数项一致) */
 export const CONST_VALUE = '__const__'
 
 export const ORPHAN_GROUP_ID = 'group:direct'
