@@ -31,7 +31,13 @@ import {
 import type { EntityRef } from '@grid/tb-client'
 import type { MetaNode } from '../../../meta/MetaNode'
 import { addNode } from '../../doc-ops'
-import { DEFAULT_STATE_MAP, type DefaultPoints, type SldStateMap } from '../../device-defaults'
+import {
+  DEFAULT_STATE_MAP,
+  STATE_KEY_RULES,
+  VALUE_RULES,
+  type DefaultPoints,
+  type SldStateMap,
+} from '../../device-defaults'
 import type { SldEditorContent } from '../../ext'
 
 export type SldValueLabel = Extract<SldLabel, { kind: 'value' }>
@@ -528,4 +534,118 @@ export function dropEntity(
     })
   }
   return node.id
+}
+
+/* ───────────── 快速绑定(2026-09-23) ───────────── */
+
+/**
+ * 内测反馈「绑定太繁琐,每次都要站点 → 设备 → 测点;能否默认用上一次的设备并展开测点」:
+ * 绑定面板把设备的测点直接列出来,点一行就绑上(实时遥测)。这里是点了之后对草稿做的事——
+ * 除了写绑定,还顺手把能推出来的补上:节点没指定设备就写上这台;状态值映射、数值标签的前缀 / 单位 / 小数位 / 相色按 key 的常见命名带出。
+ * 「顺手补的」只填空着的、或者还是上一个 key 自动带出来的值——工程人员自己改过的不动。
+ */
+export interface QuickDevice {
+  type: EntityRef['type']
+  id: string
+  name: string
+}
+
+export const quickBinding = (d: QuickDevice, key: string): Binding => ({
+  mode: 'ts',
+  entity: { type: d.type, id: d.id, name: d.name },
+  key,
+})
+
+/** 绑定里的 key(只认 ts / attr 的固定 key) */
+const keyOfBinding = (b: Binding | undefined): string | undefined => {
+  const k = b && 'key' in b ? (b as { key?: unknown }).key : undefined
+  return typeof k === 'string' && k ? k : undefined
+}
+
+/** 状态测点 key → 值映射:认得的命名按规则(「分闸位置」是 1 = 分),其余 1 合 / 0 分 */
+export function stateMapForKey(key: string | undefined): SldStateMap {
+  const rule = key ? STATE_KEY_RULES.find(r => r.pattern.test(key)) : undefined
+  return { ...(rule?.map ?? DEFAULT_STATE_MAP) }
+}
+
+export interface LabelDefaults {
+  title?: string
+  unit?: string
+  digits?: number
+  color?: SldLabelColor
+}
+
+/** 数值 key → 标签的前缀 / 单位 / 小数位 / 相色(按 VALUE_RULES;认不出返回空对象) */
+export function labelDefaultsForKey(key: string | undefined): LabelDefaults {
+  if (!key) return {}
+  for (const rule of VALUE_RULES)
+    for (const item of rule.items)
+      if (item.pattern.test(key))
+        return {
+          title: item.title,
+          ...(rule.unit !== undefined ? { unit: rule.unit } : {}),
+          ...(rule.digits !== undefined ? { digits: rule.digits } : {}),
+          ...(item.color !== undefined ? { color: item.color } : {}),
+        }
+  return {}
+}
+
+/** 节点没指定设备时写上(节点的设备管告警闪烁、在线灯、点击跳转) */
+function adoptEntity(n: SldNode | undefined, d: QuickDevice): void {
+  if (n && !n.entity) n.entity = { type: d.type, name: d.name }
+}
+
+/** 点一行测点 → 开关状态绑上它 */
+export function quickBindState(
+  draft: SldEditorContent,
+  nodeId: string,
+  device: QuickDevice,
+  key: string,
+  newPointId: () => string
+): void | false {
+  const n = findNode(draft.doc, nodeId)
+  if (!n || !key || !device.id) return false
+  const prevKey = n.state ? keyOfBinding(draft.bindings[sldPointSlot(n.state.pt)]) : undefined
+  adoptEntity(n, device)
+  setStateBinding(draft, nodeId, quickBinding(device, key), newPointId)
+  // 值映射还是自动带出来的样子才跟着换(自己改过 / 取反过的不动)
+  if (n.state && JSON.stringify(n.state.map) === JSON.stringify(stateMapForKey(prevKey)))
+    n.state.map = stateMapForKey(key)
+}
+
+/** 点一行测点 → 数值标签绑上它 */
+export function quickBindLabel(
+  draft: SldEditorContent,
+  labelId: string,
+  device: QuickDevice,
+  key: string,
+  newPointId: () => string
+): void | false {
+  const l = findValueLabel(draft.doc, labelId)
+  if (!l || !key || !device.id) return false
+  const before = labelDefaultsForKey(keyOfBinding(draft.bindings[sldPointSlot(l.pt)]))
+  const after = labelDefaultsForKey(key)
+  writeBinding(draft, l, quickBinding(device, key), newPointId)
+  if (l.attach) adoptEntity(findNode(draft.doc, l.attach), device)
+  // 空着的、或还是上一个 key 带出来的,换成这个 key 的;没有对应值就清掉
+  const auto = <T>(cur: T | undefined, prev: T | undefined): boolean => cur === undefined || cur === '' || cur === prev
+  if (auto(l.title, before.title)) {
+    if (after.title) l.title = after.title
+    else delete l.title
+  }
+  if (auto(l.color, before.color)) {
+    if (after.color) l.color = after.color
+    else delete l.color
+  }
+  const format: SldValueFormat = { ...(l.format ?? {}) }
+  if (auto(format.unit, before.unit)) {
+    if (after.unit !== undefined) format.unit = after.unit
+    else delete format.unit
+  }
+  if (auto(format.digits, before.digits)) {
+    if (after.digits !== undefined) format.digits = after.digits
+    else delete format.digits
+  }
+  if (Object.keys(format).length) l.format = format
+  else delete l.format
 }

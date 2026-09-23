@@ -6,9 +6,11 @@
  * - 选中一个节点:设备、开关状态(测点 + 值映射)、依附的数值标签;
  * - 选中一个数值标签:单条编辑。
  * host.tree 为空时顶部提示「未连接平台」,映射表与格式照样能改;只读时整个面板禁用(fieldset disabled)。
+ * 快速绑定(2026-09-23):没绑的测点直接展开这台设备的测点列表(QuickPointPicker),点一行就绑上,绑完自动轮到下一个;
+ * 设备缺省 = 节点的设备,没有就沿用上一台(最近用过的设备,按站点记在本机)。原来的 BindingRow 收在「其他方式」里。
  */
-import { computed, inject, ref } from 'vue'
-import { collectPointRefs, getSldSymbol, type Binding, type BindingSlotSpec } from '@grid/scada-renderer'
+import { computed, inject, provide, ref, watch } from 'vue'
+import { collectPointRefs, getSldSymbol, isContextRef, type Binding, type BindingSlotSpec } from '@grid/scada-renderer'
 import type { EntityRef } from '@grid/tb-client'
 import BindingRow from '../../../editor/BindingRow.vue'
 import EntityTree from '../../../editor/EntityTree.vue'
@@ -17,6 +19,9 @@ import { DEFAULT_STATE_MAP, type SldStateMap } from '../../device-defaults'
 import { SLD_EDITOR_CTX } from '../../ext'
 import { ENTITY_DRAG_TYPE, centerSpot, dragDataOf, placeEntity } from './drop'
 import MapEditor from './MapEditor.vue'
+import QuickPointPicker from './QuickPointPicker.vue'
+import { QUICK_BIND, openSlotOf, type QuickBindState } from './quick'
+import { recentDevices, rememberDevice } from './recent'
 import {
   addValueLabel,
   attachedValueLabels,
@@ -28,6 +33,7 @@ import {
   hydrateBinding,
   invertStateMap,
   isPointBound,
+  quickBindState,
   selectionOfRef,
   setNodeEntity,
   setNodeOnline,
@@ -38,6 +44,7 @@ import {
   setStateMap,
   unboundRefs,
   withDefaultEntity,
+  type QuickDevice,
 } from './ops'
 import ValueLabelEditor from './ValueLabelEditor.vue'
 
@@ -66,12 +73,67 @@ const soloLabelEntity = computed(() => {
   return at ? doc.value.nodes.find(n => n.id === at)?.entity : undefined
 })
 
+/* ───────────── 快速绑定:当前设备 / 最近设备 / 展开哪个列表 ───────────── */
+
+const site = ctx.host.siteName
+const recent = recentDevices(site)
+/** 绑定里带 id 的实体记进最近设备(BindingRow 里手动选的也算) */
+function rememberFrom(b: Binding | null): void {
+  const e = b && 'entity' in b ? b.entity : undefined
+  if (e && !isContextRef(e)) rememberDevice(site, e)
+}
+/** 节点(或独立数值标签依附的节点)的设备,回设备树补上 id */
+const hostDevice = computed<QuickDevice | null>(() => {
+  const e = node.value?.entity ?? soloLabelEntity.value
+  const hit = e ? findEntityByName(tree.value, e.type, e.name) : undefined
+  return e && hit?.id ? { type: hit.type, id: hit.id, name: hit.name || e.name } : null
+})
+const deviceOverride = ref<QuickDevice | null>(null)
+const explicitOpen = ref<string | null | undefined>(undefined)
+// 换了选中对象:设备回到缺省、列表回到「自动展开第一个没绑的」
+watch(
+  () => JSON.stringify(target.value),
+  () => {
+    deviceOverride.value = null
+    explicitOpen.value = undefined
+  }
+)
+const quickDevice = computed(() => deviceOverride.value ?? hostDevice.value ?? recent.value[0] ?? null)
+const labelBound = (pt: string): boolean => isPointBound(bindingOf(content.value, pt))
+/** 还没绑的测点,按面板上从上到下的顺序 */
+const unboundSlots = computed<string[]>(() => {
+  const solo = soloLabel.value
+  if (solo?.kind === 'value') return labelBound(solo.pt) ? [] : [`label:${solo.id}`]
+  if (!node.value) return []
+  const out: string[] = []
+  if (hasStateBody.value && !stateBound.value) out.push('state')
+  for (const l of labels.value) if (!labelBound(l.pt)) out.push(`label:${l.id}`)
+  return out
+})
+const quick: QuickBindState = {
+  device: quickDevice,
+  recent,
+  isOpen: slot => openSlotOf(explicitOpen.value, unboundSlots.value) === slot,
+  toggle: slot => {
+    explicitOpen.value = quick.isOpen(slot) ? null : slot
+  },
+  useDevice: d => {
+    deviceOverride.value = d
+    rememberDevice(site, d)
+  },
+  picked: () => {
+    explicitOpen.value = undefined
+  },
+}
+provide(QUICK_BIND, quick)
+
 /* ───────────── 设备树(拖进画布) ───────────── */
 
 const treeOpen = ref(false)
 const picked = ref<MetaNode>()
-function pickForDrag(_e: EntityRef, n: MetaNode): void {
+function pickForDrag(e: EntityRef, n: MetaNode): void {
   picked.value = n
+  rememberDevice(site, { type: e.type, id: e.id, name: e.name || n.name })
 }
 function onDragStart(e: DragEvent): void {
   const data = picked.value && dragDataOf(picked.value)
@@ -115,6 +177,17 @@ function pickEntity(e: EntityRef, n: MetaNode): void {
   const id = node.value?.id
   const name = e.name || n.name
   if (id && name) ctx!.apply(d => setNodeEntity(d, id, { type: e.type, name }), '选择设备')
+  if (name) rememberDevice(site, { type: e.type, id: e.id, name })
+  deviceOverride.value = null
+}
+/** 节点没设备时一键沿用上一台 */
+function useRecentEntity(): void {
+  const id = node.value?.id
+  const last = recent.value[0]
+  if (!id || !last) return
+  ctx!.apply(d => setNodeEntity(d, id, { type: last.type, name: last.name }), '沿用上一台设备')
+  rememberDevice(site, last)
+  deviceOverride.value = null
 }
 function clearEntity(): void {
   const id = node.value?.id
@@ -143,7 +216,27 @@ function setStatePoint(b: Binding | null): void {
   if (!n) return
   const next = withDefaultEntity(b, n.entity, tree.value)
   ctx!.apply(d => setStateBinding(d, n.id, next, () => ctx!.newId('p')), '改状态测点')
+  rememberFrom(next)
 }
+/** 测点列表里点了一行 */
+function quickState(d: QuickDevice, key: string): void {
+  const n = node.value
+  if (!n) return
+  if (ctx!.apply(draft => quickBindState(draft, n.id, d, key, () => ctx!.newId('p')), '绑定开关状态')) {
+    rememberDevice(site, d)
+    quick.picked()
+  }
+}
+const stateKey = computed(() => {
+  const b = stateBinding.value
+  return b && 'key' in b && typeof b.key === 'string' ? b.key : undefined
+})
+const stateDevice = computed(() => {
+  const b = stateBinding.value
+  return b && 'entity' in b && b.entity && !isContextRef(b.entity) ? b.entity.name : undefined
+})
+/** 「其他方式」:属性 / 常量 / 手动选,即原来的 BindingRow */
+const stateManual = ref(false)
 function setMap(map: Record<string, string>): void {
   const id = node.value?.id
   if (id) ctx!.apply(d => setStateMap(d, id, map as SldStateMap), '改状态映射')
@@ -180,6 +273,7 @@ function setOnlinePoint(b: Binding | null): void {
   if (!n) return
   const next = withDefaultEntity(b, n.entity, tree.value)
   ctx!.apply(d => setOnlineBinding(d, n.id, next, () => ctx!.newId('p')), '改在线状态测点')
+  rememberFrom(next)
 }
 function setCorner(e: Event): void {
   const id = node.value?.id
@@ -265,6 +359,16 @@ function addLabel(): void {
           <span v-else class="sld-bd-hint">未指定</span>
           <span class="sld-bd-grow" />
           <button
+            v-if="!node.entity && recent[0]"
+            type="button"
+            class="sld-bd-mini"
+            data-role="use-recent-entity"
+            :title="'沿用上一台:' + recent[0].name"
+            @click="useRecentEntity"
+          >
+            沿用上一台
+          </button>
+          <button
             type="button"
             class="sld-bd-mini"
             data-role="pick-entity"
@@ -292,7 +396,29 @@ function addLabel(): void {
           <i v-if="node.state && !stateBound" class="sld-bd-dot" title="未绑定" />
           <code v-if="node.state">pt.{{ node.state.pt }}</code>
         </h4>
+        <QuickPointPicker
+          v-if="quick.isOpen('state')"
+          :bound-key="stateKey"
+          :bound-device="stateDevice"
+          @pick="quickState"
+        />
+        <div class="sld-bd-row">
+          <button type="button" class="sld-bd-link" data-role="qp-toggle" @click="quick.toggle('state')">
+            {{ quick.isOpen('state') ? '收起测点列表' : stateBound ? '换测点' : '展开测点列表' }}
+          </button>
+          <span class="sld-bd-grow" />
+          <button
+            v-if="!stateBound"
+            type="button"
+            class="sld-bd-link"
+            data-role="manual-toggle"
+            @click="stateManual = !stateManual"
+          >
+            {{ stateManual ? '收起' : '其他方式(属性 / 常量)' }}
+          </button>
+        </div>
         <BindingRow
+          v-if="stateBound || stateManual"
           :key="node.id"
           :spec="stateSpec"
           :model-value="stateBinding"

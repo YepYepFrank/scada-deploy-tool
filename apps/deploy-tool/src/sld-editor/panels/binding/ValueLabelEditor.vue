@@ -2,19 +2,28 @@
 /**
  * 一个数值标签的编辑:测点(复用 BindingRow)、前缀、digits / unit / scale、颜色、枚举文字。
  * 每个字段在 change 时经 ctx.apply 提交,一次一步撤销。
+ * 快速绑定(2026-09-23):没绑时直接展开测点列表(绑定面板 provide 的 QUICK_BIND),点一行就绑上,
+ * 前缀 / 单位 / 小数位 / 相色按 key 的常见命名带出;原来的 BindingRow 收在「其他方式」里。
  */
 import { computed, inject, ref } from 'vue'
 import type { Binding, BindingSlotSpec, SldEntityName } from '@grid/scada-renderer'
 import BindingRow from '../../../editor/BindingRow.vue'
 import { SLD_EDITOR_CTX } from '../../ext'
+import { isContextRef } from '@grid/scada-renderer'
 import MapEditor from './MapEditor.vue'
+import QuickPointPicker from './QuickPointPicker.vue'
+import { QUICK_BIND } from './quick'
+import { rememberDevice } from './recent'
 import {
   bindingOf,
   hydrateBinding,
+  isPointBound,
+  quickBindLabel,
   removeValueLabel,
   setLabelBinding,
   updateValueLabel,
   withDefaultEntity,
+  type QuickDevice,
   type SldValueLabel,
   type ValueLabelPatch,
 } from './ops'
@@ -64,6 +73,28 @@ function patch(p: ValueLabelPatch, what: string): void {
 function setBinding(b: Binding | null): void {
   const next = withDefaultEntity(b, props.defaultEntity, tree.value)
   ctx.apply(d => setLabelBinding(d, props.labelId, next, () => ctx.newId('p')), '改标签测点')
+  const e = next && 'entity' in next ? next.entity : undefined
+  if (e && !isContextRef(e)) rememberDevice(ctx.host.siteName, e)
+}
+
+/* ───── 快速绑定 ───── */
+const quick = inject(QUICK_BIND, null)
+const slot = computed(() => `label:${props.labelId}`)
+const bound = computed(() => isPointBound(binding.value))
+const boundKey = computed(() => {
+  const b = binding.value
+  return b && 'key' in b && typeof b.key === 'string' ? b.key : undefined
+})
+const boundDevice = computed(() => {
+  const b = binding.value
+  return b && 'entity' in b && b.entity && !isContextRef(b.entity) ? b.entity.name : undefined
+})
+const manual = ref(false)
+function quickPick(d: QuickDevice, key: string): void {
+  if (ctx.apply(draft => quickBindLabel(draft, props.labelId, d, key, () => ctx.newId('p')), '绑定数值标签')) {
+    rememberDevice(ctx.host.siteName, d)
+    quick?.picked()
+  }
 }
 function setColor(kind: string): void {
   patch({ color: kind === 'custom' ? customColor.value : kind || null }, '改标签颜色')
@@ -83,7 +114,20 @@ function remove(): void {
       <span class="sld-bd-grow" />
       <button type="button" class="sld-bd-mini sld-bd-danger" data-role="label-remove" @click="remove">删除</button>
     </div>
+    <template v-if="quick">
+      <QuickPointPicker v-if="quick.isOpen(slot)" :bound-key="boundKey" :bound-device="boundDevice" @pick="quickPick" />
+      <div class="sld-bd-row">
+        <button type="button" class="sld-bd-link" data-role="qp-toggle" @click="quick.toggle(slot)">
+          {{ quick.isOpen(slot) ? '收起测点列表' : bound ? '换测点' : '展开测点列表' }}
+        </button>
+        <span class="sld-bd-grow" />
+        <button v-if="!bound" type="button" class="sld-bd-link" data-role="manual-toggle" @click="manual = !manual">
+          {{ manual ? '收起' : '其他方式(属性 / 常量)' }}
+        </button>
+      </div>
+    </template>
     <BindingRow
+      v-if="!quick || bound || manual"
       :spec="spec"
       :model-value="binding"
       :tree="tree"
