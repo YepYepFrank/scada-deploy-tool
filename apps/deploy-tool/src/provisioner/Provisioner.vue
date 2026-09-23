@@ -40,7 +40,10 @@ import {
   wireRootChain,
   unwireRootChain,
 } from './publisher.js'
-import KeyPicker from '../components/KeyPicker.vue'
+import DataSourceDrawer from './DataSourceDrawer.vue'
+import SourceField from './SourceField.vue'
+import { CONST_VALUE, buildSourceGroups, splitPointValue } from './source-picker'
+import { recentDevices, rememberDevice } from '../sld-editor/panels/binding/recent'
 import { assignSiteCustomer, custOf, devicesOutside, listCustomers } from './siteCustomer'
 import {
   LS_ENVS,
@@ -858,11 +861,6 @@ const deviceGroups = computed(() => {
   arr.sort((a, b) => a.name.localeCompare(b.name))
   return arr
 })
-const claimedKeys = computed(() =>
-  claimedDevices.value.flatMap(d =>
-    d.keys.filter(k => k.claimed).map(k => ({ device: d.name, key: k.key, label: k.label || k.key, cn: keyCn(k) }))
-  )
-)
 
 /* ── computations ───────────────────────────────────────── */
 const computations = ref([])
@@ -911,24 +909,6 @@ async function claimGroup(g, v) {
 
 /* 第 3 步 方式一/方式二 折叠(默认折叠,组头带摘要) */
 const wayOpen = reactive({ w1: false, w2: false })
-
-/*
- * 第 3 步运算弹窗:测点选择器分组(KeyPicker 组件内置过滤与按设备折叠)。
- * 来源是第 2 步「认领」的测点——没认领就一个都选不到,这是设计如此。
- * 原来这里经由一个 claimedKeyGroups 中间量,而它在 de6b7d9(T3.7 删旧组态编辑器)被连带删掉、
- * 引用却留着,导致第 3 步下拉从 2026-09-06 起一直是空的。现在直接用 claimedKeys,不再留中间量。
- */
-const keyPickerGroups = computed(() => {
-  const by = new Map()
-  for (const k of claimedKeys.value) {
-    if (!by.has(k.device)) by.set(k.device, [])
-    by.get(k.device).push(k)
-  }
-  return [...by.entries()].map(([device, items]) => ({
-    label: dn(device),
-    items: items.map(k => ({ value: `${device}||${k.key}`, label: dual(k.cn, k.key) })),
-  }))
-})
 
 /* ── 设备模板(tbsite/v2 批量配置)───────────────────────── */
 const deviceTemplates = ref([]) // { name, selector: {profiles:[], prefixes:[]}, items: [] }
@@ -1278,7 +1258,7 @@ const tplKeyOptions = computed(() => {
   for (const d of matched) for (const k of d.keys.filter(k => k.claimed)) cover.set(k.key, (cover.get(k.key) || 0) + 1)
   return [...cover.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([key, n]) => ({ key, label: `${kd(key)} · ${n}/${matched.length} 台` }))
+    .map(([key, n]) => ({ key, label: `${kd(key)} · ${n}/${matched.length} 台`, cover: `${n}/${matched.length} 台` }))
 })
 
 // 设备模板里个别设备单独设的级别(severityByDevice),卡片上列前 3 台
@@ -1365,7 +1345,7 @@ const aggKeyOptions = computed(() => {
   for (const d of matched) for (const k of d.keys.filter(k => k.claimed)) cover.set(k.key, (cover.get(k.key) || 0) + 1)
   return [...cover.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([key, n]) => ({ key, label: `${kd(key)} · ${n}/${matched.length} 台` }))
+    .map(([key, n]) => ({ key, label: `${kd(key)} · ${n}/${matched.length} 台`, cover: `${n}/${matched.length} 台` }))
 })
 
 /* ── 自定义四则运算 ── */
@@ -1906,6 +1886,139 @@ async function writeResultAssets() {
   metaRev.value++
   const n = r.created.length + r.existing.length
   return n ? `平台上结果资产已就绪 ${n} 个(新建 ${r.created.length})` : ''
+}
+
+/* ── 数据源面板(2026-09-23 YY:下拉太难用,点格子后右侧弹面板点选;站 → 网关 → 设备 → 测点)──
+   面板只负责「挑」,值的格式与原来的下拉一模一样:测点 = 「设备||测点」,模板 / 汇聚 = 测点 key,设备 = 设备名 */
+const srcPanel = reactive({
+  open: false,
+  id: '',
+  mode: 'point',
+  title: '',
+  value: '',
+  allowConst: false,
+  keys: [],
+  keyScope: '',
+  only: null,
+  note: null,
+  ctxDevice: '',
+  emptyText: '',
+  onPick: null,
+})
+const srcGroups = computed(() =>
+  srcPanel.open && srcPanel.mode !== 'key'
+    ? buildSourceGroups(devices.value, {
+        keyCn,
+        dual,
+        dict: keyDict.value,
+        only: srcPanel.only ?? undefined,
+        note: srcPanel.note ?? undefined,
+      })
+    : []
+)
+const srcRecent = computed(() => recentDevices(site.name).value.map(d => d.name))
+function openSource(id, opts) {
+  Object.assign(srcPanel, {
+    mode: 'point',
+    value: '',
+    allowConst: false,
+    keys: [],
+    keyScope: '',
+    only: null,
+    note: null,
+    ctxDevice: '',
+    emptyText: '',
+    onPick: null,
+    ...opts,
+    id,
+    open: true,
+  })
+}
+const srcActive = id => srcPanel.open && srcPanel.id === id
+function onSourcePick(v) {
+  const fn = srcPanel.onPick
+  const mode = srcPanel.mode
+  srcPanel.open = false
+  fn?.(v)
+  // 选过的设备记进「最近用过」(与接线图绑定面板共用,按站点记在本机)
+  const name = mode === 'device' ? v : splitPointValue(v)?.device
+  const d = name ? devByName.value.get(name) : undefined
+  if (d?.tbId) rememberDevice(site.name, { type: 'DEVICE', id: d.tbId, name: d.name })
+}
+watch(
+  () => modal.open || presetOne.open,
+  o => {
+    if (!o) srcPanel.open = false
+  }
+)
+/** 格子上显示的文字 */
+function pointText(v) {
+  if (!v) return ''
+  if (v === CONST_VALUE) return '【常数】'
+  const p = splitPointValue(v)
+  if (!p) return kd(v)
+  const k = devByName.value.get(p.device)?.keys.find(x => x.key === p.key)
+  return `${dn(p.device)} · ${k ? dual(keyCn(k), p.key) : kd(p.key)}`
+}
+/** 只有 key 的测点(设备模板 / 汇聚):中文名取任一台认领设备上的(第 2 步人工填的优先),都没有再按字典 / 派生 */
+function keyText(key) {
+  if (!key) return ''
+  for (const d of claimedDevices.value) {
+    const k = d.keys.find(x => x.key === key && x.claimed)
+    if (k) return dual(keyCn(k), key)
+  }
+  return kd(key)
+}
+const keyOptionsOf = opts => opts.map(k => ({ key: k.key, text: keyText(k.key), note: k.cover }))
+const tplScope = () => {
+  const t = deviceTemplates.value[modal.target]
+  return t ? `设备模板「${t.name}」匹配的 ${tplMatched(t).length} 台设备里的同名测点` : ''
+}
+/** 周期统计换设备:统计测点只留新设备也有的,单测点(差值 / 积分)不是这台的清掉 */
+function setRollupDevice(name) {
+  modal.form.device = name
+  const have = new Set(modalDeviceKeys.value.map(k => k.key))
+  if (Array.isArray(modal.form.keys)) modal.form.keys = modal.form.keys.filter(k => have.has(k))
+  const p = splitPointValue(modal.form.key)
+  if (p && p.device !== name) modal.form.key = ''
+}
+/** 单设备模式下「测点」格子:列全部认领设备,选到别的设备上的测点就连设备一起换 */
+function openKeyField(id, label, get, set, extra = {}) {
+  if (modal.target !== null)
+    return openSource(id, {
+      mode: 'key',
+      title: `为「${label}」选择测点`,
+      value: get(),
+      keys: keyOptionsOf(tplKeyOptions.value),
+      keyScope: tplScope(),
+      onPick: set,
+    })
+  openSource(id, { title: `为「${label}」选择测点`, value: get(), onPick: set, ...extra })
+}
+function openTermField(i) {
+  const t = modal.form.terms[i]
+  const near = [...modal.form.terms.slice(0, i).reverse(), ...modal.form.terms.slice(i + 1)]
+  const ctx = near.map(x => splitPointValue(x.src)?.device).find(Boolean) ?? ''
+  openSource(`term-${i}`, {
+    title: `为第 ${i + 1} 项选择数据源`,
+    value: t.src,
+    allowConst: true,
+    ctxDevice: ctx,
+    onPick: v => (t.src = v),
+  })
+}
+function openPresetDevice() {
+  const p = presetOne.preset
+  const n = new Map(presetOneDevices.value.map(x => [x.d.name, x.n]))
+  openSource('preset-device', {
+    mode: 'device',
+    title: `「${p?.name ?? ''}」用到哪台设备`,
+    value: presetOne.device,
+    only: new Set(n.keys()),
+    note: name => `可用 ${n.get(name) ?? 0}/${p?.items.length ?? 0} 项`,
+    emptyText: '已认领的设备里没有具备这个方案所需测点的,请先在第 2 步认领',
+    onPick: v => (presetOne.device = v),
+  })
 }
 
 function openTpl(id, target = null) {
@@ -3792,7 +3905,12 @@ function openFrontend() {
     </div>
 
     <!-- template modal -->
-    <div v-if="modal.open" class="modal-mask" @click.self="modal.open = false">
+    <div
+      v-if="modal.open"
+      class="modal-mask"
+      :class="{ 'with-drawer': srcPanel.open, 'narrow-drawer': srcPanel.open && srcPanel.mode !== 'point' }"
+      @click.self="modal.open = false"
+    >
       <div class="modal">
         <h3>{{ modalTpl.name }}</h3>
         <p class="d">{{ modalTpl.desc }}</p>
@@ -3801,11 +3919,19 @@ function openFrontend() {
           <div class="frow">
             <div v-if="modal.target === null" class="field">
               <label>设备</label>
-              <select v-model="modal.form.device">
-                <option v-for="d in claimedDevices" :key="d.name" :value="d.name">
-                  {{ dual(d.cn, d.name) }}
-                </option>
-              </select>
+              <SourceField
+                :text="modal.form.device ? dn(modal.form.device) : ''"
+                placeholder="点击选择设备…"
+                :active="srcActive('rollup-device')"
+                @open="
+                  openSource('rollup-device', {
+                    mode: 'device',
+                    title: '周期统计:选择设备',
+                    value: modal.form.device,
+                    onPick: setRollupDevice,
+                  })
+                "
+              />
             </div>
             <div v-else class="field">
               <label>适用范围</label>
@@ -3857,14 +3983,24 @@ function openFrontend() {
           <div v-if="modal.tplId === 'window.delta' || modal.tplId === 'window.integrate'" class="frow">
             <div class="field">
               <label>{{ modal.tplId === 'window.delta' ? '累计测点' : '功率测点' }}</label>
-              <select v-if="modal.target === null" v-model="modal.form.key">
-                <option v-for="k in modalDeviceKeys" :key="k.key" :value="modal.form.device + '||' + k.key">
-                  {{ dual(keyCn(k), k.key) }}
-                </option>
-              </select>
-              <select v-else v-model="modal.form.key">
-                <option v-for="k in tplKeyOptions" :key="k.key" :value="k.key">{{ k.label }}</option>
-              </select>
+              <SourceField
+                :text="modal.target === null ? pointText(modal.form.key) : keyText(modal.form.key)"
+                placeholder="点击选择测点…"
+                :active="srcActive('rollup-key')"
+                @open="
+                  openKeyField(
+                    'rollup-key',
+                    modal.tplId === 'window.delta' ? '累计测点' : '功率测点',
+                    () => modal.form.key,
+                    v => {
+                      const p = modal.target === null ? splitPointValue(v) : null
+                      if (p && p.device !== modal.form.device) setRollupDevice(p.device)
+                      modal.form.key = v
+                    },
+                    { ctxDevice: modal.form.device }
+                  )
+                "
+              />
             </div>
           </div>
         </template>
@@ -3885,11 +4021,35 @@ function openFrontend() {
           <div class="frow">
             <div class="field">
               <label>累计充电量测点 (kWh)</label>
-              <KeyPicker v-model="modal.form.chargeRef" :groups="keyPickerGroups" placeholder="选择测点…" />
+              <SourceField
+                :text="pointText(modal.form.chargeRef)"
+                placeholder="点击选择测点…"
+                :active="srcActive('charge')"
+                @open="
+                  openSource('charge', {
+                    title: '为「累计充电量测点」选择测点',
+                    value: modal.form.chargeRef,
+                    ctxDevice: splitPointValue(modal.form.dischargeRef)?.device,
+                    onPick: v => (modal.form.chargeRef = v),
+                  })
+                "
+              />
             </div>
             <div class="field">
               <label>累计放电量测点 (kWh)</label>
-              <KeyPicker v-model="modal.form.dischargeRef" :groups="keyPickerGroups" placeholder="选择测点…" />
+              <SourceField
+                :text="pointText(modal.form.dischargeRef)"
+                placeholder="点击选择测点…"
+                :active="srcActive('discharge')"
+                @open="
+                  openSource('discharge', {
+                    title: '为「累计放电量测点」选择测点',
+                    value: modal.form.dischargeRef,
+                    ctxDevice: splitPointValue(modal.form.chargeRef)?.device,
+                    onPick: v => (modal.form.dischargeRef = v),
+                  })
+                "
+              />
             </div>
           </div>
           <div class="frow">
@@ -3948,9 +4108,21 @@ function openFrontend() {
           <div class="frow">
             <div class="field">
               <label>源测点(各成员的同名测点)</label>
-              <select v-model="modal.form.key">
-                <option v-for="k in aggKeyOptions" :key="k.key" :value="k.key">{{ k.label }}</option>
-              </select>
+              <SourceField
+                :text="keyText(modal.form.key)"
+                placeholder="点击选择测点…"
+                :active="srcActive('agg-key')"
+                @open="
+                  openSource('agg-key', {
+                    mode: 'key',
+                    title: '为「源测点」选择测点',
+                    value: modal.form.key,
+                    keys: keyOptionsOf(aggKeyOptions),
+                    keyScope: `匹配的 ${aggMatched.length} 台成员设备里的同名测点`,
+                    onPick: v => (modal.form.key = v),
+                  })
+                "
+              />
             </div>
             <div class="field">
               <label>聚合方式</label>
@@ -3982,12 +4154,12 @@ function openFrontend() {
               <option v-for="o in EXPR_OPS" :key="o" :value="o">{{ OP_SHOW[o] }}</option>
             </select>
             <span v-else style="width: 64px"></span>
-            <KeyPicker
-              v-model="t.src"
-              :groups="keyPickerGroups"
+            <SourceField
+              :text="pointText(t.src)"
+              placeholder="点击选择测点或常数…"
               style="min-width: 300px"
-              :topItems="[{ value: '__const__', label: '【常数】' }]"
-              placeholder="选择测点…"
+              :active="srcActive(`term-${i}`)"
+              @open="openTermField(i)"
             />
             <input
               v-if="t.src === '__const__'"
@@ -4134,15 +4306,20 @@ function openFrontend() {
           <div v-for="p in modalTpl.params" :key="p.id" class="frow">
             <div class="field">
               <label>{{ p.label }}</label>
-              <KeyPicker
-                v-if="p.type === 'key' && modal.target === null"
-                v-model="modal.form[p.id]"
-                :groups="keyPickerGroups"
-                placeholder="选择测点…"
+              <SourceField
+                v-if="p.type === 'key'"
+                :text="modal.target === null ? pointText(modal.form[p.id]) : keyText(modal.form[p.id])"
+                placeholder="点击选择测点…"
+                :active="srcActive(`param-${p.id}`)"
+                @open="
+                  openKeyField(
+                    `param-${p.id}`,
+                    p.label,
+                    () => modal.form[p.id],
+                    v => (modal.form[p.id] = v)
+                  )
+                "
               />
-              <select v-else-if="p.type === 'key'" v-model="modal.form[p.id]">
-                <option v-for="k in tplKeyOptions" :key="k.key" :value="k.key">{{ k.label }}</option>
-              </select>
               <select v-else-if="p.type === 'alarmOp'" v-model="modal.form.op">
                 <option v-for="o in ALARM_OPS" :key="o.id" :value="o.id">{{ o.label }}</option>
               </select>
@@ -4358,7 +4535,12 @@ function openFrontend() {
     </div>
 
     <!-- 常用方案用到单台设备(2026-09-11):选设备、统一改阈值,展开成方式二的单设备运算 -->
-    <div v-if="presetOne.open" class="modal-mask confirm-mask" @click.self="presetOne.open = false">
+    <div
+      v-if="presetOne.open"
+      class="modal-mask confirm-mask"
+      :class="{ 'with-drawer': srcPanel.open, 'narrow-drawer': srcPanel.open && srcPanel.mode !== 'point' }"
+      @click.self="presetOne.open = false"
+    >
       <div class="modal confirm-modal">
         <h3>「{{ presetOne.preset.name }}」用到单台设备</h3>
         <p class="confirm-text">
@@ -4366,12 +4548,13 @@ function openFrontend() {
         </p>
         <div class="field" style="margin-bottom: 10px">
           <label>设备</label>
-          <select v-model="presetOne.device" style="min-width: 340px">
-            <option value="" disabled>选择设备…</option>
-            <option v-for="x in presetOneDevices" :key="x.d.name" :value="x.d.name">
-              {{ dual(x.d.cn, x.d.name) }} · 可用 {{ x.n }}/{{ presetOne.preset.items.length }} 项
-            </option>
-          </select>
+          <SourceField
+            :text="presetOne.device ? dn(presetOne.device) : ''"
+            placeholder="点击选择设备…"
+            style="min-width: 340px"
+            :active="srcActive('preset-device')"
+            @open="openPresetDevice"
+          />
         </div>
         <div v-if="presetCommonValue(presetOne.preset) !== null" class="field" style="margin-bottom: 10px">
           <label>阈值(方案里的越限告警统一用这个值)</label>
@@ -4421,5 +4604,23 @@ function openFrontend() {
         </div>
       </div>
     </div>
+
+    <!-- 第 3 步的数据源面板(2026-09-23):点取数的格子时从右侧滑出 -->
+    <DataSourceDrawer
+      :open="srcPanel.open"
+      :title="srcPanel.title"
+      :site-label="site.name"
+      :mode="srcPanel.mode"
+      :groups="srcGroups"
+      :keys="srcPanel.keys"
+      :key-scope="srcPanel.keyScope"
+      :value="srcPanel.value"
+      :allow-const="srcPanel.allowConst"
+      :ctx-device="srcPanel.ctxDevice"
+      :recent="srcRecent"
+      :empty-text="srcPanel.emptyText"
+      @pick="onSourcePick"
+      @close="srcPanel.open = false"
+    />
   </div>
 </template>
