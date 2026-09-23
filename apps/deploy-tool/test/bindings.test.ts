@@ -60,6 +60,19 @@ const fakeApi = async (url: string) => {
 }
 const fakeClient = () => new MetaClient(fakeApi)
 const D1 = { type: 'DEVICE', id: 'id-SSP_1', name: 'SSP_1' } as const
+const settle = async () => {
+  await new Promise(r => setTimeout(r, 0))
+  await nextTick()
+}
+/** 数据源面板(2026-09-23 起取代内联实体树 + 测点下拉):点格子打开,面板里的设备 / 测点行 */
+type Row = ReturnType<typeof mount>
+const openSrc = async (w: Row) => {
+  await w.find('[data-role="entity"]').trigger('click')
+  await settle()
+}
+const srcDevice = (w: Row, id: string) => w.find(`[data-role="source-device"][data-name="${id}"]`)
+const srcRows = (w: Row) => w.findAll('[data-role="source-point"]')
+const srcKeys = (w: Row) => srcRows(w).map(r => r.attributes('data-value')!.split('||')[1])
 
 describe('元数据树', () => {
   it('buildMetaTree:设备归到最后连接的网关下,直连设备 / 资产各成一组;排序自然序', () => {
@@ -159,9 +172,12 @@ describe('binding-check', () => {
 
 describe('BindingRow', () => {
   const tree = bigSite()
-  it('mode 下拉只列槽位允许的 modes;选 ts 后产出 {mode, entity, key} 形状;换实体清 key', async () => {
+  it('mode 下拉只列槽位允许的 modes;选 ts 后产出 {mode, entity, key} 形状;面板里点一行实体和测点一起定', async () => {
     const spec = getWidget('number-card')!.bindingSlots[0]! // value:ts / attr / const
-    const w = mount(BindingRow, { props: { spec, modelValue: null, tree, client: fakeClient() } })
+    const w = mount(BindingRow, {
+      props: { spec, modelValue: null, tree, client: fakeClient() },
+      global: { stubs: { Teleport: true } },
+    })
     const opts = w.findAll('select[data-role="mode"] option').map(o => o.attributes('value'))
     expect(opts).toEqual(['', 'ts', 'attr', 'const'])
     await w.find('select[data-role="mode"]').setValue('ts')
@@ -171,12 +187,43 @@ describe('BindingRow', () => {
       key: '',
     })
     await w.setProps({ modelValue: { mode: 'ts', entity: D1, key: 'P' } as Binding })
-    await w.find('[data-role="entity"]').trigger('click')
-    await w.find('[data-id="id-SSP_2"]').trigger('click')
+    expect(w.find('[data-role="entity"]').text()).toContain('SSP_1')
+    await openSrc(w)
+    // 停在当前实体上,当前测点高亮
+    expect(w.find('.dsd-dev.on').attributes('data-name')).toBe('id-SSP_1')
+    expect(w.find('.dsd-row.cur').attributes('data-value')).toBe('id-SSP_1||P')
+    await srcDevice(w, 'id-SSP_2').trigger('click')
+    await settle()
+    await w.find('[data-role="source-point"][data-value="id-SSP_2||Q"]').trigger('click')
     expect(w.emitted('update:modelValue')!.at(-1)![0]).toEqual({
       mode: 'ts',
       entity: { type: 'DEVICE', id: 'id-SSP_2', name: 'SSP_2' },
-      key: '',
+      key: 'Q',
+    })
+    expect(w.find('[data-role="source-drawer"]').exists()).toBe(false)
+  })
+
+  it('属性绑定:面板列属性;范围在格子下面选', async () => {
+    const spec = getWidget('number-card')!.bindingSlots[0]!
+    const w = mount(BindingRow, {
+      props: {
+        spec,
+        modelValue: { mode: 'attr', entity: D1, scope: 'SERVER_SCOPE', key: '' } as Binding,
+        tree,
+        client: fakeClient(),
+      },
+      global: { stubs: { Teleport: true } },
+    })
+    expect(w.find('select[data-role="attr-scope"]').exists()).toBe(true)
+    await openSrc(w)
+    expect(w.find('.dsd-title b').text()).toContain('属性')
+    expect(srcKeys(w)).toEqual(['model', 'soh'])
+    await w.find('[data-role="source-point"][data-value="id-SSP_1||soh"]').trigger('click')
+    expect(w.emitted('update:modelValue')!.at(-1)![0]).toEqual({
+      mode: 'attr',
+      entity: D1,
+      scope: 'SERVER_SCOPE',
+      key: 'soh',
     })
   })
 
@@ -192,7 +239,7 @@ describe('BindingRow', () => {
     })
     // 单 key 时既没有「再加一个测点」,也没有多 key 提示
     expect(w.find('[data-role="multi-key-warning"]').exists()).toBe(false)
-    expect(w.findAll('.kp')).toHaveLength(1)
+    expect(w.findAll('[data-role="entity"]')).toHaveLength(1)
     await w.find('select[data-role="window"]').setValue('7d')
     expect((w.emitted('update:modelValue')!.at(-1)![0] as { window: string }).window).toBe('7d')
     await w.find('select[data-role="agg"]').setValue('MAX')
@@ -255,47 +302,28 @@ describe('BindingRow · 第 3 步声明的输出(还没发布)', () => {
       global: { stubs: { Teleport: true } },
     })
 
-  it('声明的输出置顶成一组;TB 上还没有的标「待发布」,照样能选', async () => {
+  it('声明的输出置顶;TB 上还没有的标「待发布」,照样能选;别的设备的不串过来', async () => {
     const w = mountRow(getWidget('number-card')!.bindingSlots[0]!, { mode: 'ts', entity: D1, key: '' })
-    await new Promise(r => setTimeout(r, 0))
-    await nextTick()
-    await w.find('.kp-btn').trigger('click')
-    // 第一组是本次配置的输出,且默认展开(pinned)
-    expect(w.findAll('.kp-group')[0]!.text()).toContain('本站配置的运算结果(3)')
-    const items = w.findAll('.kp-item').map(i => i.text())
-    // 三条都在:已发布的带最近值,没发布的带「待发布」
-    expect(items.some(t => t.startsWith('calc_total_p') && !t.includes('待发布'))).toBe(true)
-    expect(items).toContain('calc_pqSum待发布')
-    expect(items).toContain('calc_PAvg1d待发布')
-    // 别的设备的输出不串过来
-    expect(items.join(' ')).not.toContain('calc_other')
-
+    await openSrc(w)
+    expect(srcKeys(w).slice(0, 3)).toEqual(['calc_total_p', 'calc_pqSum', 'calc_PAvg1d'])
+    const texts = srcRows(w).map(r => r.text())
+    expect(texts[0]).toContain('99')
+    expect(texts[1]).toContain('待发布')
+    expect(texts[2]).toContain('待发布')
+    expect(texts.join(' ')).not.toContain('calc_other')
     // 未发布的也能选中,写进绑定 —— 这正是「先绑后发布」要的
-    await w
-      .findAll('.kp-item')
-      .find(i => i.text().startsWith('calc_PAvg1d'))!
-      .trigger('mousedown')
+    await w.find('[data-role="source-point"][data-value="id-SSP_1||calc_PAvg1d"]').trigger('click')
     expect((w.emitted('update:modelValue')!.at(-1)![0] as { key: string }).key).toBe('calc_PAvg1d')
   })
 
-  it('已发布的 calc_ 不重复出现在两组里', async () => {
+  it('已发布的 calc_ 只出现一次;不传 declared 时 calc_ 仍排在遥测前面', async () => {
     const w = mountRow(getWidget('number-card')!.bindingSlots[0]!, { mode: 'ts', entity: D1, key: '' })
-    await new Promise(r => setTimeout(r, 0))
-    await nextTick()
-    await w.find('.kp-btn').trigger('click')
-    const groups = w.findAll('.kp-group').map(g => g.text())
-    // calc_total_p 已被第一组收编,就不该再有「计算结果(calc_)」那一组
-    expect(groups.some(t => t.includes('计算结果(calc_)'))).toBe(false)
-    expect(groups.some(t => t.includes('遥测(4)'))).toBe(true)
-  })
-
-  it('不传 declared 时行为与从前完全一致(独立编辑器)', async () => {
-    const w = mountRow(getWidget('number-card')!.bindingSlots[0]!, { mode: 'ts', entity: D1, key: '' }, false)
-    await new Promise(r => setTimeout(r, 0))
-    await nextTick()
-    await w.find('.kp-btn').trigger('click')
-    expect(w.findAll('.kp-group').map(g => g.text())).toEqual(['▼⭐ 计算结果(calc_)1', '▶遥测(4)4'])
-    expect(w.findAll('.kp-item').map(i => i.text())).toEqual(['calc_total_p # · 99'])
+    await openSrc(w)
+    expect(srcKeys(w).filter(k => k === 'calc_total_p')).toHaveLength(1)
+    const plain = mountRow(getWidget('number-card')!.bindingSlots[0]!, { mode: 'ts', entity: D1, key: '' }, false)
+    await openSrc(plain)
+    expect(srcKeys(plain)).toEqual(['calc_total_p', 'CB', 'name', 'P', 'Q'])
+    expect(srcRows(plain)[0]!.text()).toContain('99')
   })
 
   it('告警类型:声明过但还没触发过的也列出来并标「待发布」', async () => {
@@ -336,28 +364,19 @@ describe('BindingRow · ext(kz)', () => {
     })
   })
 
-  it('归档历史:实体点树、测点点 KeyPicker、聚合选下拉 —— 全程不碰 JSON', async () => {
+  it('归档历史:实体和测点在数据源面板里一起点、聚合选下拉 —— 全程不碰 JSON', async () => {
     const w = mountExt({ mode: 'ext', source: 'kz', window: '30d', interval: '1d', params: { entity: D1, keys: [] } })
     // params JSON 默认收起
     expect(w.find('textarea').exists()).toBe(false)
-    // 实体按钮显示的是当前实体,点开就是同一棵元数据树
+    // 格子显示的是当前实体,点开是同一套 站 → 网关 → 设备 → 测点
     expect(w.find('[data-role="entity"]').text()).toContain('SSP_1')
-    await w.find('[data-role="entity"]').trigger('click')
-    await w.find('[data-id="id-SSP_2"]').trigger('click')
-    expect(last(w).params).toEqual({ entity: { type: 'DEVICE', id: 'id-SSP_2', name: 'SSP_2' }, keys: [] })
-
-    // 测点:等 tsKeys 回来后 KeyPicker 里就是该实体的 key
-    await new Promise(r => setTimeout(r, 0))
-    await nextTick()
-    await w.find('.kp-btn').trigger('click')
-    // 分组与 ts / ts-history 一样:calc_ 结果置顶展开,遥测组点开
-    expect(w.findAll('.kp-group').map(g => g.text())).toEqual(['▼⭐ 计算结果(calc_)1', '▶遥测(4)4'])
-    await w.findAll('.kp-group')[1]!.trigger('mousedown')
-    await w
-      .findAll('.kp-item')
-      .find(i => i.text().startsWith('P '))!
-      .trigger('mousedown')
-    expect((last(w).params as { keys: string[] }).keys).toEqual(['P'])
+    await openSrc(w)
+    await srcDevice(w, 'id-SSP_2').trigger('click')
+    await settle()
+    // calc_ 结果排在前面,与 ts / ts-history 一样
+    expect(srcKeys(w)).toEqual(['calc_total_p', 'CB', 'name', 'P', 'Q'])
+    await w.find('[data-role="source-point"][data-value="id-SSP_2||P"]').trigger('click')
+    expect(last(w).params).toEqual({ entity: { type: 'DEVICE', id: 'id-SSP_2', name: 'SSP_2' }, keys: ['P'] })
 
     await w.setProps({ modelValue: { mode: 'ext', source: 'kz', params: { entity: D1, keys: ['P'] } } as Binding })
     await w.find('select[data-role="ext-agg"]').setValue('MAX')
@@ -382,9 +401,10 @@ describe('BindingRow · ext(kz)', () => {
     expect(w.find('[data-role="entity"]').text()).toContain('选择站点')
     // 归档历史那一套控件都不见了,换成周期 + 指标
     expect(w.find('select[data-role="ext-agg"]').exists()).toBe(false)
-    expect(w.find('.kp').exists()).toBe(false)
-    await w.find('[data-role="entity"]').trigger('click')
-    await w.find('[data-id="id-GW1"]').trigger('click')
+    // 站点只选实体:面板是设备模式,没有测点栏
+    await openSrc(w)
+    expect(w.find('.dsd-points').exists()).toBe(false)
+    await srcDevice(w, 'id-GW1').trigger('click')
     expect(last(w).params).toEqual({ stationId: 'id-GW1' })
 
     await w.setProps({

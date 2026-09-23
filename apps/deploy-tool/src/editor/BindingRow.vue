@@ -6,13 +6,23 @@
  *   ext(kz):查询类型二选一 —— 归档历史(实体 + 测点 + 聚合)/ 收益趋势(站点 + 指标),都从元数据树点选,不再手写 JSON;
  *            形状与校验规则在 `ext-params.ts`,与校验层共用一份
  * 只负责产出契约形状的 Binding;校验(必填 / 类型)由 BindingsPanel 与校验层做。
+ * 选实体 / 测点(2026-09-23 YY):与第 3 步同一个「数据源」面板——点格子右侧滑出,站 → 网关 → 设备 / 资产 → 测点,
+ * 点一行同时定下实体和测点;属性绑定列属性,告警 / 收益站点只选实体。原来的内联实体树与测点下拉不再用。
  */
-import { computed, inject, ref, watch, type Ref } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
 import { dual, type KeyCnFn } from '../naming'
 import type { Binding, BindingMode, BindingSlotSpec } from '@grid/scada-renderer'
 import type { EntityRef } from '@grid/tb-client'
-import KeyPicker from '../components/KeyPicker.vue'
-import EntityTree from './EntityTree.vue'
+import DataSourceDrawer from '../provisioner/DataSourceDrawer.vue'
+import SourceField from '../provisioner/SourceField.vue'
+import {
+  joinPointValue,
+  metaToSourceGroups,
+  splitPointValue,
+  type SourceDevice,
+  type SourcePoint,
+} from '../provisioner/source-picker'
+import { recentDevices, rememberDevice } from '../sld-editor/panels/binding/recent'
 import type { KeyInfo, MetaClient, MetaNode } from '../meta/MetaNode'
 import { emptyBinding } from './binding-check'
 import { isContextRef, type WhenMissing } from '@grid/scada-renderer'
@@ -68,9 +78,6 @@ const emit = defineEmits<{ 'update:modelValue': [b: Binding | null]; split: [key
 /** 测点中文名(EditorApp 从 useMeta 提供;没有就只显示英文)——名称一律「中文(英文)」(2026-09-11) */
 const keyCn = inject<KeyCnFn>('keyCn', () => '')
 const keyText = (key: string) => dual(keyCn(key), key)
-/** 全屏编辑时实体树加高(EditorApp 注入;嵌入态 260px,全屏 460px)——2026-09-18 点选空间太小的反馈 */
-const pickerTall = inject<Ref<boolean>>('pickerTall', ref(false))
-const treeHeight = computed(() => (pickerTall.value ? 460 : 260))
 
 const ALL_MODES: BindingMode[] = ['ts', 'ts-history', 'attr', 'alarm', 'const', 'ext']
 const MODE_LABEL: Record<BindingMode, string> = {
@@ -204,9 +211,7 @@ function setExtKind(raw: string) {
 }
 
 // ---------- 实体 ----------
-const treeOpen = ref(false)
 function pickEntity(e: EntityRef) {
-  treeOpen.value = false
   const m = mode.value
   // 换实体后 key 清空(不同设备 key 不同)
   // 跟随上下文时选的是样例实体(写进 fallback);测点跟随上下文时不清(它本来就不属于哪台设备)
@@ -227,76 +232,26 @@ function pickEntity(e: EntityRef) {
   )
 }
 
-// ---------- key ----------
-const keys = ref<KeyInfo[]>([])
-const attrKeys = ref<string[]>([])
+// ---------- 告警类型(测点 / 属性由数据源面板按需读)----------
 const alarmTypes = ref<string[]>([])
-const loading = ref(false)
 watch(
-  // 用字符串做 watch 源:返回数组的话每次求值都是新数组,任何 prop 变动都会重拉 key
-  () =>
-    `${entity.value?.id ?? ''}|${mode.value}|${extK.value}|${(props.modelValue as { scope?: string } | null)?.scope ?? ''}`,
+  () => `${entity.value?.id ?? ''}|${mode.value}`,
   async () => {
     const e = entity.value
     const c = props.client
-    keys.value = []
-    attrKeys.value = []
     alarmTypes.value = []
-    if (!e?.id || !c) return
-    loading.value = true
+    if (!e?.id || !c || mode.value !== 'alarm') return
     try {
-      if (mode.value === 'ts' || mode.value === 'ts-history' || (mode.value === 'ext' && extK.value === 'history'))
-        keys.value = await c.tsKeys(e)
-      else if (mode.value === 'attr')
-        attrKeys.value = await c.attrKeys(e, (props.modelValue as { scope?: string }).scope ?? 'SERVER_SCOPE')
-      else if (mode.value === 'alarm') alarmTypes.value = await c.alarmTypes(e)
+      alarmTypes.value = await c.alarmTypes(e)
     } catch {
-      /* 拉不到 key 不阻塞手输 */
-    } finally {
-      loading.value = false
+      /* 拉不到不阻塞手输 */
     }
   },
   { immediate: true }
 )
-/** 当前实体在本次配置里会产生的 key / 告警类型(可能尚未发布) */
-const declKeys = computed(() => {
-  const e = entity.value
-  return e?.name ? declaredKeysFor(props.declared, e.type, e.name) : []
-})
 const declAlarms = computed(() => {
   const e = entity.value
   return e?.name ? declaredAlarmsFor(props.declared, e.type, e.name) : []
-})
-
-const kindMark = (k: KeyInfo) =>
-  k.kind === 'number' ? '#' : k.kind === 'boolean' ? '◐' : k.kind === 'string' ? '"' : ''
-type PickItem = { value: string; label: string; badge?: string }
-const keyGroups = computed(() => {
-  const item = (k: KeyInfo): PickItem => ({
-    value: k.key,
-    label: `${keyText(k.key)}${kindMark(k) ? ' ' + kindMark(k) : ''}${k.latest !== undefined ? ' · ' + String(k.latest) : ''}`,
-  })
-  const have = new Map(keys.value.map(k => [k.key, k]))
-  const decl = declKeys.value
-  const declSet = new Set(decl.map(d => d.key))
-  const g: { label: string; items: PickItem[]; pinned?: boolean }[] = []
-  // ① 本次配置声明的输出置顶:已发布的照常显示最近值,没发布的标「待发布」也能先绑上
-  if (decl.length)
-    g.push({
-      label: `⭐ 本站配置的运算结果(${decl.length})`,
-      pinned: true,
-      items: decl.map(d => {
-        const k = have.get(d.key)
-        return k ? item(k) : { value: d.key, label: keyText(d.key), badge: '待发布' }
-      }),
-    })
-  const rest = keys.value.filter(k => !declSet.has(k.key))
-  // ② TB 上已有、但本次配置没声明的 calc_(上一版配置留下的)
-  const calc = rest.filter(k => /^calc_/.test(k.key))
-  const plain = rest.filter(k => !/^calc_/.test(k.key))
-  if (calc.length) g.push({ label: '⭐ 计算结果(calc_)', items: calc.map(item), pinned: true })
-  g.push({ label: `遥测(${plain.length})`, items: plain.map(item) })
-  return g
 })
 /** 告警类型:TB 上出现过的 + 本次配置声明的(还没触发过,所以查不到) */
 const alarmChoices = computed<{ type: string; pending: boolean }[]>(() => {
@@ -306,14 +261,118 @@ const alarmChoices = computed<{ type: string; pending: boolean }[]>(() => {
     ...declAlarms.value.filter(t => !seen.has(t)).map(t => ({ type: t, pending: true })),
   ]
 })
-const attrGroups = computed(() => [
-  { label: `属性(${attrKeys.value.length})`, items: attrKeys.value.map(k => ({ value: k, label: keyText(k) })) },
-])
 /** 已选实体按钮上的名字:设备 / 网关 TB 标签是中文就「中文(英文)」 */
 const entityText = computed(() => {
   const e = entity.value
   return e?.id ? dual(findNode(props.tree, e.id)?.label, e.name || e.id) : ''
 })
+
+// ---------- 数据源面板(2026-09-23:与第 3 步同一个)----------
+const srcOpen = ref(false)
+/** 站点名 = 元数据树根的名字;最近用过的设备按站点记,与接线图绑定面板、第 3 步共用 */
+const siteName = computed(() => props.tree?.name ?? '')
+const srcGroups = computed(() => (srcOpen.value ? metaToSourceGroups(props.tree, dual) : []))
+const srcRecent = computed(() => recentDevices(siteName.value).value.map(d => d.id))
+const revenue = computed(() => mode.value === 'ext' && extK.value === 'revenue')
+/** 告警、收益站点只选实体;其余选「实体 + 测点 / 属性」 */
+const srcMode = computed<'point' | 'device'>(() => (mode.value === 'alarm' || revenue.value ? 'device' : 'point'))
+const pointNoun = computed(() => (mode.value === 'attr' ? '属性' : '测点'))
+/** 当前绑的测点(跟随上下文时是样例) */
+const currentKey = computed(() => {
+  if (mode.value === 'ts' || mode.value === 'attr') return sampleKeyOf(f('key'))
+  if (mode.value === 'ts-history') return hkeys.value[0] ?? ''
+  if (mode.value === 'ext' && extK.value === 'history') return ekeys.value[0] ?? ''
+  return ''
+})
+const srcValue = computed(() => {
+  const e = entity.value
+  if (!e?.id) return ''
+  if (srcMode.value === 'device') return e.id
+  return currentKey.value ? joinPointValue(e.id, currentKey.value) : ''
+})
+const srcTitle = computed(() => {
+  const slot = props.spec.title || props.spec.name
+  const what = srcMode.value === 'device' ? (revenue.value ? '站点(网关设备)' : '设备') : `设备和${pointNoun.value}`
+  return `为「${slot}」选择${what}${followsEntity.value ? '(样例)' : ''}`
+})
+/** 格子上显示的文字 */
+const srcText = computed(() => {
+  if (!entity.value?.id) return ''
+  const pre = followsEntity.value ? '样例:' : ''
+  const ent = `${entity.value.type === 'ASSET' ? '◆' : '▫'} ${entityText.value}`
+  if (srcMode.value === 'device') return pre + ent
+  return `${pre}${ent} · ${currentKey.value ? keyText(currentKey.value) : `(未选${pointNoun.value})`}`
+})
+const srcPlaceholder = computed(() =>
+  !props.tree
+    ? '先连接 TB'
+    : srcMode.value === 'device'
+      ? revenue.value
+        ? '选择站点(网关设备)…'
+        : '选择设备…'
+      : followsEntity.value
+        ? `选样例设备和${pointNoun.value}(用来挑测点、看预览)…`
+        : `点击选择设备和${pointNoun.value}…`
+)
+const VALUE_KIND: Record<string, string> = { number: '数值', boolean: '开关量', string: '文本' }
+const shortVal = (v: unknown): string => {
+  if (v === undefined || v === null || v === '') return ''
+  const t = typeof v === 'object' ? JSON.stringify(v) : String(v)
+  return t.length > 12 ? t.slice(0, 11) + '…' : t
+}
+/** 面板打开某台设备时读它的测点 / 属性;本站第 3 步声明的运算输出置顶,还没发布的标「待发布」 */
+async function loadPoints(d: SourceDevice): Promise<SourcePoint[]> {
+  const c = props.client
+  const e = d.ref
+  if (!c || !e) return []
+  if (mode.value === 'attr') {
+    const list = await c.attrKeys(e, (props.modelValue as { scope?: string } | null)?.scope ?? 'SERVER_SCOPE')
+    return list.map(k => ({ key: k, text: keyText(k), kind: '', unit: '', latest: '' }))
+  }
+  const got = await c.tsKeys(e)
+  const byKey = new Map(got.map(k => [k.key, k]))
+  const decl = declaredKeysFor(props.declared, e.type, e.name)
+  const declSet = new Set(decl.map(x => x.key))
+  const row = (k: KeyInfo): SourcePoint => ({
+    key: k.key,
+    text: keyText(k.key),
+    kind: VALUE_KIND[k.kind ?? ''] ?? '',
+    unit: '',
+    latest: shortVal(k.latest),
+  })
+  return [
+    ...decl.map(x => {
+      const k = byKey.get(x.key)
+      return k ? row(k) : { key: x.key, text: keyText(x.key), kind: '', unit: '', latest: '', badge: '待发布' }
+    }),
+    ...got.filter(k => !declSet.has(k.key) && /^calc_/.test(k.key)).map(row),
+    ...got.filter(k => !declSet.has(k.key) && !/^calc_/.test(k.key)).map(row),
+  ]
+}
+/** 点了一行:实体和测点一起定(换了实体时多余的旧测点不留) */
+function pickPoint(e: EntityRef, key: string) {
+  const m = mode.value
+  const same = entity.value?.id === e.id
+  const ent = withPickedEntity(entitySrc.value, e)
+  if (m === 'ts' || m === 'attr') return patch({ entity: ent, key: withPickedKey(keySrc.value, key) })
+  if (m === 'ts-history') {
+    const first = withPickedKey(rawHKeys.value[0], key)
+    return patch({ entity: ent, keys: same ? [first, ...rawHKeys.value.slice(1)].filter(Boolean) : [first] })
+  }
+  if (m === 'ext') {
+    const first = withPickedKey(rawEKeys.value[0], key)
+    patchParams({ entity: ent, keys: same ? [first, ...rawEKeys.value.slice(1)].filter(Boolean) : [first] })
+  }
+}
+function onSrcPick(v: string) {
+  srcOpen.value = false
+  const id = srcMode.value === 'device' ? v : splitPointValue(v)?.device
+  const e = id ? findNode(props.tree, id)?.entity : undefined
+  if (!e) return
+  rememberDevice(siteName.value, e)
+  if (srcMode.value === 'device') return pickEntity(e)
+  pickPoint(e, splitPointValue(v)!.key)
+}
 
 /**
  * ts-history:一条绑定 = 一条序列 = 一个测点。渲染器按绑定条数出 SeriesValue,一条绑定里写多个
@@ -324,15 +383,9 @@ const rawHKeys = computed(() => ((props.modelValue as { keys?: unknown[] } | nul
 /** 显示用:跟随上下文的测点显示它的样例 */
 const hkeys = computed(() => rawHKeys.value.map(sampleKeyOf))
 const extraKeys = computed(() => hkeys.value.slice(1).filter(Boolean))
-/** 换第一个测点时保留多余项,免得「改个 key」把它们悄悄抹掉 —— 多余项要用下面两个按钮显式处理 */
-function setHKey(v: string) {
-  patch({ keys: [withPickedKey(rawHKeys.value[0], v), ...rawHKeys.value.slice(1)].filter(Boolean) })
-}
+/** 多余项要用下面两个按钮显式处理(面板里换第一个测点时同一实体的多余项保留,见 pickPoint) */
 function keepFirstKey() {
   patch({ keys: rawHKeys.value.slice(0, 1).filter(Boolean) })
-}
-function setKey(v: string) {
-  patch({ key: withPickedKey(keySrc.value, v) })
 }
 
 // alarm types
@@ -373,9 +426,6 @@ const rawEKeys = computed(
 )
 const ekeys = computed(() => rawEKeys.value.map(sampleKeyOf))
 const ekeyExtra = computed(() => ekeys.value.slice(1).filter(Boolean))
-function setEKey(v: string) {
-  patchParams({ keys: [withPickedKey(rawEKeys.value[0], v), ...rawEKeys.value.slice(1)].filter(Boolean) })
-}
 function keepFirstEKey() {
   patchParams({ keys: rawEKeys.value.slice(0, 1).filter(Boolean) })
 }
@@ -410,26 +460,15 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
         <option v-for="m in modes" :key="m" :value="m">{{ MODE_LABEL[m] }} · {{ m }}</option>
       </select>
       <template v-if="mode && mode !== 'const' && !(mode === 'ext' && extK === 'unknown')">
-        <button
-          type="button"
-          class="br-entity"
+        <SourceField
+          class="br-src"
           data-role="entity"
-          :class="{ empty: !entity?.id }"
+          :text="srcText"
+          :placeholder="srcPlaceholder"
+          :active="srcOpen"
           :disabled="!tree"
-          @click="treeOpen = !treeOpen"
-        >
-          {{
-            entity?.id
-              ? `${followsEntity ? '样例:' : ''}${entity.type === 'ASSET' ? '◆' : '▫'} ${entityText}`
-              : tree
-                ? extK === 'revenue'
-                  ? '选择站点(网关设备)…'
-                  : followsEntity
-                    ? '选样例设备(用来挑测点、看预览)…'
-                    : '选择实体…'
-                : '先连接 TB'
-          }}
-        </button>
+          @open="srcOpen = true"
+        />
       </template>
     </div>
     <!-- 跟随页面上下文(渲染器 0.9.0):宿主给「当前设备 / 站点」,这张卡跟着换;样例设备只在编辑器里用 -->
@@ -480,41 +519,18 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
       }}{{ followsKey ? '测点' : '' }}{{ (followsEntity || followsKey) && followsWindow ? '、' : ''
       }}{{ followsWindow ? '窗口' : '' }}只是样例(挑测点、看预览用)。
     </div>
-    <div v-if="treeOpen && tree" class="br-tree">
-      <EntityTree :root="tree" :selected-id="entity?.id ?? null" :height="treeHeight" @select="pickEntity" />
-    </div>
 
-    <!-- ts -->
-    <div v-if="mode === 'ts'" class="br-line">
-      <KeyPicker
-        :model-value="sampleKeyOf(f('key'))"
-        :groups="keyGroups"
-        :placeholder="loading ? '读取测点…' : entity?.id ? (followsKey ? '选样例测点' : '选择测点') : '先选实体'"
-        @update:model-value="setKey($event)"
-      />
-    </div>
     <!-- attr -->
-    <div v-else-if="mode === 'attr'" class="br-line">
-      <select :value="f('scope')" @change="patch({ scope: ev($event), key: '' })">
-        <option v-for="s in SCOPES" :key="s" :value="s">{{ s }}</option>
-      </select>
-      <KeyPicker
-        :model-value="sampleKeyOf(f('key'))"
-        :groups="attrGroups"
-        :placeholder="loading ? '读取属性…' : '选择属性'"
-        @update:model-value="patch({ key: $event })"
-      />
+    <div v-if="mode === 'attr'" class="br-line">
+      <label
+        >属性范围
+        <select data-role="attr-scope" :value="f('scope')" @change="patch({ scope: ev($event), key: '' })">
+          <option v-for="s in SCOPES" :key="s" :value="s">{{ s }}</option>
+        </select></label
+      >
     </div>
     <!-- ts-history -->
     <template v-else-if="mode === 'ts-history'">
-      <div class="br-line">
-        <KeyPicker
-          :model-value="hkeys[0] ?? ''"
-          :groups="keyGroups"
-          :placeholder="loading ? '读取测点…' : entity?.id ? '选择测点' : '先选实体'"
-          @update:model-value="setHKey($event)"
-        />
-      </div>
       <div v-if="extraKeys.length" class="br-line br-legacy" data-role="multi-key-warning">
         <span>这条绑定还绑着 {{ extraKeys.join('、') }} —— 一条绑定只画一条序列,渲染时只用第一个,多余的会被丢掉。</span>
         <button v-if="spec.multiple" type="button" class="br-mini" @click="emit('split', hkeys.slice())">
@@ -577,7 +593,7 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
         @change="setConst(ev($event))"
       />
     </div>
-    <!-- ext(kz):查询类型二选一,实体 / 站点 / 测点都点选;手写 JSON 只作后路 -->
+    <!-- ext(kz):查询类型二选一,实体 / 站点 / 测点都在上面的数据源里点选;手写 JSON 只作后路 -->
     <template v-else-if="mode === 'ext'">
       <div class="br-line">
         <label
@@ -632,12 +648,6 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
       <!-- 归档历史:实体在上面选,这里选测点 + 聚合 -->
       <template v-if="extK === 'history'">
         <div class="br-line">
-          <KeyPicker
-            :model-value="ekeys[0] ?? ''"
-            :groups="keyGroups"
-            :placeholder="loading ? '读取测点…' : entity?.id ? '选择测点' : '先选实体'"
-            @update:model-value="setEKey($event)"
-          />
           <label
             >聚合
             <select
@@ -686,6 +696,20 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
         ></textarea>
       </div>
     </template>
+    <DataSourceDrawer
+      :open="srcOpen"
+      :title="srcTitle"
+      :site-label="siteName"
+      :mode="srcMode"
+      :groups="srcGroups"
+      :value="srcValue"
+      :ctx-device="entity?.id ?? ''"
+      :recent="srcRecent"
+      :load-points="srcMode === 'point' ? loadPoints : undefined"
+      :point-noun="pointNoun"
+      @pick="onSrcPick"
+      @close="srcOpen = false"
+    />
   </div>
 </template>
 
@@ -744,6 +768,10 @@ const ev = (e: Event) => (e.target as HTMLInputElement | HTMLSelectElement | HTM
 }
 .br textarea.bad {
   border-color: #ff6b6b;
+}
+.br-src {
+  flex: 1;
+  min-width: 0;
 }
 .br-entity {
   flex: 1;

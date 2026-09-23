@@ -23,10 +23,12 @@ export interface SourcePoint {
   key: string
   /** 「中文(英文)」 */
   text: string
-  /** 遥测 / 遥信;字典里没有类型时为空 */
-  kind: '' | '遥测' | '遥信'
+  /** 第 3 步:遥测 / 遥信(按测点字典);第 4 步:数值 / 开关量 / 文本(按最近值);不知道为空 */
+  kind: string
   unit: string
   latest: string
+  /** 小标记,如「待发布」「运算结果」(第 4 步:本站配置的运算输出) */
+  badge?: string
 }
 
 export interface SourceDevice {
@@ -39,6 +41,12 @@ export interface SourceDevice {
   points: SourcePoint[]
   /** 设备模式下的附注,如「可用 3/4 项」 */
   note?: string
+  /** 第 4 步:平台实体(name 字段放的是实体 id,重名的设备 / 资产也分得开) */
+  ref?: { type: 'DEVICE' | 'ASSET'; id: string; name: string }
+  /** 测点按需读(打开这台设备时才去平台拉) */
+  lazy?: boolean
+  /** 资产的层级缩进(站点资产 → 子资产) */
+  depth?: number
 }
 
 export interface SourceGroup {
@@ -69,7 +77,7 @@ export interface KeyOption {
   /** 如「8/10 台」 */
   note?: string
   /** 遥测 / 遥信(按测点字典;开关变位告警只列遥信) */
-  kind?: SourcePoint['kind']
+  kind?: string
 }
 
 /** 四则运算的「常数」项(与原 KeyPicker 的 topItems 同值) */
@@ -84,8 +92,7 @@ const short = (v: unknown): string => {
   return s.length > 12 ? s.slice(0, 11) + '…' : s
 }
 
-const kindOf = (type: string | undefined): SourcePoint['kind'] =>
-  type === 'YX' ? '遥信' : type === 'YC' ? '遥测' : ''
+const kindOf = (type: string | undefined): string => (type === 'YX' ? '遥信' : type === 'YC' ? '遥测' : '')
 
 function toDevice(d: StepDevice, gateway: string | null, o: BuildOptions): SourceDevice {
   return {
@@ -190,3 +197,53 @@ export function splitPointValue(v: string | undefined): { device: string; key: s
   return { device: v.slice(0, i), key: v.slice(i + 2) }
 }
 export const joinPointValue = (device: string, key: string): string => `${device}||${key}`
+
+/* ───────────── 第 4 步:从元数据树(站 → 网关 → 设备 / 资产)整理 ───────────── */
+
+/** 元数据树节点(meta/MetaNode 的结构;这里只用到这些字段) */
+export interface MetaLike {
+  id: string
+  name: string
+  kind: string
+  label?: string
+  profile?: string
+  entity?: { type: 'DEVICE' | 'ASSET'; id: string; name?: string }
+  children: MetaLike[]
+}
+
+/** 第 4 步:打开某台设备时读它的测点 / 属性 */
+export type PointsLoader = (device: SourceDevice) => Promise<SourcePoint[]>
+
+/**
+ * 元数据树 → 面板分组:每个网关一组(网关本体可选),「直连 / 未归网关设备」一组,「资产」一组(按包含关系缩进)。
+ * 设备的 name 放实体 id(值为 `实体id||key`),测点标记为按需读取。
+ */
+export function metaToSourceGroups(
+  root: MetaLike | null | undefined,
+  dual: (cn: string | null | undefined, en: string) => string
+): SourceGroup[] {
+  if (!root) return []
+  const toDev = (n: MetaLike, depth = 0): SourceDevice => ({
+    name: n.entity!.id,
+    label: dual(n.label, n.name),
+    profile: n.profile ?? '',
+    gateway: null,
+    points: [],
+    ref: { type: n.entity!.type, id: n.entity!.id, name: n.entity!.name || n.name },
+    lazy: true,
+    ...(depth ? { depth } : {}),
+  })
+  const flat = (list: MetaLike[], depth: number): SourceDevice[] =>
+    list.flatMap(n => [...(n.entity ? [toDev(n, depth)] : []), ...flat(n.children, n.entity ? depth + 1 : depth)])
+  const out: SourceGroup[] = []
+  for (const c of root.children) {
+    if (c.kind === 'gateway' && c.entity)
+      out.push({ id: `gw:${c.id}`, label: dual(c.label, c.name), self: toDev(c), devices: flat(c.children, 0) })
+    else if (c.entity) out.push({ id: `one:${c.id}`, label: dual(c.label, c.name), self: toDev(c), devices: [] })
+    else {
+      const devices = flat(c.children, 0)
+      if (devices.length) out.push({ id: c.id, label: c.name, devices })
+    }
+  }
+  return out
+}

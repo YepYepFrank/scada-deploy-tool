@@ -11,12 +11,14 @@ import {
   buildSourceGroups,
   filterGroups,
   joinPointValue,
+  metaToSourceGroups,
   searchPoints,
   splitPointValue,
   type StepDevice,
 } from '../src/provisioner/source-picker'
 import DataSourceDrawer from '../src/provisioner/DataSourceDrawer.vue'
 import SourceField from '../src/provisioner/SourceField.vue'
+import { buildMetaTree } from '../src/meta/MetaNode'
 
 const k = (key: string, label = '', claimed = true, latest?: unknown, unit = '') => ({
   key,
@@ -85,7 +87,11 @@ describe('整理成 站 → 网关 → 设备 → 测点', () => {
 
 describe('数据源面板', () => {
   const open = (props: Record<string, unknown>) =>
-    mount(DataSourceDrawer, { props: { open: true, title: 't', groups, ...props }, attachTo: document.body })
+    mount(DataSourceDrawer, {
+      props: { open: true, title: 't', groups, ...props },
+      attachTo: document.body,
+      global: { stubs: { teleport: true } },
+    })
 
   it('测点:停在当前值的设备上、它的网关展开;点一行交出「设备||测点」', async () => {
     const w = open({ value: 'METER1||EPI' })
@@ -166,6 +172,7 @@ describe('数据源面板 · 多选(第二步)', () => {
     mount(DataSourceDrawer, {
       props: { open: true, title: 't', groups, multiple: true, ...props },
       attachTo: document.body,
+      global: { stubs: { teleport: true } },
     })
   const picked = (w: ReturnType<typeof open>) => w.findAll('[data-role="source-picked"]').map(c => c.text())
 
@@ -217,6 +224,56 @@ describe('数据源面板 · 多选(第二步)', () => {
     await w.find('[data-role="source-toggle-shown"]').trigger('click')
     await w.find('[data-role="source-confirm"]').trigger('click')
     expect(w.emitted('pickMany')).toEqual([[['T1_CB'], undefined]])
+    w.unmount()
+  })
+})
+
+describe('第 4 步:元数据树进面板,测点按需读', () => {
+  const tree = buildMetaTree(
+    '站',
+    [
+      { id: { id: 'g1' }, name: 'GW1', type: 'gateway', label: '1# 网关', additionalInfo: { gateway: true } },
+      { id: { id: 'd1' }, name: 'IED1', type: 'IED', additionalInfo: { lastConnectedGateway: 'g1' } },
+      { id: { id: 'd2' }, name: 'EV1', type: 'CHARGER' },
+    ],
+    [
+      { id: { id: 'a1' }, name: 'SITE', type: 'site' },
+      { id: { id: 'a2' }, name: 'RT_TOTAL', type: 'calc' },
+    ],
+    [{ from: 'a1', to: 'a2' }]
+  )
+  const g = metaToSourceGroups(tree, dual)
+
+  it('网关一组(网关本体可选)、直连一组、资产一组按包含关系缩进;设备以实体 id 标识、测点按需读', () => {
+    expect(g.map(x => x.label)).toEqual(['1# 网关（GW1）', '直连 / 未归网关设备', '资产'])
+    expect(g[0]!.self?.name).toBe('g1')
+    expect(g[0]!.devices.map(d => [d.name, d.ref?.name, d.lazy])).toEqual([['d1', 'IED1', true]])
+    expect(g[2]!.devices.map(d => [d.ref?.name, d.depth ?? 0])).toEqual([
+      ['SITE', 0],
+      ['RT_TOTAL', 1],
+    ])
+  })
+  it('打开设备时才读测点;读取中有提示;点一行交出「实体id||key」', async () => {
+    let calls = 0
+    let release: () => void = () => {}
+    const loadPoints = (d: { name: string }) => {
+      calls++
+      return new Promise<Array<{ key: string; text: string; kind: string; unit: string; latest: string }>>(r => {
+        release = () => r([{ key: 'P', text: `P@${d.name}`, kind: '数值', unit: '', latest: '1' }])
+      })
+    }
+    const w = mount(DataSourceDrawer, {
+      props: { open: true, title: 't', groups: g, loadPoints, ctxDevice: 'd1' },
+      attachTo: document.body,
+      global: { stubs: { teleport: true } },
+    })
+    await flushPromises()
+    expect(calls).toBe(1)
+    expect(w.text()).toContain('读取测点')
+    release()
+    await flushPromises()
+    await w.find('[data-role="source-point"][data-value="d1||P"]').trigger('click')
+    expect(w.emitted('pick')).toEqual([['d1||P']])
     w.unmount()
   })
 })

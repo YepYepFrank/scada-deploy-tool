@@ -40,22 +40,22 @@ defineEmits<{ open: [] }>()
   min-width: 220px;
   max-width: 100%;
   padding: 6px 10px;
-  color: var(--ink-0);
+  color: var(--ink-0, #ecf9ff);
   font: inherit;
   text-align: left;
-  background: var(--bg-0);
-  border: 1px solid var(--line-1);
-  border-radius: var(--r);
+  background: var(--bg-0, #041634);
+  border: 1px solid var(--line-1, rgba(83, 196, 255, 0.32));
+  border-radius: var(--r, 6px);
   cursor: pointer;
 }
 .src-field:hover {
-  border-color: var(--accent);
+  border-color: var(--accent, #19b7ff);
 }
 .src-field.empty {
-  color: var(--ink-2);
+  color: var(--ink-2, #8fbce8);
 }
 .src-field.active {
-  border-color: var(--accent);
+  border-color: var(--accent, #19b7ff);
   box-shadow: 0 0 0 2px rgba(25, 183, 255, 0.25);
 }
 .src-field-text {
@@ -77,6 +77,6 @@ defineEmits<{ open: [] }>()
 }
 .src-field-caret {
   flex: none;
-  color: var(--ink-2);
+  color: var(--ink-2, #8fbce8);
 }
 </style>
