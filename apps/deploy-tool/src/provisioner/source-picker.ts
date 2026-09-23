@@ -68,6 +68,8 @@ export interface KeyOption {
   text: string
   /** 如「8/10 台」 */
   note?: string
+  /** 遥测 / 遥信(按测点字典;开关变位告警只列遥信) */
+  kind?: SourcePoint['kind']
 }
 
 /** 四则运算的「常数」项(与原 KeyPicker 的 topItems 同值) */

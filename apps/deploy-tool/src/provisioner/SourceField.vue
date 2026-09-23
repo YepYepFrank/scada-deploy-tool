@@ -65,6 +65,16 @@ defineEmits<{ open: [] }>()
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* 多选格子 + 「清空」一行 */
+.src-multi {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+.src-multi .src-field {
+  flex: 1;
+}
 .src-field-caret {
   flex: none;
   color: var(--ink-2);

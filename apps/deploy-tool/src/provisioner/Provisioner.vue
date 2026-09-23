@@ -1194,7 +1194,7 @@ function suggestAlarm() {
   if (modalTpl.value?.kind !== 'alarm') return
   const k = keyBase(modal.form.key)
   if (!k) return
-  // 开关变位告警的名称在勾选测点时逐个生成(swToggle),这里不管
+  // 开关变位告警的名称在选测点时逐个生成(applySwitchSel),这里不管
   if (modalTpl.value.switch) return
   const cn = keyDict.value[k]?.name || k
   const isSwitch = ['eq', 'ne'].includes(modal.form.op)
@@ -1903,7 +1903,12 @@ const srcPanel = reactive({
   note: null,
   ctxDevice: '',
   emptyText: '',
+  multiple: false,
+  selected: [],
+  singleDevice: false,
+  onlyKind: '',
   onPick: null,
+  onPickMany: null,
 })
 const srcGroups = computed(() =>
   srcPanel.open && srcPanel.mode !== 'key'
@@ -1928,7 +1933,12 @@ function openSource(id, opts) {
     note: null,
     ctxDevice: '',
     emptyText: '',
+    multiple: false,
+    selected: [],
+    singleDevice: false,
+    onlyKind: '',
     onPick: null,
+    onPickMany: null,
     ...opts,
     id,
     open: true,
@@ -1944,6 +1954,17 @@ function onSourcePick(v) {
   const name = mode === 'device' ? v : splitPointValue(v)?.device
   const d = name ? devByName.value.get(name) : undefined
   if (d?.tbId) rememberDevice(site.name, { type: 'DEVICE', id: d.tbId, name: d.name })
+}
+/** 多选的「确定」:一次交回;用到的设备都记进最近用过 */
+function onSourcePickMany(vals, device) {
+  const fn = srcPanel.onPickMany
+  srcPanel.open = false
+  fn?.(vals, device)
+  const names = device ? [device] : [...new Set(vals.map(v => splitPointValue(v)?.device).filter(Boolean))]
+  for (const name of names.reverse()) {
+    const d = devByName.value.get(name)
+    if (d?.tbId) rememberDevice(site.name, { type: 'DEVICE', id: d.tbId, name: d.name })
+  }
 }
 watch(
   () => modal.open || presetOne.open,
@@ -2007,6 +2028,81 @@ function openTermField(i) {
     onPick: v => (t.src = v),
   })
 }
+/** 多选格子上的摘要:前 3 个 + 「等 N 个」 */
+function summaryOf(texts, max = 3) {
+  if (!texts.length) return ''
+  return texts.slice(0, max).join('、') + (texts.length > max ? ` 等 ${texts.length} 个` : '')
+}
+/** 某台设备上的测点显示名 */
+function devKeyText(device, key) {
+  const k = devByName.value.get(device)?.keys.find(x => x.key === key)
+  return k ? dual(keyCn(k), key) : kd(key)
+}
+/* 周期统计 / 多级归档的「统计测点」(多选,同一台设备) */
+const kmSummary = computed(() =>
+  summaryOf(
+    (modal.form.keys || []).map(k => (modal.target !== null ? keyText(k) : devKeyText(modal.form.device, k)))
+  )
+)
+function openRollupKeys() {
+  if (modal.target !== null)
+    return openSource('rollup-keys', {
+      mode: 'key',
+      multiple: true,
+      title: '选择统计测点',
+      selected: modal.form.keys,
+      keys: keyOptionsOf(tplKeyOptions.value),
+      keyScope: tplScope(),
+      onPickMany: vals => (modal.form.keys = vals),
+    })
+  openSource('rollup-keys', {
+    multiple: true,
+    singleDevice: true,
+    title: '选择统计测点(同一台设备)',
+    selected: modal.form.keys,
+    ctxDevice: modal.form.device,
+    onPickMany: (vals, dev) => {
+      if (dev && dev !== modal.form.device) setRollupDevice(dev)
+      modal.form.keys = vals
+    },
+  })
+}
+/* 开关变位告警的遥信测点(多选,可跨设备);已选的保留原来填的名称 / 级别 */
+const keyOfRef = ref => splitPointValue(ref)?.key ?? ref
+/** 缺省告警名:测点中文名(第 2 步填的 / 字典 / 派生)+「变位」,都没有用 key */
+function switchNameOf(ref) {
+  const p = splitPointValue(ref)
+  const key = keyOfRef(ref)
+  const k = p
+    ? devByName.value.get(p.device)?.keys.find(x => x.key === key)
+    : claimedDevices.value.map(d => d.keys.find(x => x.key === key && x.claimed)).find(Boolean)
+  return `${(k && keyCn(k)) || smartCn(key) || key}变位`
+}
+function applySwitchSel(refs) {
+  modal.form.swSel = refs.map(
+    ref => modal.form.swSel.find(x => x.ref === ref) ?? { ref, name: switchNameOf(ref), severity: modal.form.severity }
+  )
+}
+const kindOfKey = key => (keyDict.value[key]?.type === 'YX' ? '遥信' : keyDict.value[key]?.type === 'YC' ? '遥测' : '')
+function openSwitchKeys() {
+  const common = {
+    multiple: true,
+    onlyKind: '遥信',
+    title: '选择开关测点(遥信)',
+    selected: modal.form.swSel.map(r => r.ref),
+    onPickMany: applySwitchSel,
+  }
+  if (modal.target !== null)
+    return openSource('switch-keys', {
+      ...common,
+      mode: 'key',
+      keys: keyOptionsOf(tplKeyOptions.value).map(k => ({ ...k, kind: kindOfKey(k.key) })),
+      keyScope: tplScope(),
+    })
+  openSource('switch-keys', common)
+}
+const swSummary = computed(() => summaryOf(modal.form.swSel.map(r => (r.ref.includes('||') ? pointText(r.ref) : keyText(r.ref)))))
+
 function openPresetDevice() {
   const p = presetOne.preset
   const n = new Map(presetOneDevices.value.map(x => [x.d.name, x.n]))
@@ -2160,72 +2256,12 @@ function keyRef(encoded) {
 
 /* ── 统计测点多选(周期统计/多级归档):过滤 + 限高滚动列表 ──
    旧的 checkbox 流式布局在 250+ 测点的设备上会把弹窗撑出视口且无法滚动 */
-const kmFilter = ref('')
-const kmLabel = k => (modal.target !== null ? k.label : dual(keyCn(k), k.key))
 const kmAll = computed(() => (modal.target !== null ? tplKeyOptions.value : modalDeviceKeys.value))
-const kmOptions = computed(() => {
-  const f = kmFilter.value.trim().toLowerCase()
-  if (!f) return kmAll.value
-  return kmAll.value.filter(k => kmLabel(k).toLowerCase().includes(f))
-})
-function kmSelectAll() {
-  const s = new Set(modal.form.keys)
-  for (const k of kmOptions.value) s.add(k.key)
-  modal.form.keys = [...s]
-}
-watch(
-  () => modal.open,
-  v => {
-    if (v) kmFilter.value = swFilter.value = ''
-  }
-)
-
 /* ── 开关变位告警(2026-09-13 现场反馈):只列遥信(YX)测点、可多选;
    方式二每个测点单独设级别,设备模板里默认一个级别、个别设备另设(进线开关报最高级,路灯开关只提示) ── */
-const swFilter = ref('')
 // 测点字典给每个测点登记了类型:YX 遥信(开关 / 状态量)、YC 遥测、YM 遥脉;没读到字典就分不出,全列出来
 const dictTyped = computed(() => Object.values(keyDict.value).some(e => e.type))
 const isYx = key => keyDict.value[key]?.type === 'YX'
-const swAll = computed(() => {
-  if (!modalTpl.value?.switch) return []
-  if (modal.target !== null) {
-    const t = deviceTemplates.value[modal.target]
-    if (!t) return []
-    const items = tplKeyOptions.value.map(k => ({ ref: k.key, key: k.key, label: k.label }))
-    return [{ label: `「${t.name}」匹配的 ${tplMatched(t).length} 台设备`, items }]
-  }
-  return claimedDevices.value.map(d => ({
-    label: dn(d.name),
-    items: d.keys
-      .filter(k => k.claimed)
-      .map(k => ({ ref: `${d.name}||${k.key}`, key: k.key, label: dual(keyCn(k), k.key) })),
-  }))
-})
-const swHiddenCount = computed(() =>
-  dictTyped.value ? swAll.value.reduce((n, g) => n + g.items.filter(it => !isYx(it.key)).length, 0) : 0
-)
-const swGroups = computed(() => {
-  const f = swFilter.value.trim().toLowerCase()
-  const all = !dictTyped.value || modal.form.swShowAll
-  return swAll.value
-    .map(g => ({
-      ...g,
-      items: g.items.filter(it => (all || isYx(it.key)) && (!f || `${g.label} ${it.label}`.toLowerCase().includes(f))),
-    }))
-    .filter(g => g.items.length)
-})
-const swPicked = r => modal.form.swSel.some(x => x.ref === r)
-function swToggle(it, on = !swPicked(it.ref)) {
-  const i = modal.form.swSel.findIndex(x => x.ref === it.ref)
-  if (on && i < 0)
-    modal.form.swSel.push({ ref: it.ref, name: `${smartCn(it.key) || it.key}变位`, severity: modal.form.severity })
-  else if (!on && i >= 0) modal.form.swSel.splice(i, 1)
-}
-const swGroupAll = g => g.items.every(it => swPicked(it.ref))
-function swToggleGroup(g) {
-  const on = !swGroupAll(g)
-  for (const it of g.items) swToggle(it, on)
-}
 function swRefText(r) {
   if (!r.includes('||')) return kd(r)
   const { device, key } = keyRef(r)
@@ -2278,8 +2314,7 @@ const swProblem = computed(() => {
 function swapToSwitch() {
   const r = modal.form.key
   openTpl('alarm.switch', modal.target)
-  swFilter.value = ''
-  if (r) swToggle({ ref: r, key: keyBase(r) })
+  if (r) applySwitchSel([r])
 }
 
 const modalValid = computed(() => {
@@ -3954,19 +3989,14 @@ function openFrontend() {
           <div v-if="modal.tplId === 'window.aggregate' || modal.tplId === 'window.cascade'" class="frow">
             <div class="field" style="flex: 1; min-width: 0">
               <label>统计测点(已选 {{ modal.form.keys.length }} / {{ kmAll.length }})</label>
-              <div class="key-multi">
-                <div class="km-bar">
-                  <input type="text" v-model="kmFilter" class="km-q" placeholder="🔍 过滤:测点名 / 中文名…" />
-                  <button class="btn ghost sm" @click="kmSelectAll">全选筛选结果</button>
-                  <button class="btn ghost sm" @click="modal.form.keys = []">清空</button>
-                </div>
-                <div class="km-list">
-                  <label v-for="k in kmOptions" :key="k.key" class="km-row" :title="kmLabel(k)">
-                    <input type="checkbox" :value="k.key" v-model="modal.form.keys" />
-                    <span class="km-name">{{ kmLabel(k) }}</span>
-                  </label>
-                  <div v-if="!kmOptions.length" class="km-empty">无匹配测点</div>
-                </div>
+              <div class="src-multi">
+                <SourceField
+                  :text="kmSummary"
+                  placeholder="点击选择统计测点(可多选)…"
+                  :active="srcActive('rollup-keys')"
+                  @open="openRollupKeys"
+                />
+                <button v-if="modal.form.keys.length" class="btn ghost sm" @click="modal.form.keys = []">清空</button>
               </div>
             </div>
           </div>
@@ -4193,41 +4223,21 @@ function openFrontend() {
         <template v-else-if="modalTpl.switch">
           <div class="frow">
             <div class="field" style="flex: 1; min-width: 0">
-              <label>开关测点(只列遥信 YX,可多选 · 已选 {{ modal.form.swSel.length }})</label>
-              <div class="key-multi">
-                <div class="km-bar">
-                  <input type="text" v-model="swFilter" class="km-q" placeholder="🔍 过滤:设备 / 测点名 / 中文名…" />
-                  <button v-if="modal.form.swSel.length" class="btn ghost sm" @click="modal.form.swSel = []">
-                    清空
-                  </button>
-                </div>
-                <div class="km-list sw-list">
-                  <template v-for="g in swGroups" :key="g.label">
-                    <div class="sw-group">
-                      <span class="sw-gname" :title="g.label">{{ g.label }}</span>
-                      <button class="btn ghost sm" @click="swToggleGroup(g)">
-                        {{ swGroupAll(g) ? '取消' : '全选' }}{{ modal.target === null ? '本设备' : '' }}({{
-                          g.items.length
-                        }})
-                      </button>
-                    </div>
-                    <label v-for="it in g.items" :key="it.ref" class="km-row" :title="it.label">
-                      <input type="checkbox" :checked="swPicked(it.ref)" @change="swToggle(it, $event.target.checked)" />
-                      <span class="km-name">{{ it.label }}</span>
-                      <span v-if="dictTyped && !isYx(it.key)" class="sw-tag">非遥信</span>
-                    </label>
-                  </template>
-                  <div v-if="!swGroups.length" class="km-empty">
-                    {{ swFilter.trim() ? '无匹配测点' : '已认领的测点里没有遥信(YX)' }}
-                  </div>
-                </div>
+              <label>开关测点(遥信 YX,可多选 · 已选 {{ modal.form.swSel.length }})</label>
+              <div class="src-multi">
+                <SourceField
+                  :text="swSummary"
+                  placeholder="点击选择开关测点(可多选)…"
+                  :active="srcActive('switch-keys')"
+                  @open="openSwitchKeys"
+                />
+                <button v-if="modal.form.swSel.length" class="btn ghost sm" @click="modal.form.swSel = []">
+                  清空
+                </button>
               </div>
               <div class="fhint">
-                <template v-if="dictTyped">按平台的测点字典只列遥信(YX,开关 / 状态量)</template>
-                <template v-else>没读到测点字典,分不出遥信 / 遥测,列出了全部测点</template>
-                <label v-if="swHiddenCount" class="abs-check" style="margin-left: 10px">
-                  <input type="checkbox" v-model="modal.form.swShowAll" />也显示非遥信测点({{ swHiddenCount }})
-                </label>
+                <template v-if="dictTyped">按平台的测点字典只列遥信(YX,开关 / 状态量),面板里可以临时放开</template>
+                <template v-else>没读到测点字典,分不出遥信 / 遥测,会列出全部测点</template>
               </div>
             </div>
           </div>
@@ -4619,7 +4629,12 @@ function openFrontend() {
       :ctx-device="srcPanel.ctxDevice"
       :recent="srcRecent"
       :empty-text="srcPanel.emptyText"
+      :multiple="srcPanel.multiple"
+      :selected="srcPanel.selected"
+      :single-device="srcPanel.singleDevice"
+      :only-kind="srcPanel.onlyKind"
       @pick="onSourcePick"
+      @pick-many="onSourcePickMany"
       @close="srcPanel.open = false"
     />
   </div>

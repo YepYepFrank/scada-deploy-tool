@@ -7,6 +7,9 @@
  *  - device:只选设备,左栏就是整个面板,点设备即选中;
  *  - key:设备模板 / 全站汇聚这种「各设备的同名测点」,只列 key 与覆盖台数,不分设备。
  * 只负责「挑」,值的含义由调用方决定;搜索框跨网关搜设备和测点,↑↓ 回车可选,Esc 关闭。
+ * 多选(multiple,第二步):行前是勾选框,点行 / 回车切换勾选,底部列出已选、「确定(N)」一次交回(pickMany);
+ *  - singleDevice:周期统计这种「一台设备的若干测点」,值是裸 key,换设备会清空已选,交回时带上设备名;
+ *  - onlyKind = '遥信':开关变位只列遥信,可勾「也显示非遥信」;字典里没有类型时不筛。
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import {
@@ -43,6 +46,14 @@ const props = withDefaults(
     recent?: string[]
     /** 没有可选设备时的说明(常用方案:没有具备所需测点的设备) */
     emptyText?: string
+    /** 多选 */
+    multiple?: boolean
+    /** 多选的初值 */
+    selected?: string[]
+    /** 多选且只能是一台设备的测点(值为裸 key);打开时停在 ctxDevice */
+    singleDevice?: boolean
+    /** 只列这一类测点(可临时放开) */
+    onlyKind?: '' | '遥测' | '遥信'
   }>(),
   {
     siteLabel: '',
@@ -55,9 +66,13 @@ const props = withDefaults(
     ctxDevice: '',
     recent: () => [],
     emptyText: '',
+    multiple: false,
+    selected: () => [],
+    singleDevice: false,
+    onlyKind: '',
   }
 )
-const emit = defineEmits<{ pick: [value: string]; close: [] }>()
+const emit = defineEmits<{ pick: [value: string]; pickMany: [values: string[], device?: string]; close: [] }>()
 
 const q = ref('')
 const sel = ref('')
@@ -66,6 +81,10 @@ const scoped = ref(false)
 const openGroups = ref(new Set<string>())
 const active = ref(0)
 const searchEl = ref<HTMLInputElement | null>(null)
+/** 多选:已勾的(保持勾选顺序) */
+const checked = ref<string[]>([])
+/** onlyKind 时临时放开 */
+const showAllKinds = ref(false)
 
 const devices = computed(() => allSourceDevices(props.groups))
 const recentDevices = computed(() =>
@@ -79,12 +98,14 @@ watch(
     q.value = ''
     scoped.value = false
     active.value = 0
+    checked.value = [...props.selected]
+    showAllKinds.value = false
     const cur = props.mode === 'point' ? splitPointValue(props.value)?.device : props.mode === 'device' ? props.value : ''
     const start =
       [cur, props.ctxDevice, ...props.recent].find(n => n && findSourceDevice(props.groups, n)) ??
       devices.value[0]?.name ??
       ''
-    sel.value = props.mode === 'point' ? start : ''
+    sel.value = props.mode === 'point' ? (props.singleDevice && props.ctxDevice ? props.ctxDevice : start) : ''
     const g = start ? groupOfDevice(props.groups, start) : undefined
     openGroups.value = new Set(props.groups.length === 1 ? [props.groups[0]!.id] : g ? [g] : [])
     await nextTick()
@@ -107,6 +128,15 @@ function toggleGroup(id: string): void {
   openGroups.value = s
 }
 
+/* ───── 类型筛选 ───── */
+const kindKnown = computed(() =>
+  props.mode === 'key'
+    ? props.keys.some(k => !!k.kind)
+    : allSourceDevices(props.groups).some(d => d.points.some(p => !!p.kind))
+)
+const kindOn = computed(() => !!props.onlyKind && kindKnown.value && !showAllKinds.value)
+const kindOk = (kind: string | undefined) => !kindOn.value || kind === props.onlyKind
+
 /* ───── 右栏:测点 ───── */
 interface Row {
   value: string
@@ -121,26 +151,40 @@ const rows = computed<Row[]>(() => {
   const t = q.value.trim().toLowerCase()
   if (props.mode === 'key')
     return props.keys
-      .filter(k => !t || k.text.toLowerCase().includes(t))
-      .map(k => ({ value: k.key, text: k.text, sub: k.note }))
+      .filter(k => kindOk(k.kind) && (!t || k.text.toLowerCase().includes(t)))
+      .map(k => ({ value: k.key, text: k.text, sub: k.note, kind: k.kind }))
   if (props.mode !== 'point') return []
   const pointRow = (d: SourceDevice, p: SourceDevice['points'][number], withDevice: boolean): Row => ({
-    value: joinPointValue(d.name, p.key),
+    value: props.singleDevice ? p.key : joinPointValue(d.name, p.key),
     text: p.text,
     ...(withDevice ? { sub: d.label } : {}),
     kind: p.kind,
     unit: p.unit,
     latest: p.latest,
   })
-  if (searching.value && !scoped.value) return searchPoints(props.groups, q.value).map(h => pointRow(h.device, h.point, true))
+  // 只能一台设备时不跨设备搜,只在当前设备里筛
+  if (searching.value && !scoped.value && !props.singleDevice)
+    return searchPoints(props.groups, q.value)
+      .filter(h => kindOk(h.point.kind))
+      .map(h => pointRow(h.device, h.point, true))
   const d = selDevice.value
   if (!d) return []
   const pts = t && !d.label.toLowerCase().includes(t) ? d.points.filter(p => p.text.toLowerCase().includes(t)) : d.points
-  return pts.map(p => pointRow(d, p, false))
+  return pts.filter(p => kindOk(p.kind)).map(p => pointRow(d, p, false))
+})
+
+/** 被类型筛选藏起来的测点数(给「也显示非遥信(N)」用) */
+const hiddenByKind = computed(() => {
+  if (!props.onlyKind || !kindKnown.value) return 0
+  if (props.mode === 'key') return props.keys.filter(k => k.kind !== props.onlyKind).length
+  const ds = props.singleDevice ? (selDevice.value ? [selDevice.value] : []) : allSourceDevices(props.groups)
+  return ds.reduce((n, d) => n + d.points.filter(p => p.kind !== props.onlyKind).length, 0)
 })
 
 function chooseDevice(d: SourceDevice): void {
   if (props.mode === 'device') return emit('pick', d.name)
+  // 一台设备的多选:换设备就清空(裸 key 不带设备,留着会张冠李戴)
+  if (props.multiple && props.singleDevice && d.name !== sel.value) checked.value = []
   sel.value = d.name
   if (searching.value) scoped.value = true
   active.value = 0
@@ -148,7 +192,34 @@ function chooseDevice(d: SourceDevice): void {
   if (g && !openGroups.value.has(g)) toggleGroup(g)
 }
 function pick(v: string): void {
+  if (props.multiple) return toggle(v)
   emit('pick', v)
+}
+
+/* ───── 多选 ───── */
+const isChecked = (v: string) => checked.value.includes(v)
+function toggle(v: string): void {
+  checked.value = isChecked(v) ? checked.value.filter(x => x !== v) : [...checked.value, v]
+}
+/** 当前列出来的是不是全勾了 */
+const allShownChecked = computed(() => rows.value.length > 0 && rows.value.every(r => isChecked(r.value)))
+function toggleShown(): void {
+  const vals = rows.value.map(r => r.value)
+  checked.value = allShownChecked.value
+    ? checked.value.filter(v => !vals.includes(v))
+    : [...checked.value, ...vals.filter(v => !isChecked(v))]
+}
+/** 已选的显示文字(找不到的原样显示) */
+function checkedText(v: string): string {
+  if (props.mode === 'key') return props.keys.find(k => k.key === v)?.text ?? v
+  if (props.singleDevice) return selDevice.value?.points.find(p => p.key === v)?.text ?? v
+  const p = splitPointValue(v)
+  const d = p ? findSourceDevice(props.groups, p.device) : undefined
+  const pt = d?.points.find(x => x.key === p!.key)
+  return d && pt ? `${d.label} · ${pt.text}` : v
+}
+function confirm(): void {
+  emit('pickMany', [...checked.value], props.singleDevice ? sel.value || undefined : undefined)
 }
 
 /* ───── 键盘 ───── */
@@ -166,10 +237,16 @@ function onKey(e: KeyboardEvent): void {
     const n = pickable.value.length
     if (n) active.value = (active.value + (e.key === 'ArrowDown' ? 1 : n - 1)) % n
   } else if (e.key === 'Enter') {
+    // 多选:Ctrl + 回车 = 确定
+    if (props.multiple && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      return confirm()
+    }
     const v = pickable.value[active.value]
     if (v) {
       e.preventDefault()
-      emit('pick', v)
+      if (props.mode === 'device') emit('pick', v)
+      else pick(v)
     }
   }
 }
@@ -224,13 +301,32 @@ const empty = computed(() => !props.groups.length && props.mode !== 'key')
         【常数】<span class="dsd-muted">选了之后在格子旁边填数值</span>
       </button>
 
+      <div v-if="multiple && onlyKind && kindKnown" class="dsd-kind">
+        <span class="dsd-muted">{{ kindOn ? `只列${onlyKind}` : '显示全部测点' }}</span>
+        <label v-if="hiddenByKind || showAllKinds" class="dsd-check">
+          <input v-model="showAllKinds" type="checkbox" data-role="source-show-all-kinds" />也显示非{{ onlyKind }}({{
+            hiddenByKind
+          }})
+        </label>
+      </div>
+
       <p v-if="empty" class="dsd-empty" data-role="source-empty">{{ emptyText || '第 2 步还没有认领任何测点' }}</p>
 
       <!-- key 模式:各设备的同名测点 -->
       <template v-else-if="mode === 'key'">
         <p v-if="keyScope" class="dsd-muted dsd-scope">{{ keyScope }}</p>
         <div class="dsd-cols dsd-cols-key">
-          <span>测点</span><span class="r">覆盖</span>
+          <span
+            >测点<button
+              v-if="multiple && rows.length"
+              type="button"
+              class="dsd-link"
+              data-role="source-toggle-shown"
+              @click="toggleShown"
+            >
+              {{ allShownChecked ? '取消全选' : searching ? '全选筛选结果' : '全选' }}
+            </button></span
+          ><span class="r">覆盖</span>
         </div>
         <ul class="dsd-list dsd-rows">
           <li v-for="r in rows" :key="r.value">
@@ -242,7 +338,11 @@ const empty = computed(() => !props.groups.length && props.mode !== 'key')
               :data-value="r.value"
               @click="pick(r.value)"
             >
-              <span class="dsd-name">{{ r.text }}</span>
+              <span class="dsd-name"
+                ><input v-if="multiple" type="checkbox" class="dsd-tick" :checked="isChecked(r.value)" tabindex="-1" />{{
+                  r.text
+                }}</span
+              >
               <span class="dsd-muted r">{{ r.sub }}</span>
             </button>
           </li>
@@ -295,7 +395,17 @@ const empty = computed(() => !props.groups.length && props.mode !== 'key')
             }}
           </p>
           <div class="dsd-cols">
-            <span>测点</span><span>类型</span><span>单位</span><span class="r">最近值</span>
+            <span
+              >测点<button
+                v-if="multiple && rows.length"
+                type="button"
+                class="dsd-link"
+                data-role="source-toggle-shown"
+                @click="toggleShown"
+              >
+                {{ allShownChecked ? '取消全选' : searching && !scoped && !singleDevice ? '全选搜索结果' : '全选本设备' }}
+              </button></span
+            ><span>类型</span><span>单位</span><span class="r">最近值</span>
           </div>
           <ul class="dsd-list dsd-rows">
             <li v-for="r in rows" :key="r.value">
@@ -309,7 +419,9 @@ const empty = computed(() => !props.groups.length && props.mode !== 'key')
                 @click="pick(r.value)"
               >
                 <span class="dsd-name"
-                  >{{ r.text }}<small v-if="r.sub" class="dsd-muted"> · {{ r.sub }}</small></span
+                  ><input v-if="multiple" type="checkbox" class="dsd-tick" :checked="isChecked(r.value)" tabindex="-1" />{{
+                    r.text
+                  }}<small v-if="r.sub" class="dsd-muted"> · {{ r.sub }}</small></span
                 >
                 <span class="dsd-muted">{{ r.kind }}</span>
                 <span class="dsd-muted">{{ r.unit }}</span>
@@ -322,6 +434,30 @@ const empty = computed(() => !props.groups.length && props.mode !== 'key')
           </ul>
         </section>
       </div>
+      <footer v-if="multiple" class="dsd-foot" data-role="source-foot">
+        <div v-if="checked.length" class="dsd-picked">
+          <span
+            v-for="v in checked"
+            :key="v"
+            class="dsd-chip on"
+            data-role="source-picked"
+            :title="checkedText(v)"
+            @click="toggle(v)"
+            >{{ checkedText(v) }} ×</span
+          >
+        </div>
+        <div class="dsd-foot-bar">
+          <span class="dsd-muted">已选 {{ checked.length }} 个{{ singleDevice ? ' · 换设备会清空' : '' }}</span>
+          <span class="dsd-grow" />
+          <button v-if="checked.length" type="button" class="dsd-x" data-role="source-clear" @click="checked = []">
+            清空
+          </button>
+          <button type="button" class="dsd-x" @click="emit('close')">取消</button>
+          <button type="button" class="dsd-ok" data-role="source-confirm" @click="confirm">
+            确定({{ checked.length }})
+          </button>
+        </div>
+      </footer>
     </aside>
   </Transition>
 </template>
@@ -552,6 +688,68 @@ const empty = computed(() => !props.groups.length && props.mode !== 'key')
   margin: 8px 0;
   color: var(--ink-2);
   font-size: 12px;
+}
+.dsd-kind {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.dsd-check {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--ink-1);
+  font-size: 12px;
+  cursor: pointer;
+}
+.dsd-link {
+  margin-left: 8px;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.dsd-tick {
+  margin: 0 6px 0 0;
+  vertical-align: -2px;
+  pointer-events: none;
+}
+.dsd-foot {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-0);
+}
+.dsd-picked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 84px;
+  overflow-y: auto;
+}
+.dsd-picked .dsd-chip {
+  max-width: 220px;
+}
+.dsd-foot-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.dsd-grow {
+  flex: 1;
+}
+.dsd-ok {
+  padding: 4px 14px;
+  color: var(--bg-0);
+  font: inherit;
+  font-weight: 600;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--r);
+  cursor: pointer;
 }
 /* 面板开着时配置弹窗往左让开,不被挡住 */
 .modal-mask.with-drawer {

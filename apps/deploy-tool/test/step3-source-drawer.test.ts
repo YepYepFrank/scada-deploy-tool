@@ -161,6 +161,66 @@ describe('数据源面板', () => {
   })
 })
 
+describe('数据源面板 · 多选(第二步)', () => {
+  const open = (props: Record<string, unknown>) =>
+    mount(DataSourceDrawer, {
+      props: { open: true, title: 't', groups, multiple: true, ...props },
+      attachTo: document.body,
+    })
+  const picked = (w: ReturnType<typeof open>) => w.findAll('[data-role="source-picked"]').map(c => c.text())
+
+  it('一台设备的若干测点(周期统计):值是裸 key,换设备清空,确定时带上设备名', async () => {
+    const w = open({ singleDevice: true, ctxDevice: 'IED1', selected: ['P'] })
+    await flushPromises()
+    expect(w.find('.dsd-dev.on').attributes('data-name')).toBe('IED1')
+    expect(picked(w)).toEqual(['有功功率（P） ×'])
+    await w.find('[data-role="source-point"][data-value="T1_CB"]').trigger('click')
+    expect(picked(w)).toHaveLength(2)
+    await w.find('[data-role="source-gw"][data-id="gw:GW2"]').trigger('click')
+    await w.find('[data-role="source-device"][data-name="PCS1"]').trigger('click')
+    expect(picked(w)).toEqual([])
+    await w.find('[data-role="source-toggle-shown"]').trigger('click')
+    await w.find('[data-role="source-confirm"]').trigger('click')
+    expect(w.emitted('pickMany')).toEqual([[['CHG_E', 'DIS_E'], 'PCS1']])
+    w.unmount()
+  })
+  it('开关变位:只列遥信,可临时放开;跨设备勾选;点已选的标签去掉;Ctrl+回车确定', async () => {
+    const w = open({ onlyKind: '遥信', selected: ['METER1||EPI'] })
+    await flushPromises()
+    const rows = () => w.findAll('[data-role="source-point"]').map(b => b.attributes('data-value'))
+    await w.find('[data-role="source-device"][data-name="IED1"]').trigger('click')
+    expect(rows()).toEqual(['IED1||T1_CB'])
+    expect(w.find('.dsd-kind').text()).toContain('也显示非遥信')
+    await w.find('[data-role="source-show-all-kinds"]').setValue(true)
+    expect(rows()).toEqual(['IED1||P', 'IED1||T1_CB'])
+    await w.find('[data-role="source-point"][data-value="IED1||T1_CB"]').trigger('click')
+    // 初值里的 EPI 不是遥信,但已选的照样保留;点标签去掉
+    expect(picked(w)).toEqual([
+      '关口电表（METER1） · 正向有功电能（EPI） ×',
+      '1# 出线保护（IED1） · 开关位置（T1_CB） ×',
+    ])
+    await w.find('[data-role="source-picked"]').trigger('click')
+    await w.find('[data-role="source-search"]').trigger('keydown', { key: 'Enter', ctrlKey: true })
+    expect(w.emitted('pickMany')).toEqual([[['IED1||T1_CB'], undefined]])
+    w.unmount()
+  })
+  it('设备模板的同名测点也能多选、按类型筛', async () => {
+    const w = open({
+      mode: 'key',
+      onlyKind: '遥信',
+      keys: [
+        { key: 'T1_CB', text: '开关位置（T1_CB）', note: '2/2 台', kind: '遥信' },
+        { key: 'P', text: '有功功率（P）', note: '2/2 台', kind: '遥测' },
+      ],
+    })
+    expect(w.findAll('[data-role="source-key"]').map(b => b.attributes('data-value'))).toEqual(['T1_CB'])
+    await w.find('[data-role="source-toggle-shown"]').trigger('click')
+    await w.find('[data-role="source-confirm"]').trigger('click')
+    expect(w.emitted('pickMany')).toEqual([[['T1_CB'], undefined]])
+    w.unmount()
+  })
+})
+
 describe('取数的格子', () => {
   it('显示已选内容;没选显示提示;点了发 open', async () => {
     const w = mount(SourceField, { props: { text: '', placeholder: '点击选择测点…' } })
