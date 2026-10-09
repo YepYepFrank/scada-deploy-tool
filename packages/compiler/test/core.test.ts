@@ -411,6 +411,40 @@ describe('rollup', () => {
     expect(mark).toContain('var TZ = 8 * 3600000')
     expect(mark).toContain('prevStart = dayStart - 86400000')
     expect(mark).toContain('metadata.ts = String(prevStart)')
+
+    // 真跑一遍「日界 → 取数 → 汇算」:驱动消息是 1h 汇算的输出(POST_TELEMETRY_REQUEST)
+    const run = (js: string, msg: unknown, metadata: Record<string, string>, msgType: string) =>
+      new Function('msg', 'metadata', 'msgType', js)(msg, metadata, msgType) as {
+        msg: Record<string, unknown>
+        metadata: Record<string, string>
+        msgType: string
+      }
+    const agg = meta.nodes[idx('级联汇算 A1 @1d')]!.configuration.jsScript as string
+    const hourly = { pMax1h: 48.17 }
+    const marked = run(mark, hourly, { deviceName: 'A1' }, 'POST_TELEMETRY_REQUEST')
+    expect(marked.msg).toEqual({})
+    expect(marked.msgType).not.toBe('POST_TELEMETRY_REQUEST')
+    // 那一天一个 1h 点都没有(例如 TB 停机一整天):不能把 1h 的值原样放行给保存节点
+    // (2026-10-09 镜像实测:pMax1h 被存到了日界时间戳上)
+    const empty = run(agg, marked.msg, marked.metadata, marked.msgType)
+    expect(empty.msgType).not.toBe('POST_TELEMETRY_REQUEST')
+    expect(empty.msg).not.toHaveProperty('pMax1h')
+    // 有数据时照常出日值,点戳在那一天的 0 点
+    const full = run(
+      agg,
+      marked.msg,
+      {
+        ...marked.metadata,
+        pMax1h: JSON.stringify([
+          { ts: 1, value: '40' },
+          { ts: 2, value: '50.5' },
+        ]),
+      },
+      marked.msgType
+    )
+    expect(full.msgType).toBe('POST_TELEMETRY_REQUEST')
+    expect(full.msg).toEqual({ pMax1d: 50.5 })
+    expect(Number(full.metadata.ts) % 86400000).toBe(16 * 3600000) // 东八区 0 点 = UTC 16:00
   })
 })
 

@@ -128,14 +128,19 @@ const TZ_JS = 'var TZ = 8 * 3600000; var day = Math.floor((Date.now() + TZ) / 86
 /** 门:当前东八区日序号 ≠ 属性里记的,才放行 */
 export const cascadeDayGateJs = (attr: string) => TZ_JS + `return String(day) !== String(metadata.ss_${attr});`
 
-/** 放行后:算出「上一个自然日」的取数区间,并把落库时间戳定在那一天的 0 点 */
+/**
+ * 放行后:算出「上一个自然日」的取数区间,并把落库时间戳定在那一天的 0 点。
+ * 消息换成空体 + 自有类型:驱动它的是 1h 汇算的输出(POST_TELEMETRY_REQUEST),原样往下传的话,
+ * 那一天取不到数时 CASCADE_JS 会把它原样放行,1h 的值就被存到日界时间戳上(2026-10-09 镜像停机两周后实测)。
+ * 换成 CASCADE_DAY 后与 5m / 1h 两级的 CASCADE_TICK 一样,没数据就被保存节点拒收。
+ */
 export const cascadeDayMarkJs = (attr: string) =>
   TZ_JS +
   'var dayStart = day * 86400000 - TZ; var prevStart = dayStart - 86400000; ' +
   'metadata.dayStartTs = String(prevStart); metadata.dayEndTs = String(dayStart); ' +
   'metadata.ts = String(prevStart); ' +
   `metadata.${attr} = String(day); ` +
-  'return { msg: msg, metadata: metadata, msgType: msgType };'
+  "return { msg: {}, metadata: metadata, msgType: 'CASCADE_DAY' };"
 
 /** 把新的日序号写回设备属性(与取数同一拍,漏写只会多算一次,不会漏算) */
 export const cascadeDayAttrJs = (attr: string) =>
