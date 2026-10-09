@@ -309,7 +309,7 @@ const activeNow = new Set((act?.data ?? []).map(a => a.originatorName))
 const checkActive = Date.now() - now < 5 * 60e3
 put('| 设备 | 上升沿 | 新建告警 | 差 | 已清除 | 收尾越限 | 收尾有激活告警 |')
 put('|---|---|---|---|---|---|---|')
-let alarmOk = alarms.length > 0
+let alarmOk = true
 const alarmNotes = []
 let sumUp = 0
 for (const name of ieds) {
@@ -335,6 +335,10 @@ if (strays.length) {
   alarmOk = false
   alarmNotes.push(`模板外的设备也建了告警:${strays.join(', ')}`)
 }
+if (!sumUp && !alarms.length) {
+  alarmOk = false
+  alarmNotes.push('窗口内没有越限,也没有告警,无从验证')
+}
 const prop = alarms.filter(a => a.propagate).length
 if (prop !== alarms.length) {
   alarmOk = false
@@ -357,6 +361,11 @@ put('')
 const chains = (await get('/api/ruleChains?pageSize=200&page=0')).data ?? []
 const mine = chains.filter(c => c.name.endsWith(`· ${SITE}`))
 const rootChain = chains.find(c => c.root)
+// 级联归档在租户共用的定时链(镜像上叫 Periodic Rollups)里,链名不带站点;只取节点名里点了本站设备的那些节点
+const metas = {}
+for (const c of chains) metas[c.id.id] = await get(`/api/ruleChain/${c.id.id}/metadata`)
+const ownNode = n => ieds.some(d => n.name.includes(` ${d} `) || n.name.endsWith(` ${d}`))
+const shared = chains.filter(c => !c.root && !mine.includes(c) && (metas[c.id.id].nodes ?? []).some(ownNode))
 const events = async (id, type, from, to) => {
   const q = from == null ? '' : `&startTime=${from}&endTime=${to}`
   const r = await get(`/api/events/RULE_NODE/${id}/${type}?tenantId=${tenantId}&pageSize=1000&page=0${q}`)
@@ -369,8 +378,9 @@ let earliestKept = Infinity,
   errEvents = 0,
   statErrs = 0
 const restarts = []
-for (const c of [...mine, rootChain].filter(Boolean)) {
-  const meta = await get(`/api/ruleChain/${c.id.id}/metadata`)
+for (const c of [...mine, ...shared, rootChain].filter(Boolean)) {
+  const all = metas[c.id.id]
+  const meta = shared.includes(c) ? { nodes: all.nodes.filter(ownNode) } : all
   let chainEarliest = Infinity,
     started = 0,
     fails = 0,
@@ -399,7 +409,7 @@ for (const c of [...mine, rootChain].filter(Boolean)) {
     statErrs += sErr
   }
   put(
-    `| ${c.root ? `${c.name}(Root,全链,不计入判定)` : c.name} | ${meta.nodes?.length ?? '?'} | ${Number.isFinite(chainEarliest) ? fmt(chainEarliest) : '无'} | ${started} | ${fails} | ${errs} | ${sErr} |`
+    `| ${c.root ? `${c.name}(Root,全链,不计入判定)` : shared.includes(c) ? `${c.name}(共用链,只计本站设备的节点)` : c.name} | ${meta.nodes?.length ?? '?'} | ${Number.isFinite(chainEarliest) ? fmt(chainEarliest) : '无'} | ${started} | ${fails} | ${errs} | ${sErr} |`
   )
 }
 put('')
