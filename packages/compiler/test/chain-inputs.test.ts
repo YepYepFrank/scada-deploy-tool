@@ -268,3 +268,42 @@ describe('别的运算的结果当输入', () => {
     expect(compile(cfg).cascadeKeys).toContain('calc_pqSum')
   })
 })
+
+describe('全站汇聚拿运算结果当源测点', () => {
+  it('各台设备上的 calc_pqSum(设备模板算出来的)求全站和:有这个结果的设备都是成员', () => {
+    const cfg = base({
+      deviceTemplates: [
+        {
+          name: '运算',
+          selector: { profiles: ['IED'] },
+          items: [
+            {
+              template: 'expr.add',
+              inputs: { a: { device: '', key: 'P' }, b: { device: '', key: 'Q' } },
+              output: 'pqSum',
+            },
+          ],
+        },
+      ],
+      devices: [dev('D1', ['P', 'Q']), dev('D2', ['P', 'Q']), dev('D3', ['P'])],
+      computations: [
+        {
+          template: 'aggregate.crossEntity',
+          name: '全站视在',
+          selector: { profiles: ['IED'] },
+          key: 'calc_pqSum',
+          agg: 'sum',
+          asset: 'S_AGG',
+          output: 'totalPq',
+        },
+      ],
+    })
+    expect(validateConfig(cfg)).toEqual([])
+    const plan = compile(cfg)
+    expect(plan.aggregates[0]!.members).toEqual(['D1', 'D2'])
+    expect(plan.aggregates[0]!.bodies[0]!.configuration.arguments.v0!.refEntityKey).toEqual({
+      type: 'TS_LATEST',
+      key: 'calc_pqSum',
+    })
+  })
+})

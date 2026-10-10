@@ -14,6 +14,13 @@ import {
   metaToSourceGroups,
   searchPoints,
   splitPointValue,
+  formatPointValue,
+  splitKeyValue,
+  formatKeyValue,
+  attrPoints,
+  resultPoints,
+  resultAssetGroup,
+  RESULT_GROUP_ID,
   type StepDevice,
 } from '../src/provisioner/source-picker'
 import DataSourceDrawer from '../src/provisioner/DataSourceDrawer.vue'
@@ -287,5 +294,115 @@ describe('取数的格子', () => {
     expect(w.emitted('open')).toHaveLength(1)
     await w.setProps({ text: '关口电表 · 正向有功电能', active: true })
     expect(w.classes()).toEqual(expect.arrayContaining(['active']))
+  })
+})
+
+describe('属性 / 运算结果当输入(2026-10-10)', () => {
+  it('点值编码:属性带范围、资产上的结果带标记,解析回来一一对应;旧的「设备||测点」照旧', () => {
+    expect(splitPointValue('IED1||P')).toEqual({ device: 'IED1', key: 'P' })
+    const attr = formatPointValue({ device: 'IED1', key: 'ratedP', attr: 'SERVER_SCOPE' })
+    expect(attr).toBe('IED1||ratedP||@attr:SERVER_SCOPE')
+    expect(splitPointValue(attr)).toEqual({ device: 'IED1', key: 'ratedP', attr: 'SERVER_SCOPE' })
+    const onAsset = formatPointValue({ device: 'S_AGG', key: 'calc_totalP', entityType: 'ASSET' })
+    expect(splitPointValue(onAsset)).toEqual({ device: 'S_AGG', key: 'calc_totalP', entityType: 'ASSET' })
+    expect(splitKeyValue(formatKeyValue({ key: 'ratedP', attr: 'SHARED_SCOPE' }))).toEqual({
+      key: 'ratedP',
+      attr: 'SHARED_SCOPE',
+    })
+    expect(splitKeyValue('P')).toEqual({ key: 'P' })
+  })
+
+  it('属性行:只留数值型,TB 的在线 / 活动时间与本工具的内部属性不列;值带范围标记', () => {
+    const rows = attrPoints('IED1', [
+      { scope: 'SERVER_SCOPE', key: 'ratedP', value: 250 },
+      { scope: 'SHARED_SCOPE', key: 'limit', value: '45.5' },
+      { scope: 'SERVER_SCOPE', key: 'model', value: 'PCS-9611' },
+      { scope: 'SERVER_SCOPE', key: 'active', value: true },
+      { scope: 'SERVER_SCOPE', key: 'lastActivityTime', value: 1791510575843 },
+      { scope: 'SERVER_SCOPE', key: 'inactivityAlarmTime', value: 1791510575843 },
+      { scope: 'SERVER_SCOPE', key: 'calc_PAvg1d__day', value: 20735 },
+      { scope: 'SERVER_SCOPE', key: 'almState_P_gt_45_abc123', value: 1 },
+      { scope: 'CLIENT_SCOPE', key: 'empty', value: '' },
+    ])
+    expect(rows.map(r => r.key)).toEqual(['limit', 'ratedP'])
+    expect(rows[1]).toMatchObject({
+      section: '属性',
+      kind: '服务端',
+      latest: '250',
+      value: 'IED1||ratedP||@attr:SERVER_SCOPE',
+    })
+  })
+
+  it('运算结果行:设备上的挂到设备下;结果资产单独一组;分层汇聚的中间键不列', () => {
+    const results = [
+      { entityType: 'DEVICE' as const, entity: 'IED1', key: 'calc_pqSum', kind: 'cf' },
+      { entityType: 'DEVICE' as const, entity: 'IED1', key: 'calc_PAvg5m', kind: 'rollup' },
+      { entityType: 'ASSET' as const, entity: 'S_AGG', key: 'calc_totalP__p0', kind: 'agg' },
+      { entityType: 'ASSET' as const, entity: 'S_AGG', key: 'calc_totalP', kind: 'agg' },
+    ]
+    const pts = resultPoints(results, 'DEVICE', 'IED1', key => key)
+    expect(pts.map(p => [p.key, p.kind, p.value])).toEqual([
+      ['calc_pqSum', '即时', 'IED1||calc_pqSum'],
+      ['calc_PAvg5m', '统计', 'IED1||calc_PAvg5m'],
+    ])
+    const g = resultAssetGroup(results, key => key)!
+    expect(g.id).toBe(RESULT_GROUP_ID)
+    expect(g.devices.map(d => [d.name, d.points.map(p => p.value)])).toEqual([
+      ['S_AGG', ['S_AGG||calc_totalP||@asset']],
+    ])
+    // 接到设备树上:IED1 的行在认领测点后面
+    const withResults = buildSourceGroups(DEVICES, {
+      ...opts,
+      extra: name => resultPoints(results, 'DEVICE', name, k => k),
+    })
+    const ied = withResults[0]!.devices.find(d => d.name === 'IED1')!
+    expect(ied.points.map(p => p.section ?? '测点')).toEqual(['测点', '测点', '运算结果', '运算结果'])
+  })
+
+  it('面板:右栏按「测点 / 属性 / 运算结果」分区;点开设备才读属性;点属性交出带标记的值', async () => {
+    const results = [{ entityType: 'DEVICE' as const, entity: 'IED1', key: 'calc_pqSum', kind: 'cf' }]
+    const g2 = [
+      ...buildSourceGroups(DEVICES, { ...opts, extra: name => resultPoints(results, 'DEVICE', name, k => k) }),
+      resultAssetGroup([{ entityType: 'ASSET', entity: 'S_AGG', key: 'calc_totalP', kind: 'agg' }], k => k)!,
+    ]
+    const asked: string[] = []
+    let release: () => void = () => {}
+    const extraPoints = (d: { name: string }) => {
+      asked.push(d.name)
+      return new Promise<ReturnType<typeof attrPoints>>(r => {
+        release = () => r(attrPoints(d.name, [{ scope: 'SERVER_SCOPE', key: 'ratedP', value: 250 }]))
+      })
+    }
+    const w = mount(DataSourceDrawer, {
+      props: { open: true, title: 't', groups: g2, extraPoints, ctxDevice: 'IED1', allowConst: true },
+      attachTo: document.body,
+      global: { stubs: { teleport: true } },
+    })
+    await flushPromises()
+    expect(asked).toEqual(['IED1'])
+    expect(w.text()).toContain('读取设备属性')
+    release()
+    await flushPromises()
+    expect(w.findAll('[data-role="source-section"]').map(x => x.text())).toEqual(['测点', '属性', '运算结果'])
+    await w.find('[data-role="source-point"][data-value="IED1||ratedP||@attr:SERVER_SCOPE"]').trigger('click')
+    expect(w.emitted('pick')).toEqual([['IED1||ratedP||@attr:SERVER_SCOPE']])
+    // 结果资产那一组:点资产、点结果,交出带 @asset 的值
+    await w.find(`[data-role="source-gw"][data-id="${RESULT_GROUP_ID}"]`).trigger('click')
+    await w.find('[data-role="source-device"][data-name="S_AGG"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-role="source-point"][data-value="S_AGG||calc_totalP||@asset"]').trigger('click')
+    expect(w.emitted('pick')!.at(-1)).toEqual(['S_AGG||calc_totalP||@asset'])
+    w.unmount()
+  })
+
+  it('没有补读、也没有运算结果时界面不变:不出分区标题', async () => {
+    const w = mount(DataSourceDrawer, {
+      props: { open: true, title: 't', groups, ctxDevice: 'IED1' },
+      attachTo: document.body,
+      global: { stubs: { teleport: true } },
+    })
+    await flushPromises()
+    expect(w.findAll('[data-role="source-section"]')).toHaveLength(0)
+    w.unmount()
   })
 })

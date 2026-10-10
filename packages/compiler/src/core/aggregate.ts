@@ -2,11 +2,20 @@
 // ≤10 台单个 CF;多则「每 10 台一个分组求和 CF + 一个汇总 CF」(租户档案 maxArgumentsPerCF = 10)
 import type { CalculatedField, CfArgument, Computation, DeviceDecl, TbsiteConfig } from '../types'
 import { MAX_CF_ARGS } from './constants'
-import { matchSelector } from './templates'
+import { matchSelector, plannedOutputs } from './templates'
 
+/**
+ * 汇聚成员:选择器匹配、且有这个测点的设备。测点可以是第 2 步认领的遥测,也可以是本站运算在这台设备上的结果
+ * (2026-10-10,如各台设备的 calc_pqSum 求全站和)。
+ */
 export function resolveAggMembers(cfg: TbsiteConfig, c: Computation): DeviceDecl[] {
+  let planned: Map<string, Set<string>> | undefined
+  const isOutput = (dev: string) =>
+    !!(planned ??= plannedOutputs(cfg, typeof cfg.outputPrefix === 'string' ? cfg.outputPrefix : ''))
+      .get(dev)
+      ?.has(c.key as string)
   return (cfg.devices || []).filter(
-    d => matchSelector(d, c.selector || {}) && (d.keys || []).some(x => x.key === c.key)
+    d => matchSelector(d, c.selector || {}) && ((d.keys || []).some(x => x.key === c.key) || isOutput(d.name))
   )
 }
 

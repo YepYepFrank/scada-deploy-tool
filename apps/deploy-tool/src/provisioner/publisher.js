@@ -13,6 +13,11 @@ export {
   compile,
   summarizePlan,
   cfInputDevices,
+  // 即时计算的输入可以是属性 / 资产上的结果(2026-10-10):定宿主看实体,保存前查引用与环
+  cfInputEntities,
+  refErrors,
+  withPrefix,
+  outputPrefixOf,
   assetCfLoad,
   MAX_CF_PER_ENTITY,
   expandConfig,

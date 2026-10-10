@@ -38,7 +38,7 @@ const deviceOutput = (item: Computation): string | undefined =>
  * 如先算 pqSum、再对 pqSum 设阈值告警)。手工运算直接算;模板项按自身所需测点判断能不能落到这台设备,
  * 落得下就把输出记上,反复几轮直到不再增加(模板之间可以接力)。原名与加前缀的名字都记,引用写哪个都认。
  */
-function plannedOutputs(cfg: TbsiteConfig, prefix: string): Map<string, Set<string>> {
+export function plannedOutputs(cfg: TbsiteConfig, prefix: string): Map<string, Set<string>> {
   const outs = new Map<string, Set<string>>()
   const add = (dev: string, k: string) => {
     const set = outs.get(dev) ?? new Set<string>()

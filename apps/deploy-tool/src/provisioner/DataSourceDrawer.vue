@@ -11,6 +11,8 @@
  *  - singleDevice:周期统计这种「一台设备的若干测点」,值是裸 key,换设备会清空已选,交回时带上设备名;
  *  - onlyKind = '遥信':开关变位只列遥信,可勾「也显示非遥信」;字典里没有类型时不筛。
  * 第 4 步(组态编辑的绑定)也用它:设备来自元数据树(含资产),测点按需读(loadPoints),值为 `实体id||key`。
+ * 2026-10-10:右栏按分区列「测点 / 属性 / 运算结果」(行上的 section);属性按需读(extraPoints,点开设备才拉),
+ * 行可以自带值(属性、资产上的结果要带标记,见 source-picker 的 formatPointValue)。
  * 面板 Teleport 到 body:编辑器全屏层、接线图编辑器里有 transform / overflow 的祖先,fixed 定位会被困住。
  */
 import { computed, nextTick, ref, watch } from 'vue'
@@ -62,6 +64,8 @@ const props = withDefaults(
     loadPoints?: PointsLoader
     /** 右栏列的是什么:测点 / 属性 */
     pointNoun?: string
+    /** 点开设备时再补读的行(第 3 步即时计算的输入:设备属性),接在设备已有的行后面 */
+    extraPoints?: PointsLoader
   }>(),
   {
     siteLabel: '',
@@ -80,6 +84,7 @@ const props = withDefaults(
     onlyKind: '',
     loadPoints: undefined,
     pointNoun: '测点',
+    extraPoints: undefined,
   }
 )
 const emit = defineEmits<{ pick: [value: string]; pickMany: [values: string[], device?: string]; close: [] }>()
@@ -100,10 +105,17 @@ const showAllKinds = ref(false)
 const loaded = ref(new Map<string, SourcePoint[]>())
 const loading = ref(new Set<string>())
 const failed = ref(new Set<string>())
-const withLoaded = (d: SourceDevice): SourceDevice => (d.lazy ? { ...d, points: loaded.value.get(d.name) ?? [] } : d)
-/** 面板里实际用的分组:按需读的设备换上已读到的测点 */
+/* 补读的行(属性):设备 name → 行 */
+const extra = ref(new Map<string, SourcePoint[]>())
+const extraLoading = ref(new Set<string>())
+const withLoaded = (d: SourceDevice): SourceDevice => {
+  const base = d.lazy ? { ...d, points: loaded.value.get(d.name) ?? [] } : d
+  const more = extra.value.get(d.name)
+  return more?.length ? { ...base, points: [...base.points, ...more] } : base
+}
+/** 面板里实际用的分组:按需读的设备换上已读到的测点,补读到的属性接在后面 */
 const G = computed<SourceGroup[]>(() =>
-  props.loadPoints
+  props.loadPoints || props.extraPoints
     ? props.groups.map(g => ({
         ...g,
         ...(g.self ? { self: withLoaded(g.self) } : {}),
@@ -111,6 +123,21 @@ const G = computed<SourceGroup[]>(() =>
       }))
     : props.groups
 )
+async function ensureExtra(name: string): Promise<void> {
+  const d = findSourceDevice(props.groups, name)
+  if (!d || !props.extraPoints || extra.value.has(name) || extraLoading.value.has(name)) return
+  extraLoading.value = new Set(extraLoading.value).add(name)
+  try {
+    const pts = await props.extraPoints(d)
+    extra.value = new Map(extra.value).set(name, pts)
+  } catch {
+    extra.value = new Map(extra.value).set(name, []) // 读不到属性不挡选测点
+  } finally {
+    const next = new Set(extraLoading.value)
+    next.delete(name)
+    extraLoading.value = next
+  }
+}
 const lazyMode = computed(() => !!props.loadPoints)
 async function ensurePoints(name: string): Promise<void> {
   const d = findSourceDevice(props.groups, name)
@@ -149,6 +176,7 @@ watch(
     // 每次打开重新读(属性的 scope、绑定的 mode 可能变了;MetaClient 自己有缓存)
     loaded.value = new Map()
     failed.value = new Set()
+    extra.value = new Map()
     const cur =
       props.mode === 'point' ? splitPointValue(props.value)?.device : props.mode === 'device' ? props.value : ''
     const start =
@@ -158,14 +186,19 @@ watch(
     sel.value = props.mode === 'point' ? (props.singleDevice && props.ctxDevice ? props.ctxDevice : start) : ''
     const g = start ? groupOfDevice(G.value, start) : undefined
     openGroups.value = new Set(G.value.length === 1 ? [G.value[0]!.id] : g ? [g] : [])
-    if (sel.value) void ensurePoints(sel.value)
+    if (sel.value) {
+      void ensurePoints(sel.value)
+      void ensureExtra(sel.value)
+    }
     await nextTick()
     searchEl.value?.focus()
   },
   { immediate: true }
 )
 watch(sel, n => {
-  if (n) void ensurePoints(n)
+  if (!n) return
+  void ensurePoints(n)
+  void ensureExtra(n)
 })
 watch(q, () => {
   scoped.value = false
@@ -194,6 +227,8 @@ const kindOk = (kind: string | undefined) => !kindOn.value || kind === props.onl
 /* ───── 右栏:测点 ───── */
 interface Row {
   value: string
+  /** 分区:换分区时右栏插一行小标题 */
+  section?: string
   text: string
   sub?: string
   kind?: string
@@ -207,10 +242,19 @@ const rows = computed<Row[]>(() => {
   if (props.mode === 'key')
     return props.keys
       .filter(k => kindOk(k.kind) && (!t || k.text.toLowerCase().includes(t)))
-      .map(k => ({ value: k.key, text: k.text, sub: k.note, kind: k.kind }))
+      .map((k, i) => ({ k, i }))
+      .sort((a, b) => (SECTION_ORDER[a.k.section ?? ''] ?? 9) - (SECTION_ORDER[b.k.section ?? ''] ?? 9) || a.i - b.i)
+      .map(({ k }) => ({
+        value: k.key,
+        text: k.text,
+        sub: k.note,
+        kind: k.kind,
+        ...(k.section ? { section: k.section } : {}),
+      }))
   if (props.mode !== 'point') return []
   const pointRow = (d: SourceDevice, p: SourceDevice['points'][number], withDevice: boolean): Row => ({
-    value: props.singleDevice ? p.key : joinPointValue(d.name, p.key),
+    value: props.singleDevice ? p.key : (p.value ?? joinPointValue(d.name, p.key)),
+    ...(p.section ? { section: p.section } : {}),
     text: p.text,
     ...(withDevice ? { sub: d.label } : {}),
     kind: p.kind,
@@ -227,8 +271,25 @@ const rows = computed<Row[]>(() => {
   if (!d) return []
   const pts =
     t && !d.label.toLowerCase().includes(t) ? d.points.filter(p => p.text.toLowerCase().includes(t)) : d.points
-  return pts.filter(p => kindOk(p.kind)).map(p => pointRow(d, p, false))
+  // 分区排序:测点 → 属性 → 运算结果(属性是点开设备后才读来的,原本接在最后)
+  const rank = (p: SourcePoint) => SECTION_ORDER[p.section ?? ''] ?? 9
+  return pts
+    .filter(p => kindOk(p.kind))
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)
+    .map(({ p }) => pointRow(d, p, false))
 })
+
+const SECTION_ORDER: Record<string, number> = { '': 0, 属性: 1, 运算结果: 2 }
+/** 这一行前面要不要插分区小标题:第一行、或和上一行分区不同(缺省分区叫「测点」) */
+function sectionHead(i: number): string {
+  const cur = rows.value[i]?.section ?? ''
+  if (i > 0 && cur === (rows.value[i - 1]?.section ?? '')) return ''
+  return cur || pointNounOrDefault.value
+}
+const pointNounOrDefault = computed(() => props.pointNoun || '测点')
+/** 有不止一个分区才显示小标题(只有测点时界面和原来一样) */
+const sectioned = computed(() => rows.value.some(r => !!r.section))
 
 /** 被类型筛选藏起来的测点数(给「也显示非遥信(N)」用) */
 const hiddenByKind = computed(() => {
@@ -272,7 +333,7 @@ function checkedText(v: string): string {
   if (props.singleDevice) return selDevice.value?.points.find(p => p.key === v)?.text ?? v
   const p = splitPointValue(v)
   const d = p ? findSourceDevice(G.value, p.device) : undefined
-  const pt = d?.points.find(x => x.key === p!.key)
+  const pt = d?.points.find(x => (x.value ?? joinPointValue(d.name, x.key)) === v)
   return d && pt ? `${d.label} · ${pt.text}` : v
 }
 function confirm(): void {
@@ -396,7 +457,10 @@ const empty = computed(() => !G.value.length && props.mode !== 'key')
             ><span class="r">覆盖</span>
           </div>
           <ul class="dsd-list dsd-rows">
-            <li v-for="r in rows" :key="r.value">
+            <li v-for="(r, i) in rows" :key="r.value">
+              <div v-if="sectioned && sectionHead(i)" class="dsd-sec" data-role="source-section">
+                {{ sectionHead(i) }}
+              </div>
               <button
                 type="button"
                 class="dsd-row dsd-row-key"
@@ -485,7 +549,10 @@ const empty = computed(() => !G.value.length && props.mode !== 'key')
               ><span>类型</span><span>单位</span><span class="r">最近值</span>
             </div>
             <ul class="dsd-list dsd-rows">
-              <li v-for="r in rows" :key="r.value">
+              <li v-for="(r, i) in rows" :key="r.value">
+                <div v-if="sectioned && sectionHead(i)" class="dsd-sec" data-role="source-section">
+                  {{ sectionHead(i) }}
+                </div>
                 <button
                   type="button"
                   class="dsd-row"
@@ -512,6 +579,12 @@ const empty = computed(() => !G.value.length && props.mode !== 'key')
               </li>
               <li v-if="selDevice && loading.has(selDevice.name) && !(searching && !scoped)" class="dsd-empty">
                 读取{{ pointNoun }}…
+              </li>
+              <li
+                v-else-if="selDevice && extraLoading.has(selDevice.name) && !(searching && !scoped)"
+                class="dsd-empty dsd-extra-loading"
+              >
+                读取设备属性…
               </li>
               <li v-else-if="selDevice && failed.has(selDevice.name) && !(searching && !scoped)" class="dsd-empty">
                 读不到这台设备的{{ pointNoun }}
@@ -753,7 +826,7 @@ const empty = computed(() => !G.value.length && props.mode !== 'key')
 .dsd-cols,
 .dsd-row:not(.dsd-row-key) {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 38px 44px 64px;
+  grid-template-columns: minmax(0, 1fr) 44px 44px 64px;
   gap: 6px;
 }
 .dsd-cols {
@@ -779,6 +852,15 @@ const empty = computed(() => !G.value.length && props.mode !== 'key')
   padding: 0;
   overflow-y: auto;
   list-style: none;
+}
+/* 分区小标题:测点 / 属性 / 运算结果 */
+.dsd-sec {
+  margin: 8px 0 2px;
+  padding: 0 6px 2px;
+  color: var(--ink-2, #8fbce8);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  border-bottom: 1px dashed var(--line-0, rgba(83, 196, 255, 0.16));
 }
 .dsd-empty {
   margin: 8px 0;

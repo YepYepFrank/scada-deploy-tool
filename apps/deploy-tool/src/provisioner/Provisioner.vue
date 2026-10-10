@@ -25,6 +25,10 @@ import {
   publish,
   cleanup,
   cfInputDevices,
+  cfInputEntities,
+  refErrors,
+  withPrefix,
+  outputPrefixOf,
   assetCfLoad,
   MAX_CF_PER_ENTITY,
   expandConfig,
@@ -42,18 +46,21 @@ import {
 } from './publisher.js'
 import DataSourceDrawer from './DataSourceDrawer.vue'
 import SourceField from './SourceField.vue'
-import { CONST_VALUE, buildSourceGroups, splitPointValue } from './source-picker'
+import {
+  ATTR_SCOPE_TEXT,
+  CONST_VALUE,
+  attrPoints,
+  buildSourceGroups,
+  formatKeyValue,
+  formatPointValue,
+  resultAssetGroup,
+  resultPoints,
+  splitKeyValue,
+  splitPointValue,
+} from './source-picker'
 import { recentDevices, rememberDevice } from '../sld-editor/panels/binding/recent'
 import { assignSiteCustomer, custOf, devicesOutside, listCustomers } from './siteCustomer'
-import {
-  LS_ENVS,
-  LS_BUILTIN_ENVS,
-  mergeEnvs,
-  labelTaken,
-  fallbackEnv,
-  renameBuiltin,
-  hideBuiltin,
-} from './envs'
+import { LS_ENVS, LS_BUILTIN_ENVS, mergeEnvs, labelTaken, fallbackEnv, renameBuiltin, hideBuiltin } from './envs'
 import { deviceCn, dual, hasCn, isKeyDictAsset, keyCnFrom, parseKeyDict } from '../naming'
 
 const STEPS = ['连接与站点', '设备与测点', '运算配置', '组态编辑', '发布上线']
@@ -107,7 +114,12 @@ function confirmAnswer(v) {
 const PROXY_TARGET = (import.meta.env.VITE_TB_PROXY_TARGET || 'http://192.168.20.61:8080').replace(/^https?:\/\//, '')
 const PROXY_NAME = PROXY_TARGET.startsWith('192.168.20.61') ? '生产镜像' : '开发代理'
 const ENVS = {
-  demo: { label: `${PROXY_NAME} · ${PROXY_TARGET}(/api 直连)`, base: '', defUser: 'tenant@thingsboard.org', defPass: '' },
+  demo: {
+    label: `${PROXY_NAME} · ${PROXY_TARGET}(/api 直连)`,
+    base: '',
+    defUser: 'tenant@thingsboard.org',
+    defPass: '',
+  },
   mirror: { label: `${PROXY_NAME} · ${PROXY_TARGET}`, base: '/tbm', defUser: 'tenant@thingsboard.org', defPass: '' },
 }
 
@@ -840,9 +852,7 @@ function matchDev(d) {
   return (
     d.name.toLowerCase().includes(q) ||
     (d.label && d.label.toLowerCase().includes(q)) ||
-    d.keys.some(
-      k => k.key.toLowerCase().includes(q) || (k.cn && k.cn.includes(q)) || (k.label && k.label.includes(q))
-    )
+    d.keys.some(k => k.key.toLowerCase().includes(q) || (k.cn && k.cn.includes(q)) || (k.label && k.label.includes(q)))
   )
 }
 const deviceGroups = computed(() => {
@@ -880,7 +890,7 @@ const compSummary = computed(() => {
   deviceTemplates.value.forEach(t => t.items.forEach(i => bump(i.template)))
   return s
 })
-const modal = reactive({ open: false, tplId: null, form: {}, editIndex: null, target: null })
+const modal = reactive({ open: false, tplId: null, form: {}, editIndex: null, target: null, refError: '' })
 
 /* 网关分组折叠:默认只展开有已认领设备的组;搜索时强制全展开 */
 const gwOpen = reactive({})
@@ -1284,7 +1294,7 @@ function tplItemDesc(item) {
   if (item.template === 'window.cascade')
     return `${item.keys.map(kd).join('/')} · ${item.aggs.join('/')} · 三级归档(5m/1h/1d)`
   if (item.template === 'expr.add' || item.template === 'expr.subtract')
-    return `${kd(item.inputs.a.key)} ${item.template === 'expr.add' ? '+' : '−'} ${kd(item.inputs.b.key)} → ${item.output}${item.outputMode === 'attr' ? '(存属性)' : ''}`
+    return `${refShort(item.inputs.a)} ${item.template === 'expr.add' ? '+' : '−'} ${refShort(item.inputs.b)} → ${item.output}${item.outputMode === 'attr' ? '(存属性)' : ''}`
   return `${kd(item.key)} @ ${item.window} → ${item.output}`
 }
 
@@ -1348,6 +1358,20 @@ const aggKeyOptions = computed(() => {
     .map(([key, n]) => ({ key, label: `${kd(key)} · ${n}/${matched.length} 台`, cover: `${n}/${matched.length} 台` }))
 })
 
+/** 汇聚成员上本站运算的同名结果(如各台设备的 calc_pqSum 求全站和,2026-10-10) */
+const aggResultOptions = computed(() => {
+  if (modalTpl.value?.kind !== 'agg') return []
+  const names = new Set(aggMatched.value.map(d => d.name))
+  const own = modalOwnOutput()
+  const cover = new Map()
+  for (const k of declaredOutputs.value.keys)
+    if (k.entityType === 'DEVICE' && names.has(k.entity) && k.key !== own && !/__p\d+$/.test(k.key))
+      cover.set(k.key, (cover.get(k.key) || 0) + 1)
+  return [...cover.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([key, n]) => ({ key, text: kd(key), note: `${n}/${names.size} 台`, section: '运算结果' }))
+})
+
 /* ── 自定义四则运算 ── */
 const EXPR_OPS = ['+', '-', '*', '/']
 const OP_SHOW = { '+': '+', '-': '−', '*': '×', '/': '÷' }
@@ -1364,8 +1388,14 @@ function removeTerm(i) {
 function termLabel(t) {
   if (t.src === '__const__') return t.constVal === '' ? '?' : t.constVal
   if (!t.src) return '?'
-  const k = kd(t.src.split('||')[1])
+  const k = refShort(keyRef(t.src))
   return t.abs ? `|${k}|` : k
+}
+/** 运算描述里的一个输入:属性标「属性」,资产上的结果带资产名 */
+function refShort(r) {
+  if (r.attr) return `${r.key}(属性)`
+  if (r.entityType === 'ASSET') return `${r.device}·${kd(r.key)}`
+  return kd(r.key)
 }
 // 从左到右依次计算的表达式预览(带括号,消除歧义)
 const exprPreview = computed(() => {
@@ -1394,19 +1424,38 @@ const customValid = computed(() => {
    输入跨设备 → 存为独立资产的遥测(不再挂到第一个输入所在的设备上),页面直接绑资产取数 ── */
 const defaultCalcAsset = computed(() => `${site.name}_CALC`)
 /** 弹窗里已选输入涉及的设备;设备模板(方式一)不绑具体设备,回空 */
-const modalCfDevices = computed(() => {
+const modalCfSrcs = computed(() => {
   const tpl = modalTpl.value
   if (!tpl || tpl.kind !== 'cf' || modal.target !== null) return []
-  const srcs = tpl.custom
+  return tpl.custom
     ? (modal.form.terms || []).map(t => t.src).filter(s => s && s !== '__const__')
-    : tpl.params.filter(p => p.type === 'key').map(p => modal.form[p.id]).filter(Boolean)
-  return [...new Set(srcs.map(s => s.split('||')[0]))]
+    : tpl.params
+        .filter(p => p.type === 'key')
+        .map(p => modal.form[p.id])
+        .filter(Boolean)
 })
+/** 已选输入涉及的实体(设备 / 结果资产),`DEVICE:名` 去重 */
+const modalCfEntities = computed(() => {
+  const seen = new Map()
+  for (const v of modalCfSrcs.value) {
+    const p = splitPointValue(v)
+    if (!p) continue
+    const t = p.entityType === 'ASSET' ? 'ASSET' : 'DEVICE'
+    seen.set(`${t}:${p.device}`, { entityType: t, name: p.device })
+  }
+  return [...seen.values()]
+})
+/** 已选输入涉及的设备(资产上的结果不算) */
+const modalCfDevices = computed(() => modalCfEntities.value.filter(e => e.entityType === 'DEVICE').map(e => e.name))
+/** 输入只在一台设备上(属性也算这台设备的)→ 结果存这台设备;用到结果资产或跨设备 → 存结果资产 */
+const modalOnOneDevice = computed(
+  () => modalCfEntities.value.length === 1 && modalCfEntities.value[0].entityType === 'DEVICE'
+)
 const modalResultAsset = computed(() => (modal.form.resultAsset || '').trim() || defaultCalcAsset.value)
 /** 结果资产名的问题(撞名 / 超 TB 单实体 CF 上限);空串 = 没问题 */
 const modalAssetProblem = computed(() => {
   // 接管来的运算保持原实体,不走「结果资产名」这一套(那是同事的资产,名字不归我们定)
-  if (modalCfDevices.value.length < 2 || modalAdopted.value) return ''
+  if (!modalCfEntities.value.length || modalOnOneDevice.value || modalAdopted.value) return ''
   const name = modalResultAsset.value
   if (name === site.name) return '结果资产名不能与站点同名'
   if (claimedDevices.value.some(d => d.name === name)) return `结果资产名与设备 ${dn(name)} 重名`
@@ -1417,25 +1466,28 @@ const modalAssetProblem = computed(() => {
     ? `资产 ${name} 上已有 ${n - 1} 个计算结果,TB 单个实体最多 ${MAX_CF_PER_ENTITY} 个,请换一个资产名`
     : ''
 })
-/** 定宿主:输入都在一台设备 → device;跨设备 → asset */
+/**
+ * 定宿主:输入都在一台设备(含这台设备的属性)→ device;跨设备、或用到结果资产上的结果 → 结果资产。
+ * 只用到一个结果资产时也不挂到那个资产上:汇聚 / 收益的资产上已有好几个计算字段,TB 单实体有上限。
+ */
 function placeCf(c) {
-  const devs = cfInputDevices(c)
-  if (devs.length > 1) c.asset = modalResultAsset.value
-  else c.device = devs[0]
+  const ents = cfInputEntities(c)
+  if (ents.length === 1 && ents[0].entityType === 'DEVICE') c.device = ents[0].name
+  else c.asset = modalResultAsset.value
 }
 /** 运算清单里的「结果存在哪」;旧配置里跨设备却挂在设备上的,提示编辑一次即改存资产 */
 function cfWhere(c) {
   const tag = c.adopted ? `(接管 · 平台字段「${c.cfName || c.output}」)` : ''
   if (c.asset) return `资产 ${c.asset} · ${kd(c.output)}${tag}`
   const legacy =
-    !c.adopted && cfInputDevices(c).length > 1
-      ? '(旧配置:跨设备结果仍存在这台设备上,点「编辑」再保存即改存资产)'
-      : ''
+    !c.adopted && cfInputDevices(c).length > 1 ? '(旧配置:跨设备结果仍存在这台设备上,点「编辑」再保存即改存资产)' : ''
   return `${dn(c.device)} · ${kd(c.output)}${tag}${legacy}`
 }
 
 /* ── 接管来的运算在弹窗里:保持接管身份和原实体(换了宿主就不是原来那个字段了) ── */
-const modalEditing = computed(() => (modal.target === null && modal.editIndex !== null ? computations.value[modal.editIndex] : null))
+const modalEditing = computed(() =>
+  modal.target === null && modal.editIndex !== null ? computations.value[modal.editIndex] : null
+)
 const modalAdopted = computed(() => !!modalEditing.value?.adopted)
 function keepAdopted(c) {
   const old = modalEditing.value
@@ -1597,13 +1649,12 @@ function setChoice(r, choice) {
   decisions[key] = { choice }
 }
 const choiceNote = r =>
-  choiceOf(r.key) !== 'tb'
-    ? ''
-    : decisions[r.key]?.backup
-      ? '已把向导里这条改成 TB 上的写法'
-      : '发布时保留 TB 上的版本'
+  choiceOf(r.key) !== 'tb' ? '' : decisions[r.key]?.backup ? '已把向导里这条改成 TB 上的写法' : '发布时保留 TB 上的版本'
 /** 这次发布要跳过的:还是「待定」的冲突 */
-const holdKeys = () => conflictRows().filter(r => choiceOf(r.key) === 'hold').map(r => r.key)
+const holdKeys = () =>
+  conflictRows()
+    .filter(r => choiceOf(r.key) === 'hold')
+    .map(r => r.key)
 const keepLabel = k => {
   if (k.startsWith('chain:')) return { where: '规则链', name: k.slice(6) }
   const [, entity, ...name] = k.slice(3).split('|')
@@ -1774,7 +1825,9 @@ async function deleteOwnChain(c) {
       title: '删除规则链',
       text:
         `立即删除 TB 上的「${c.name}」?\n` +
-        (src.length ? `· 同时删掉向导里生成它的 ${src.length} 条${CHAIN_KIND_CN[kind]}条目,否则下次发布又会建回来;\n` : '') +
+        (src.length
+          ? `· 同时删掉向导里生成它的 ${src.length} 条${CHAIN_KIND_CN[kind]}条目,否则下次发布又会建回来;\n`
+          : '') +
         (rootPoints ? `· Root 上本站点的转发节点指向它,会先摘掉。${ROOT_RESTART}\n` : '') +
         '· Root 上如果还有别人的节点转发到它,只清空不删。',
       okLabel: '删除',
@@ -1849,7 +1902,7 @@ async function unwireRoot() {
 /** 单设备运算:这台设备上平台已有的别人的计算字段 + 本站点要建的,超过 TB 单实体上限就提前拦 */
 const modalSlotProblem = computed(() => {
   const st = platform.state
-  if (!st || modalCfDevices.value.length !== 1 || modalAdopted.value) return ''
+  if (!st || !modalOnOneDevice.value || modalAdopted.value) return ''
   const dev = modalCfDevices.value[0]
   const key = `DEVICE|${dev}`
   const foreign =
@@ -1909,21 +1962,93 @@ const srcPanel = reactive({
   onlyKind: '',
   onPick: null,
   onPickMany: null,
+  // 2026-10-10:本站运算的结果也列出来('device' = 设备上的;'all' = 再加结果资产那一组),attrs = 点开设备读属性
+  results: false,
+  attrs: false,
+  /** 不列的结果 key(正在编辑的这条运算自己的输出,免得自己用自己) */
+  exclude: '',
 })
-const srcGroups = computed(() =>
-  srcPanel.open && srcPanel.mode !== 'key'
-    ? buildSourceGroups(devices.value, {
-        keyCn,
-        dual,
-        dict: keyDict.value,
-        only: srcPanel.only ?? undefined,
-        note: srcPanel.note ?? undefined,
-      })
-    : []
-)
+/** 本站运算会产出的结果(第 3 步配到哪就推到哪,与发布时写出的 key 同一套推法) */
+const siteResults = computed(() => declaredOutputs.value.keys.filter(k => k.key !== srcPanel.exclude))
+const srcGroups = computed(() => {
+  if (!srcPanel.open || srcPanel.mode === 'key') return []
+  const groups = buildSourceGroups(devices.value, {
+    keyCn,
+    dual,
+    dict: keyDict.value,
+    only: srcPanel.only ?? undefined,
+    note: srcPanel.note ?? undefined,
+    ...(srcPanel.results ? { extra: name => resultPoints(siteResults.value, 'DEVICE', name, kd) } : {}),
+  })
+  const assets = srcPanel.results === 'all' ? resultAssetGroup(siteResults.value, kd) : null
+  return assets ? [...groups, assets] : groups
+})
+
+/* ── 设备属性(即时计算的输入,2026-10-10):点开设备时读三种范围,本次弹窗内缓存 ── */
+const ATTR_SCOPES = ['SERVER_SCOPE', 'SHARED_SCOPE', 'CLIENT_SCOPE']
+const attrCache = new Map()
+async function deviceAttrRows(name) {
+  if (attrCache.has(name)) return attrCache.get(name)
+  const d = devByName.value.get(name)
+  if (!d?.tbId) return []
+  const job = Promise.all(
+    ATTR_SCOPES.map(scope =>
+      api(`/api/plugins/telemetry/DEVICE/${d.tbId}/values/attributes/${scope}`)
+        .then(list => (Array.isArray(list) ? list : []).map(a => ({ scope, key: a.key, value: a.value })))
+        .catch(() => [])
+    )
+  ).then(parts => parts.flat())
+  attrCache.set(name, job)
+  return job
+}
+const shortVal = v => {
+  const t = typeof v === 'object' ? JSON.stringify(v) : String(v)
+  return t.length > 12 ? t.slice(0, 11) + '…' : t
+}
+/** 面板点开一台设备时补读它的属性(结果资产那一组不是设备,不读) */
+async function loadDeviceAttrs(dev) {
+  if (!devByName.value.has(dev.name)) return []
+  return attrPoints(dev.name, await deviceAttrRows(dev.name), shortVal)
+}
+/** 设备模板:匹配设备上的同名属性(覆盖台数),给「两项加 / 减」当输入 */
+async function tplAttrOptions(t) {
+  const matched = tplMatched(t)
+  const cover = new Map()
+  const rows = await Promise.all(matched.map(d => deviceAttrRows(d.name)))
+  for (const list of rows)
+    for (const p of attrPoints('', list)) {
+      const v = formatKeyValue({ key: p.key, attr: splitPointValue(p.value).attr })
+      cover.set(v, (cover.get(v) || 0) + 1)
+    }
+  return [...cover.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([v, n]) => {
+      const { key, attr } = splitKeyValue(v)
+      return { key: v, text: `${key}(${ATTR_SCOPE_TEXT[attr]})`, note: `${n}/${matched.length} 台`, section: '属性' }
+    })
+}
+/** 设备模板:匹配设备上本站运算的同名结果(覆盖台数) */
+function tplResultOptions(t, exclude = '') {
+  const names = new Set(tplMatched(t).map(d => d.name))
+  const cover = new Map()
+  for (const k of declaredOutputs.value.keys)
+    if (k.entityType === 'DEVICE' && names.has(k.entity) && k.key !== exclude && !/__p\d+$/.test(k.key))
+      cover.set(k.key, (cover.get(k.key) || 0) + 1)
+  return [...cover.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([key, n]) => ({ key, text: kd(key), note: `${n}/${names.size} 台`, section: '运算结果' }))
+}
+/** 当前弹窗里这条运算的输出(带前缀),面板里不列它 */
+function modalOwnOutput() {
+  const out = (modal.form.output || '').trim()
+  return out ? withPrefix(outputPrefixOf(siteJson.value), out) : ''
+}
 const srcRecent = computed(() => recentDevices(site.name).value.map(d => d.name))
 function openSource(id, opts) {
   Object.assign(srcPanel, {
+    results: false,
+    attrs: false,
+    exclude: '',
     mode: 'point',
     value: '',
     allowConst: false,
@@ -1970,6 +2095,7 @@ watch(
   () => modal.open || presetOne.open,
   o => {
     if (!o) srcPanel.open = false
+    else attrCache.clear() // 每次开弹窗重新读属性(平台上可能刚改过)
   }
 )
 /** 格子上显示的文字 */
@@ -1978,12 +2104,16 @@ function pointText(v) {
   if (v === CONST_VALUE) return '【常数】'
   const p = splitPointValue(v)
   if (!p) return kd(v)
+  if (p.attr) return `${dn(p.device)} · ${p.key}(${ATTR_SCOPE_TEXT[p.attr] || '属性'})`
+  if (p.entityType === 'ASSET') return `资产 ${p.device} · ${kd(p.key)}`
   const k = devByName.value.get(p.device)?.keys.find(x => x.key === p.key)
   return `${dn(p.device)} · ${k ? dual(keyCn(k), p.key) : kd(p.key)}`
 }
 /** 只有 key 的测点(设备模板 / 汇聚):中文名取任一台认领设备上的(第 2 步人工填的优先),都没有再按字典 / 派生 */
-function keyText(key) {
-  if (!key) return ''
+function keyText(v) {
+  if (!v) return ''
+  const { key, attr } = splitKeyValue(v)
+  if (attr) return `${key}(${ATTR_SCOPE_TEXT[attr] || '属性'})`
   for (const d of claimedDevices.value) {
     const k = d.keys.find(x => x.key === key && x.claimed)
     if (k) return dual(keyCn(k), key)
@@ -2005,16 +2135,36 @@ function setRollupDevice(name) {
 }
 /** 单设备模式下「测点」格子:列全部认领设备,选到别的设备上的测点就连设备一起换 */
 function openKeyField(id, label, get, set, extra = {}) {
-  if (modal.target !== null)
-    return openSource(id, {
+  // 即时计算(两项加 / 减)的输入还可以是设备属性;别的(告警、差值 / 积分)只能是遥测或设备上的运算结果
+  const isCf = modalTpl.value?.kind === 'cf'
+  const own = modalOwnOutput()
+  if (modal.target !== null) {
+    const t = deviceTemplates.value[modal.target]
+    const base = [...keyOptionsOf(tplKeyOptions.value), ...(t ? tplResultOptions(t, own) : [])]
+    openSource(id, {
       mode: 'key',
-      title: `为「${label}」选择测点`,
+      title: `为「${label}」选择${isCf ? '数据源' : '测点'}`,
       value: get(),
-      keys: keyOptionsOf(tplKeyOptions.value),
+      keys: base,
       keyScope: tplScope(),
       onPick: set,
     })
-  openSource(id, { title: `为「${label}」选择测点`, value: get(), onPick: set, ...extra })
+    // 属性要从平台读(匹配设备逐台),读到了再补进列表
+    if (isCf && t)
+      void tplAttrOptions(t).then(more => {
+        if (srcPanel.open && srcPanel.id === id && more.length) srcPanel.keys = [...base, ...more]
+      })
+    return
+  }
+  openSource(id, {
+    title: `为「${label}」选择${isCf ? '数据源' : '测点'}`,
+    value: get(),
+    onPick: set,
+    results: isCf ? 'all' : 'device',
+    attrs: isCf,
+    exclude: own,
+    ...extra,
+  })
 }
 function openTermField(i) {
   const t = modal.form.terms[i]
@@ -2025,6 +2175,10 @@ function openTermField(i) {
     value: t.src,
     allowConst: true,
     ctxDevice: ctx,
+    // 2026-10-10:设备属性、本站别的运算的结果(设备上的 + 结果资产上的)也能选
+    results: 'all',
+    attrs: true,
+    exclude: modalOwnOutput(),
     onPick: v => (t.src = v),
   })
 }
@@ -2040,9 +2194,7 @@ function devKeyText(device, key) {
 }
 /* 周期统计 / 多级归档的「统计测点」(多选,同一台设备) */
 const kmSummary = computed(() =>
-  summaryOf(
-    (modal.form.keys || []).map(k => (modal.target !== null ? keyText(k) : devKeyText(modal.form.device, k)))
-  )
+  summaryOf((modal.form.keys || []).map(k => (modal.target !== null ? keyText(k) : devKeyText(modal.form.device, k))))
 )
 function openRollupKeys() {
   if (modal.target !== null)
@@ -2051,13 +2203,14 @@ function openRollupKeys() {
       multiple: true,
       title: '选择统计测点',
       selected: modal.form.keys,
-      keys: keyOptionsOf(tplKeyOptions.value),
+      keys: [...keyOptionsOf(tplKeyOptions.value), ...tplResultOptions(deviceTemplates.value[modal.target])],
       keyScope: tplScope(),
       onPickMany: vals => (modal.form.keys = vals),
     })
   openSource('rollup-keys', {
     multiple: true,
     singleDevice: true,
+    results: 'device',
     title: '选择统计测点(同一台设备)',
     selected: modal.form.keys,
     ctxDevice: modal.form.device,
@@ -2101,7 +2254,9 @@ function openSwitchKeys() {
     })
   openSource('switch-keys', common)
 }
-const swSummary = computed(() => summaryOf(modal.form.swSel.map(r => (r.ref.includes('||') ? pointText(r.ref) : keyText(r.ref)))))
+const swSummary = computed(() =>
+  summaryOf(modal.form.swSel.map(r => (r.ref.includes('||') ? pointText(r.ref) : keyText(r.ref))))
+)
 
 function openPresetDevice() {
   const p = presetOne.preset
@@ -2119,6 +2274,7 @@ function openPresetDevice() {
 
 function openTpl(id, target = null) {
   const tpl = TEMPLATES[id]
+  modal.refError = ''
   modal.tplId = id
   modal.editIndex = null
   modal.target = target
@@ -2129,6 +2285,7 @@ function openTpl(id, target = null) {
 
 // 编辑设备模板内的运算项
 function openTplItemEdit(target, idx) {
+  modal.refError = ''
   const item = deviceTemplates.value[target].items[idx]
   const tpl = TEMPLATES[item.template]
   modal.tplId = item.template
@@ -2151,7 +2308,7 @@ function openTplItemEdit(target, idx) {
       f.message = item.message
     }
   } else if (tpl.kind === 'cf') {
-    for (const p of tpl.params) f[p.id] = item.inputs[p.id].key
+    for (const p of tpl.params) f[p.id] = formatKeyValue(item.inputs[p.id])
     f.output = item.output || ''
     f.outputMode = item.outputMode || 'ts'
   } else if (item.template === 'window.cascade') {
@@ -2172,6 +2329,7 @@ function openTplItemEdit(target, idx) {
 }
 
 function openEdit(i) {
+  modal.refError = ''
   const c = computations.value[i]
   const tpl = TEMPLATES[c.template]
   modal.tplId = c.template
@@ -2212,7 +2370,7 @@ function openEdit(i) {
     f.terms = c.terms.map(t =>
       t.kind === 'const'
         ? { src: '__const__', constVal: String(t.value), abs: false }
-        : { src: `${t.device}||${t.key}`, constVal: '', abs: !!t.abs }
+        : { src: formatPointValue(t), constVal: '', abs: !!t.abs }
     )
     f.termOps = [...c.ops]
     f.absAll = !!c.absAll
@@ -2220,7 +2378,7 @@ function openEdit(i) {
     f.outputMode = c.outputMode || 'ts'
     f.resultAsset = c.asset || ''
   } else if (tpl.kind === 'cf') {
-    for (const p of tpl.params) f[p.id] = `${c.inputs[p.id].device}||${c.inputs[p.id].key}`
+    for (const p of tpl.params) f[p.id] = formatPointValue(c.inputs[p.id])
     f.output = c.output || ''
     f.outputMode = c.outputMode || 'ts'
     f.resultAsset = c.asset || ''
@@ -2249,9 +2407,15 @@ const modalDeviceKeys = computed(() => {
   return d ? d.keys.filter(k => k.claimed) : []
 })
 
+/** 字段值 → 编译器的输入引用;属性 / 资产上的结果带上标记(source-picker 的 splitPointValue) */
 function keyRef(encoded) {
-  const [device, key] = encoded.split('||')
-  return { device, key }
+  const p = splitPointValue(encoded) ?? { device: '', key: '' }
+  return {
+    device: p.device,
+    key: p.key,
+    ...(p.attr ? { attr: p.attr } : {}),
+    ...(p.entityType ? { entityType: p.entityType } : {}),
+  }
 }
 
 /* ── 统计测点多选(周期统计/多级归档):过滤 + 限高滚动列表 ──
@@ -2360,7 +2524,22 @@ const modalValid = computed(() => {
   return true
 })
 
+/**
+ * 保存前把这条运算放进去试编一遍,查引用与环(2026-10-10:用了属性 / 别的运算的结果当输入之后才可能出问题,
+ * 比如 A 用 B、B 又用 A)。有问题就留在弹窗里、把原因写在底部。
+ */
+function refProblemWith(apply) {
+  const probe = JSON.parse(JSON.stringify(siteJson.value))
+  apply(probe)
+  try {
+    return refErrors(probe)[0] || ''
+  } catch {
+    return ''
+  }
+}
+
 function addComputation() {
+  modal.refError = ''
   const tpl = modalTpl.value
   // 模板模式:构造不绑定设备的运算项,存入设备模板
   if (modal.target !== null) {
@@ -2391,7 +2570,7 @@ function addComputation() {
       item.message = modal.form.message.trim()
     } else if (tpl.kind === 'cf') {
       item.inputs = {}
-      for (const p of tpl.params) item.inputs[p.id] = { key: modal.form[p.id] }
+      for (const p of tpl.params) item.inputs[p.id] = splitKeyValue(modal.form[p.id])
       item.output = modal.form.output.trim()
       item.outputMode = modal.form.outputMode
     } else if (modal.tplId === 'window.cascade') {
@@ -2406,6 +2585,17 @@ function addComputation() {
         item.key = modal.form.key
         item.output = modal.form.output.trim()
       }
+    }
+    const target = modal.target
+    const editIndex = modal.editIndex
+    const problem = refProblemWith(probe => {
+      const its = probe.deviceTemplates[target].items
+      if (editIndex !== null) its.splice(editIndex, 1, item)
+      else its.push(item)
+    })
+    if (problem) {
+      modal.refError = problem
+      return
     }
     const items = deviceTemplates.value[modal.target].items
     if (modal.editIndex !== null) items.splice(modal.editIndex, 1, item)
@@ -2496,6 +2686,15 @@ function addComputation() {
       c.output = modal.form.output.trim()
     }
   }
+  const editIndex = modal.editIndex
+  const problem = refProblemWith(probe => {
+    if (editIndex !== null) probe.computations.splice(editIndex, 1, c)
+    else probe.computations.push(c)
+  })
+  if (problem) {
+    modal.refError = problem
+    return
+  }
   if (modal.editIndex !== null) computations.value.splice(modal.editIndex, 1, c)
   else computations.value.push(c)
   modal.open = false
@@ -2522,17 +2721,22 @@ function compDesc(c) {
   }
   if (c.template === 'expr.custom') {
     let s =
-      c.terms[0].kind === 'const' ? c.terms[0].value : c.terms[0].abs ? `|${kd(c.terms[0].key)}|` : kd(c.terms[0].key)
+      c.terms[0].kind === 'const'
+        ? c.terms[0].value
+        : c.terms[0].abs
+          ? `|${refShort(c.terms[0])}|`
+          : refShort(c.terms[0])
     for (let i = 1; i < c.terms.length; i++) {
       const t = c.terms[i]
-      const tk = t.kind === 'const' ? t.value : t.abs ? `|${kd(t.key)}|` : kd(t.key)
+      const tk = t.kind === 'const' ? t.value : t.abs ? `|${refShort(t)}|` : refShort(t)
       s = `(${s}) ${OP_SHOW[c.ops[i - 1]]} ${tk}`
     }
     return `${c.absAll ? `|${s}|` : s} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}`
   }
   if (c.template.startsWith('expr.')) {
     const op = c.template === 'expr.add' ? '+' : '−'
-    return `${dn(c.inputs.a.device)} · ${kd(c.inputs.a.key)} ${op} ${dn(c.inputs.b.device)} · ${kd(c.inputs.b.key)} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}`
+    const side = r => (r.entityType === 'ASSET' ? refShort(r) : `${dn(r.device)} · ${refShort(r)}`)
+    return `${side(c.inputs.a)} ${op} ${side(c.inputs.b)} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}`
   }
   if (tpl.kind === 'cf') {
     return `${dn(c.device)} → ${kd(c.output)}`
@@ -2601,12 +2805,21 @@ function cardPreview() {
 }
 /** 第 5 步「打开检视页」:大屏 site.html 的卡片库模式(登录后逐卡看实时值与引用),要先发布过 */
 function openCardsInspect() {
-  window.open(`/site.html?site=${encodeURIComponent(site.name)}&base=${encodeURIComponent(curEnv.value.base)}&cards=1`, '_blank')
+  window.open(
+    `/site.html?site=${encodeURIComponent(site.name)}&base=${encodeURIComponent(curEnv.value.base)}&cards=1`,
+    '_blank'
+  )
 }
 async function cardRemove(id, slot) {
   const w = cardsState.value?.config.widgets.find(x => x.id === id)
   const title = (w?.props && typeof w.props.title === 'string' && w.props.title) || w?.type || id
-  if (!(await askConfirm({ title: '删除卡片', text: `删除卡片「${title}」(${id})?前端如果已经引用了它,引用会失效。`, okLabel: '删除' })))
+  if (
+    !(await askConfirm({
+      title: '删除卡片',
+      text: `删除卡片「${title}」(${id})?前端如果已经引用了它,引用会失效。`,
+      okLabel: '删除',
+    }))
+  )
     return
   cardsRef.value?.removeSlot(slot)
 }
@@ -2687,14 +2900,21 @@ async function publishPagesAfterRules() {
           published: st.published[st.currentPageName],
         }
       : null
-  const docs = [mk(editorRef.value, pageState.value, '页面'), mk(cardsRef.value, cardsState.value, '卡片库', 'cards')].filter(
-    Boolean
-  )
+  const docs = [
+    mk(editorRef.value, pageState.value, '页面'),
+    mk(cardsRef.value, cardsState.value, '卡片库', 'cards'),
+  ].filter(Boolean)
   pagePubBlock.value = ''
   pagePubMsg.value = ''
   if (!docs.length) return true // 没进过第 4 步:只有规则
   try {
-    const r = await savePagesAndPublish(docs, { api, siteName: site.name, user: conn.username, publishPage, listSitePages })
+    const r = await savePagesAndPublish(docs, {
+      api,
+      siteName: site.name,
+      user: conn.username,
+      publishPage,
+      listSitePages,
+    })
     for (const p of r.published) {
       const ed = p.label === '卡片库' ? cardsRef.value : editorRef.value
       ed?.setPageName(p.pageName)
@@ -3115,7 +3335,8 @@ function openFrontend() {
         </div>
       </div>
       <p class="site-id-hint">
-        只限英文(字母、数字、- 和 _)。<b>发布后不要改</b>——改了会被当成一个新站点,旧站点的规则链、资产还留在平台上,大屏地址也会变。
+        只限英文(字母、数字、- 和
+        _)。<b>发布后不要改</b>——改了会被当成一个新站点,旧站点的规则链、资产还留在平台上,大屏地址也会变。
       </p>
       <p v-if="siteIdError && perm.role !== 'field'" class="err-msg site-id-err">{{ siteIdError }}</p>
       <div class="connect-go">
@@ -3152,7 +3373,10 @@ function openFrontend() {
           <button
             class="btn"
             :disabled="
-              siteCust.busy || !site.name || !!siteIdError || (siteAsset ? siteCust.pick === siteCustNow : !siteCust.pick)
+              siteCust.busy ||
+              !site.name ||
+              !!siteIdError ||
+              (siteAsset ? siteCust.pick === siteCustNow : !siteCust.pick)
             "
             @click="doAssignCustomer"
           >
@@ -3160,7 +3384,8 @@ function openFrontend() {
           </button>
         </div>
         <p class="site-cust-hint">
-          站点「{{ site.name }}」现在:<b>{{ siteAsset ? custTitle(siteCustNow) : '还没发布到平台上' }}</b>。
+          站点「{{ site.name }}」现在:<b>{{ siteAsset ? custTitle(siteCustNow) : '还没发布到平台上' }}</b
+          >。
           客户账号(如大屏值班账号)只看得到分给它所属客户的站点和页面;本工具建的页面、结果资产跟着站点一起分,设备不动。
         </p>
         <p v-if="custOutside.length" class="site-cust-warn">
@@ -3169,7 +3394,8 @@ function openFrontend() {
               .slice(0, 5)
               .map(d => dn(d.name))
               .join('、')
-          }}{{ custOutside.length > 5 ? ' 等' : '' }}。请在 TB 里把这些设备也分给该客户——设备可能是同事在用的,工具不自动改。
+          }}{{ custOutside.length > 5 ? ' 等' : '' }}。请在 TB
+          里把这些设备也分给该客户——设备可能是同事在用的,工具不自动改。
         </p>
         <p v-if="siteCust.msg" class="ok-msg">{{ siteCust.msg }}</p>
         <p v-if="siteCust.err" class="err-msg">{{ siteCust.err }}</p>
@@ -3287,7 +3513,9 @@ function openFrontend() {
                 @change="claimDevice(d, $event.target.checked)"
               />
               <span class="name">{{ dual(d.cn, d.name) }}</span>
-              <span class="profile-chip" :title="profileCn(d.profile)">{{ dual(profileCn(d.profile), d.profile) }}</span>
+              <span class="profile-chip" :title="profileCn(d.profile)">{{
+                dual(profileCn(d.profile), d.profile)
+              }}</span>
               <span class="cnt" :class="{ some: d.keys.some(k => k.claimed) }">
                 {{ d.keys.filter(k => k.claimed).length }}/{{ d.keys.length }} 测点 ·
                 {{ d.open ? '收起 ▲' : '展开 ▼' }}</span
@@ -3305,8 +3533,7 @@ function openFrontend() {
                 <template v-for="k in d.keys" :key="k.key">
                   <input type="checkbox" v-model="k.claimed" />
                   <span class="kname"
-                    >{{ dual(k.cn || smartCn(k.key), k.key) }}
-                    <span style="opacity: 0.55">= {{ k.latest }}</span></span
+                    >{{ dual(k.cn || smartCn(k.key), k.key) }} <span style="opacity: 0.55">= {{ k.latest }}</span></span
                   >
                   <input type="text" v-model="k.label" :placeholder="k.cn || k.key" />
                   <input type="text" v-model="k.unit" placeholder="如 kW / V / ℃" />
@@ -3385,7 +3612,8 @@ function openFrontend() {
               每条选一种处理:待定(这次发布不动)/ 以 TB 为准 / 以本工具为准(发布时覆盖 TB);没选的按待定
             </div>
             <div v-for="r in platView.conflicts" :key="'cf' + r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ dn(r.entity) }}</span><span class="pn">{{ r.cf.name }}</span>
+              <span class="pe">{{ dn(r.entity) }}</span
+              ><span class="pn">{{ r.cf.name }}</span>
               <span class="plat-tag warn">{{ driftLabel(r) }}</span>
               <span class="choice-seg">
                 <button
@@ -3446,17 +3674,19 @@ function openFrontend() {
               以 TB 为准、发布时不覆盖({{ keepPlatform.length }})—— 本工具不再改写它们,直到取消保留
             </div>
             <div v-for="k in keepPlatform" :key="k" class="plat-row">
-              <span class="pe">{{ keepLabel(k).where }}</span><span class="pn">{{ keepLabel(k).name }}</span>
+              <span class="pe">{{ keepLabel(k).where }}</span
+              ><span class="pn">{{ keepLabel(k).name }}</span>
               <button class="btn ghost sm" @click="unkeep(k)">取消保留</button>
             </div>
           </div>
           <div v-if="platView.pending.length || platView.chainPending.length" class="plat-group">
             <div class="plat-gt">
-              待发布的修改({{ platView.pending.length + platView.chainPending.length }})—— 向导里改过、平台上没人动过,第 5
-              步发布后生效
+              待发布的修改({{ platView.pending.length + platView.chainPending.length }})—— 向导里改过、平台上没人动过,第
+              5 步发布后生效
             </div>
             <div v-for="r in platView.pending" :key="'pcf' + r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ dn(r.entity) }}</span><span class="pn">{{ r.cf.name }}</span>
+              <span class="pe">{{ dn(r.entity) }}</span
+              ><span class="pn">{{ r.cf.name }}</span>
               <button class="btn ghost sm" @click="toggleDiff('cf:' + r.entity + '|' + r.cf.name)">
                 {{ diffOpen['cf:' + r.entity + '|' + r.cf.name] ? '收起差异' : '查看差异' }}
               </button>
@@ -3475,14 +3705,17 @@ function openFrontend() {
               带本站点标记、声明里已没有({{ platView.orphans.length }})—— 不处理的话第 5 步发布会删掉
             </div>
             <div v-for="r in platView.orphans" :key="r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ dn(r.entity) }}</span><span class="pn">{{ r.cf.name }}</span><code>{{ cfExprOf(r) }}</code>
+              <span class="pe">{{ dn(r.entity) }}</span
+              ><span class="pn">{{ r.cf.name }}</span
+              ><code>{{ cfExprOf(r) }}</code>
               <button class="btn ghost sm" @click="handBackRow(r)">交还(保留字段)</button>
             </div>
           </div>
           <div v-if="platView.missing.length" class="plat-group">
             <div class="plat-gt">声明里有、平台上还没有({{ platView.missing.length }})—— 第 5 步发布时建</div>
             <div v-for="m in platView.missing" :key="m.entity + m.name" class="plat-row">
-              <span class="pe">{{ dn(m.entity) }}</span><span class="pn">{{ m.name }}</span>
+              <span class="pe">{{ dn(m.entity) }}</span
+              ><span class="pn">{{ m.name }}</span>
             </div>
           </div>
           <div v-if="platView.adoptable.length" class="plat-group">
@@ -3502,11 +3735,13 @@ function openFrontend() {
               TB 里改
             </summary>
             <div v-for="r in platView.readonly" :key="r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ dn(r.entity) }}</span><span class="pn">{{ r.cf.name }} → {{ kd(cfOutOf(r)) }}</span>
-              <code>{{ cfExprOf(r) }}</code><span class="plat-why">{{ r.adopt.reason }}</span>
+              <span class="pe">{{ dn(r.entity) }}</span
+              ><span class="pn">{{ r.cf.name }} → {{ kd(cfOutOf(r)) }}</span> <code>{{ cfExprOf(r) }}</code
+              ><span class="plat-why">{{ r.adopt.reason }}</span>
             </div>
             <div v-for="r in platView.otherSite" :key="r.cf.id?.id" class="plat-row">
-              <span class="pe">{{ dn(r.entity) }}</span><span class="pn">{{ r.cf.name }}</span>
+              <span class="pe">{{ dn(r.entity) }}</span
+              ><span class="pn">{{ r.cf.name }}</span>
               <span class="plat-why">本工具 · 站点「{{ r.site }}」在管</span>
             </div>
           </details>
@@ -3553,9 +3788,7 @@ function openFrontend() {
                   <option value="" disabled>改为转发到…</option>
                   <option v-for="o in ownChains" :key="o.id" :value="o.id">{{ o.name }}</option>
                 </select>
-                <button class="btn ghost sm" :disabled="chainOp.busy || !rootPick" @click="retargetRoot">
-                  改指向
-                </button>
+                <button class="btn ghost sm" :disabled="chainOp.busy || !rootPick" @click="retargetRoot">改指向</button>
                 <button
                   class="btn ghost sm"
                   :disabled="chainOp.busy || !ownChains.some(o => o.name === chainNamesNow.alarm)"
@@ -3647,7 +3880,7 @@ function openFrontend() {
       </div>
       <template v-if="wayOpen.w2">
         <p class="hint">
-          针对某一台设备(或全站级指标)单独配置。点击卡片、填参数即可,不需要写任何表达式;所有测点都是下拉选择并带中文说明。
+          针对某一台设备(或全站级指标)单独配置。点击卡片、填参数即可,不需要写任何表达式;测点都在右侧面板里点选并带中文说明,即时计算还可以选设备属性和别的运算结果。
         </p>
         <div class="preset-row">
           <span class="preset-label">常用方案用到单台设备(如只给低压进线设电压越限):</span>
@@ -3658,7 +3891,8 @@ function openFrontend() {
             :title="p.desc"
             @click="openPresetOne(p)"
           >
-            <span class="preset-icon">{{ p.icon }}</span>{{ p.name }}
+            <span class="preset-icon">{{ p.icon }}</span
+            >{{ p.name }}
           </button>
         </div>
         <p v-if="presetOneMsg" class="ok-msg" style="margin: 0 0 10px">{{ presetOneMsg }}</p>
@@ -3718,10 +3952,22 @@ function openFrontend() {
       <p v-if="conn.status !== 'ok'" class="err-msg">尚未连接 ThingsBoard——请先在第 1 步连接。</p>
       <template v-else>
         <div class="ed-doc-tabs" data-role="ed-doc-tabs">
-          <button type="button" class="page-tab" :class="{ on: edTab === 'page' }" data-tab="page" @click="edTab = 'page'">
+          <button
+            type="button"
+            class="page-tab"
+            :class="{ on: edTab === 'page' }"
+            data-tab="page"
+            @click="edTab = 'page'"
+          >
             页面<span v-if="pageState" class="dim"> · {{ pageState.config.widgets.length }} 个组件</span>
           </button>
-          <button type="button" class="page-tab" :class="{ on: edTab === 'cards' }" data-tab="cards" @click="edTab = 'cards'">
+          <button
+            type="button"
+            class="page-tab"
+            :class="{ on: edTab === 'cards' }"
+            data-tab="cards"
+            @click="edTab = 'cards'"
+          >
             卡片库<span v-if="cardsState" class="dim"> · {{ cardsState.config.widgets.length }} 张卡</span>
           </button>
           <span
@@ -3783,8 +4029,8 @@ function openFrontend() {
     <div v-show="step === 4" class="panel">
       <h2>发布上线</h2>
       <p class="hint">
-        一个按钮把这个站点的全部配置写入 ThingsBoard:先是规则(设备核对 → 计算字段 → 聚合链 → 告警链 →
-        站点配置),再是第 4 步的页面与卡片库;完成后自动打开站点大屏。出错的步骤会标红并显示原因,修正后重新发布即可(所有写入都是幂等的)。
+        一个按钮把这个站点的全部配置写入 ThingsBoard:先是规则(设备核对 → 计算字段 → 聚合链 → 告警链 → 站点配置),再是第 4
+        步的页面与卡片库;完成后自动打开站点大屏。出错的步骤会标红并显示原因,修正后重新发布即可(所有写入都是幂等的)。
       </p>
 
       <div class="page-pub" data-role="pages-summary">
@@ -4147,7 +4393,7 @@ function openFrontend() {
                     mode: 'key',
                     title: '为「源测点」选择测点',
                     value: modal.form.key,
-                    keys: keyOptionsOf(aggKeyOptions),
+                    keys: [...keyOptionsOf(aggKeyOptions), ...aggResultOptions],
                     keyScope: `匹配的 ${aggMatched.length} 台成员设备里的同名测点`,
                     onPick: v => (modal.form.key = v),
                   })
@@ -4231,9 +4477,7 @@ function openFrontend() {
                   :active="srcActive('switch-keys')"
                   @open="openSwitchKeys"
                 />
-                <button v-if="modal.form.swSel.length" class="btn ghost sm" @click="modal.form.swSel = []">
-                  清空
-                </button>
+                <button v-if="modal.form.swSel.length" class="btn ghost sm" @click="modal.form.swSel = []">清空</button>
               </div>
               <div class="fhint">
                 <template v-if="dictTyped">按平台的测点字典只列遥信(YX,开关 / 状态量),面板里可以临时放开</template>
@@ -4384,7 +4628,8 @@ function openFrontend() {
             <div class="fhint">
               计算结果保存成的新测点名,用英文字母/数字,如 netPower(净功率)
               <template v-if="outputPrefix"
-                >;发布后的 key 为 <b>{{ outputPrefix }}{{ modal.form.output.trim() || 'netPower' }}</b>(前缀不可改,ADR-003)</template
+                >;发布后的 key 为 <b>{{ outputPrefix }}{{ modal.form.output.trim() || 'netPower' }}</b
+                >(前缀不可改,ADR-003)</template
               >
             </div>
           </div>
@@ -4396,14 +4641,24 @@ function openFrontend() {
             </select>
           </div>
         </div>
-        <div v-if="modalCfDevices.length" class="frow">
+        <div v-if="modalCfEntities.length" class="frow">
           <p v-if="modalAdopted" class="hint" style="margin: 4px 0 0">
             接管来的运算:结果仍存在原来的 <b>{{ modalEditing.asset || dn(modalEditing.device) }}</b> 上,平台字段名「{{
               modalEditing.cfName || modalEditing.output
             }}」不变。
           </p>
-          <div v-else-if="modalCfDevices.length > 1" class="field">
-            <label>结果存到资产 (英文名) · 输入来自 {{ modalCfDevices.length }} 台设备</label>
+          <div v-else-if="!modalOnOneDevice" class="field">
+            <label
+              >结果存到资产 (英文名) · 输入来自
+              {{
+                [
+                  modalCfDevices.length ? `${modalCfDevices.length} 台设备` : '',
+                  ...modalCfEntities.filter(e => e.entityType === 'ASSET').map(e => `结果资产 ${e.name}`),
+                ]
+                  .filter(Boolean)
+                  .join('、')
+              }}</label
+            >
             <input
               type="text"
               v-model="modal.form.resultAsset"
@@ -4412,7 +4667,8 @@ function openFrontend() {
             />
             <div class="fhint">
               跨设备的计算结果存为这个资产的遥测(没有会自动建,并挂到站点下),页面上绑这个资产取数;留空用
-              <b>{{ defaultCalcAsset }}</b>。几条跨设备运算可以共用一个资产,同一资产最多 {{ MAX_CF_PER_ENTITY }} 个结果。
+              <b>{{ defaultCalcAsset }}</b
+              >。几条跨设备运算可以共用一个资产,同一资产最多 {{ MAX_CF_PER_ENTITY }} 个结果。
             </div>
             <div v-if="modalAssetProblem" class="err-msg">{{ modalAssetProblem }}</div>
           </div>
@@ -4425,6 +4681,7 @@ function openFrontend() {
           <div class="field"><label>输出测点名</label><input type="text" :value="modalTpl.fixedOutput" disabled /></div>
         </div>
 
+        <div v-if="modal.refError" class="err-msg" data-role="ref-error">{{ modal.refError }}</div>
         <div class="modal-foot">
           <button class="btn ghost" @click="modal.open = false">取消</button>
           <button class="btn" :disabled="!modalValid" @click="addComputation">
@@ -4554,7 +4811,9 @@ function openFrontend() {
       <div class="modal confirm-modal">
         <h3>「{{ presetOne.preset.name }}」用到单台设备</h3>
         <p class="confirm-text">
-          {{ presetOne.preset.desc }}。<br />选一台设备,按它实际有的测点生成单设备运算(缺测点的跳过),之后可在方式二列表里逐条修改。
+          {{
+            presetOne.preset.desc
+          }}。<br />选一台设备,按它实际有的测点生成单设备运算(缺测点的跳过),之后可在方式二列表里逐条修改。
         </p>
         <div class="field" style="margin-bottom: 10px">
           <label>设备</label>
@@ -4588,7 +4847,9 @@ function openFrontend() {
         <p v-if="envModal.builtin" class="confirm-text">
           内置环境的地址是固定的(经本工具代理转发),这里只改它在下拉里显示的名字;名称清空即恢复默认名。
         </p>
-        <p v-else class="confirm-text">录入项目名称与 ThingsBoard 地址,保存后在环境下拉中随时可选(保存在本机浏览器)。</p>
+        <p v-else class="confirm-text">
+          录入项目名称与 ThingsBoard 地址,保存后在环境下拉中随时可选(保存在本机浏览器)。
+        </p>
         <div class="field" style="margin-bottom: 10px">
           <label>{{ envModal.builtin ? '显示名称' : '项目名称' }}</label>
           <input
@@ -4633,6 +4894,7 @@ function openFrontend() {
       :selected="srcPanel.selected"
       :single-device="srcPanel.singleDevice"
       :only-kind="srcPanel.onlyKind"
+      :extra-points="srcPanel.attrs ? loadDeviceAttrs : undefined"
       @pick="onSourcePick"
       @pick-many="onSourcePickMany"
       @close="srcPanel.open = false"
