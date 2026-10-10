@@ -32,6 +32,7 @@ import { sldCoords, type SldScreenMapper } from './coords'
 import {
   DEFAULT_KV_COLORS,
   alarmLevelsByEntity,
+  effectiveKvColors,
   asPointValue,
   entityIdsFromBindings,
   entityKey,
@@ -182,6 +183,8 @@ const switches = computed(() => stateful.value.filter(s => s.isSwitch))
 const switchSig = computed(() => switches.value.map(s => nodeStates.value[s.id]).join(','))
 
 const hasSource = computed(() => !!doc.value?.nodes.some(n => n.source))
+/** 页面里存的旧缺省配色(10 kV 红)按新缺省画,见 effectiveKvColors */
+const kvTable = computed(() => effectiveKvColors(props.kvColors) ?? DEFAULT_KV_COLORS)
 /** 带电结果;null = 不着色。只依赖 doc 与开关三态(switchSig),数值标签变化不会重算 */
 const energy = computed(() => {
   const d = doc.value
@@ -346,7 +349,7 @@ function onDblClick() {
           :doc="doc!"
           :node-states="nodeStates"
           :energy="energy"
-          :kv-colors="kvColors"
+          :kv-colors="kvTable"
           :alarms="alarms"
           :show-names="showNames"
           :clickable="!design"

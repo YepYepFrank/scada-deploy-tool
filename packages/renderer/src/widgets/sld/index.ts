@@ -3,7 +3,16 @@ import { emptySldDoc, isSldDoc, sldPointSlot, SLD_ALARMS_SLOT, SLD_POINT_SLOT_PR
 import { DEFAULT_KV_COLORS, sampleValueFor } from './format'
 import SldWidget from './SldWidget.vue'
 
-export { DEFAULT_KV_COLORS, SLD_PHASE_COLORS, formatSldValue, kvColor, labelColor, type SldKvColor } from './format'
+export {
+  DEFAULT_KV_COLORS,
+  LEGACY_DEFAULT_KV_COLORS,
+  SLD_PHASE_COLORS,
+  effectiveKvColors,
+  formatSldValue,
+  kvColor,
+  labelColor,
+  type SldKvColor,
+} from './format'
 export { sldCoords, type SldScreenMapper } from './coords'
 
 /**

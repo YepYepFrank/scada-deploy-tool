@@ -28,6 +28,8 @@ import {
   labelColor,
   sampleValueFor,
   DEFAULT_KV_COLORS,
+  LEGACY_DEFAULT_KV_COLORS,
+  effectiveKvColors,
 } from '../src/widgets/sld/format'
 import { sldWidget } from '../src/widgets/sld'
 
@@ -155,8 +157,9 @@ describe('格式化与取色(纯函数)', () => {
   })
 
   it('电压等级取色:相等优先,15% 内归最近一档,未知等级 / 太远返回 undefined', () => {
-    expect(kvColor(10, DEFAULT_KV_COLORS)).toBe('#ff4d4f')
-    expect(kvColor(10.5, DEFAULT_KV_COLORS)).toBe('#ff4d4f')
+    // 10 kV 紫(0.13.0 起;原来的红色和开关「合闸红」撞色)
+    expect(kvColor(10, DEFAULT_KV_COLORS)).toBe('#b37feb')
+    expect(kvColor(10.5, DEFAULT_KV_COLORS)).toBe('#b37feb')
     expect(kvColor(0.38, DEFAULT_KV_COLORS)).toBe('#ff9f1a')
     expect(kvColor(35, DEFAULT_KV_COLORS)).toBe('#ffd21f')
     expect(kvColor(110, DEFAULT_KV_COLORS)).toBeUndefined()
@@ -292,6 +295,25 @@ describe('带电着色', () => {
   it('自定义 kvColors 生效', () => {
     const { w } = mountSld({ doc: DOC, values: vals(1), kvColors: [{ kv: 10, color: 'rgb(1, 2, 3)' }] })
     expect(w.find('.sr-sld-wire[data-id="w2"]').attributes('style')).toContain('rgb(1, 2, 3)')
+  })
+
+  it('10 kV 与合闸红分开:缺省 10 kV 紫;旧页面里抄进去的旧缺省表(10 kV 红)按新缺省画,改过的照用', () => {
+    const closedRed = '#ff3b3b' // SldSymbol 的合闸色缺省
+    expect(DEFAULT_KV_COLORS.map(c => c.color.toLowerCase())).not.toContain(closedRed)
+    expect(kvColor(10, DEFAULT_KV_COLORS)).not.toBe('#ff4d4f')
+    // 缺省:10 kV 带电的线画紫色
+    const fresh = mountSld({ doc: DOC, values: vals(1) }).w
+    expect(fresh.find('.sr-sld-wire[data-id="w2"]').attributes('style')).toContain('#b37feb')
+    // 旧页面:建组件时把 0.12.0 的缺省表原样存进了页面配置(顺序、大小写不同也认)
+    const legacy = [...LEGACY_DEFAULT_KV_COLORS].reverse().map(c => ({ ...c, color: c.color.toUpperCase() }))
+    expect(effectiveKvColors(legacy)).toBe(DEFAULT_KV_COLORS)
+    const old = mountSld({ doc: DOC, values: vals(1), kvColors: legacy }).w
+    expect(old.find('.sr-sld-wire[data-id="w2"]').attributes('style')).toContain('#b37feb')
+    // 有人改过任何一档:不替人做主,照原样用(包括特意留的 10 kV 红)
+    const custom = [...LEGACY_DEFAULT_KV_COLORS.slice(0, 2), { kv: 0.4, color: '#123456' }]
+    expect(effectiveKvColors(custom)).toBe(custom)
+    const kept = mountSld({ doc: DOC, values: vals(1), kvColors: custom }).w
+    expect(kept.find('.sr-sld-wire[data-id="w2"]').attributes('style')).toContain('#ff4d4f')
   })
 })
 

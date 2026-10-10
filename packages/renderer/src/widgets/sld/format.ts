@@ -74,12 +74,42 @@ export interface SldKvColor {
   color: string
 }
 
-/** 缺省电压等级配色:35 kV 黄、10 kV 红、0.4 kV 橙(案例图的低压是橙色);其余等级用主题强调色 */
+/**
+ * 缺省电压等级配色:35 kV 黄、10 kV 紫、0.4 kV 橙(案例图的低压是橙色);其余等级用主题强调色(天蓝)。
+ * 10 kV 到 0.12.0 为止是红色,和开关的「合闸红」撞色(合闸红块压在 10 kV 母线上看不清),0.13.0 改紫;
+ * 紫色同红 / 绿 / 灰三种开关色、黄 / 橙两档电压色、天蓝的主题色都分得开。
+ */
 export const DEFAULT_KV_COLORS: SldKvColor[] = [
+  { kv: 35, color: '#ffd21f' },
+  { kv: 10, color: '#b37feb' },
+  { kv: 0.4, color: '#ff9f1a' },
+]
+
+/** 0.12.0 及以前的缺省表。编辑器建接线图组件时把缺省表原样存进页面配置,旧页面里存的就是它 */
+export const LEGACY_DEFAULT_KV_COLORS: readonly SldKvColor[] = [
   { kv: 35, color: '#ffd21f' },
   { kv: 10, color: '#ff4d4f' },
   { kv: 0.4, color: '#ff9f1a' },
 ]
+
+const sameTable = (a: readonly SldKvColor[], b: readonly SldKvColor[]): boolean => {
+  if (a.length !== b.length) return false
+  const norm = (t: readonly SldKvColor[]) =>
+    t
+      .map(r => `${r?.kv}:${String(r?.color ?? '').toLowerCase()}`)
+      .sort()
+      .join('|')
+  return norm(a) === norm(b)
+}
+
+/**
+ * 实际用的配色表:页面里存的和旧缺省表一字不差(没人改过,只是建组件时抄进去的)→ 换成新缺省;
+ * 改过任何一档的照原样用,不替人做主。
+ */
+export function effectiveKvColors(table: readonly SldKvColor[] | undefined): readonly SldKvColor[] | undefined {
+  if (!Array.isArray(table)) return table
+  return sameTable(table, LEGACY_DEFAULT_KV_COLORS) ? DEFAULT_KV_COLORS : table
+}
 
 /**
  * 电压等级 → 颜色。先找相等的;没有就找相对偏差 ≤ 15% 里最近的一档(10.5 kV 归 10 kV、0.38 kV 归 0.4 kV);
