@@ -16,7 +16,7 @@ monorepo 内用 `workspace:*`;仓库外用 `pnpm pack` 出的 tarball 或私有 
 import { createApp } from 'vue'
 import '@grid/scada-renderer/style.css'
 import { registerBuiltins } from '@grid/scada-renderer'
-registerBuiltins() // 登记包内 10 组件 + 3 模板,只需一次
+registerBuiltins() // 登记包内 11 组件(含一次接线图 sld)+ 4 模板(含卡片库 cards),只需一次
 ```
 
 ```vue
