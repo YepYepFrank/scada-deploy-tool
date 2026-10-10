@@ -82,9 +82,9 @@ export function compile(
         ? {
             asset: host.name,
             ...base,
-            body: buildCf(c, pick(ids.assets, 'asset', host.name), devIds, 'ASSET'),
+            body: buildCf(c, pick(ids.assets, 'asset', host.name), devIds, 'ASSET', ids.assets),
           }
-        : { device: host.name, ...base, body: buildCf(c, devIds[host.name] as string, devIds) }
+        : { device: host.name, ...base, body: buildCf(c, devIds[host.name] as string, devIds, 'DEVICE', ids.assets) }
     })
 
   const aggregates = computations

@@ -10,10 +10,10 @@
 //   · **Root 链上只动本工具自己的那部分**(YY 定:Root 由高潮维护,工具可以写,但只能改自己配的):
 //     本站点的转发节点由工具加 / 改 / 摘;写 Root 之前核对「别人的节点与连线」与读出来时一字不差才写,
 //     带 version 防覆盖;只在接线 / 摘线时写,平时发布不碰 Root。
-import type { Computation, RuleChainMetadata, TbsiteConfig } from '../types'
+import type { CalculatedField, Computation, RuleChainMetadata, TbsiteConfig } from '../types'
 import { alarmMetadata } from '../core/alarm'
 import { buildAggCfs, resolveAggMembers } from '../core/aggregate'
-import { buildCf, cfHost } from '../core/cf'
+import { buildCf, cfHost, cfInputRefs } from '../core/cf'
 import {
   AGG_ASSET_TYPE,
   chainNames,
@@ -569,6 +569,17 @@ export async function publish(
   }
   report('devices', 'ok', `${cfg.devices.length} 台全部就绪`)
 
+  /**
+   * 接力的运算(2026-10-10:即时计算可以拿别的运算的结果当输入)。TB 的计算字段创建时读一遍输入的现值;
+   * 上游这次才新建、结果还没落库时,下游可能一直不出数(分层汇聚的汇总字段也是这个原因要删了重建)。
+   * 所以记下这次新建的输出(fresh)和这次写过的即时计算,等汇聚也写完,再按层把「输入里有新输出」的删了重建。
+   */
+  const fresh = new Set<string>()
+  const outKey = (type: string, entity: string, key: string) => `${type}|${entity}|${key}`
+  const writtenCfs: { c: Computation; hostId: string; body: CalculatedField; id: unknown }[] = []
+  let cfDetail = ''
+  let cfHadFailure = false
+
   // 3. 计算字段 — 逐条容错:单台设备失败不拖垮整批
   report('cf', 'run')
   if (!stepOn('cf')) report('cf', 'ok', '跳过(上次已成功)')
@@ -611,6 +622,25 @@ export async function publish(
         : (await api('/api/asset', { name, type: AGG_ASSET_TYPE, additionalInfo: mark })).id.id
       return (assetIds[name] = id as string)
     }
+    /** 输入里引用到的资产(别的运算的结果资产):本站点的结果资产还没建就先建上;接管来的引用同事的资产,只认已有的 */
+    const ownAssets = new Set(
+      outputInventory(cfg, computations, prefix)
+        .filter(o => o.entityType === 'ASSET')
+        .map(o => o.entity)
+    )
+    const refAssetIds = async (c: Computation): Promise<Record<string, string>> => {
+      const ids: Record<string, string> = {}
+      for (const r of cfInputRefs(c)) {
+        if (r.entityType !== 'ASSET' || ids[r.device]) continue
+        if (ownAssets.has(r.device) && !c.adopted) ids[r.device] = await resultAsset({ ...c, adopted: false }, r.device)
+        else {
+          const found = assetIds[r.device] ? { id: { id: assetIds[r.device] } } : await findAsset(api, r.device)
+          if (!found) throw new Error(`引用的资产「${r.device}」在 TB 上找不到`)
+          ids[r.device] = assetIds[r.device] = found.id.id as string
+        }
+      }
+      return ids
+    }
     for (const c of cfComps) {
       const host = cfHost(c)
       const output = c.output as string
@@ -621,7 +651,7 @@ export async function publish(
       }
       try {
         const hostId = host.entityType === 'ASSET' ? await resultAsset(c, host.name) : (devIds[host.name] as string)
-        const body = buildCf(c, hostId, devIds, host.entityType)
+        const body = buildCf(c, hostId, devIds, host.entityType, await refAssetIds(c))
         cfCache[hostId] ||= await listCfs(api, host.entityType, hostId)
         const existing = cfCache[hostId].find(x => x.name === cfName)
         // 归属标记 + 写入时的指纹:保留字段上原有的其它 additionalInfo(接管来的字段可能有同事写的东西)
@@ -638,6 +668,8 @@ export async function publish(
           throw versionConflict(e, `计算字段「${cfName}」`)
         }
         if (!existing && saved?.id) cfCache[hostId].push({ id: saved.id, name: cfName })
+        if (!existing) fresh.add(outKey(host.entityType, host.name, output))
+        writtenCfs.push({ c, hostId, body, id: existing?.id ?? saved?.id })
         report('cf', 'run', `${created + updated + failed}/${cfComps.length} · ${host.name}`)
       } catch (e) {
         failed++
@@ -653,6 +685,8 @@ export async function publish(
         (failed ? ` · 失败 ${failed}(见下方失败清单)` : '') +
         (retry?.cf?.length ? ` · 重试范围 ${cfComps.length} 条` : '')
       : '无'
+    cfDetail = detail
+    cfHadFailure = failed > 0
     report('cf', failed ? 'err' : 'ok', detail)
   }
 
@@ -691,6 +725,7 @@ export async function publish(
             body.additionalInfo = { ...mark, print: cfPrint(body) }
             const ex = existing.find(x => x.name === body.name)
             if (ex) body.id = ex.id
+            else fresh.add(outKey('ASSET', c.asset as string, body.configuration.output.name as string))
             await api('/api/calculatedField', body)
             cfCount++
           }
@@ -703,6 +738,7 @@ export async function publish(
             final.additionalInfo = { ...mark, print: cfPrint(final) }
             const ex = existing.find(x => x.name === final.name)
             if (ex) await api(`/api/calculatedField/${ex.id.id}`, null, 'DELETE')
+            else fresh.add(outKey('ASSET', c.asset as string, c.output as string))
             await api('/api/calculatedField', final)
             cfCount++
           }
@@ -719,6 +755,50 @@ export async function publish(
           (aggFailed ? ` · 失败 ${aggFailed}(见下方失败清单)` : '')
       )
     } else report('agg', 'ok', '无')
+  }
+
+  // 3b''. 接力的即时计算:上游这次新建的,等它出数后把下游删了重建。按依赖分层:上游也在重建的,
+  //       等上游重建完、再等一次才轮到它(A → B → C 都是新的:先 B,再 C)
+  {
+    const refKey = (r: { device: string; key: string; entityType?: string }) =>
+      outKey(r.entityType === 'ASSET' ? 'ASSET' : 'DEVICE', r.device, r.key)
+    const inputsOf = (i: number) =>
+      cfInputRefs(writtenCfs[i]!.c)
+        .filter(r => !r.attr)
+        .map(refKey)
+    const outOf = (i: number) => {
+      const h = cfHost(writtenCfs[i]!.c)
+      return outKey(h.entityType, h.name, writtenCfs[i]!.c.output as string)
+    }
+    const pending = new Set(writtenCfs.map((_, i) => i).filter(i => inputsOf(i).some(k => fresh.has(k))))
+    let rebuilt = 0
+    while (pending.size) {
+      const pendingOuts = new Set([...pending].map(outOf))
+      let due = [...pending].filter(i => !inputsOf(i).some(k => pendingOuts.has(k) && k !== outOf(i)))
+      if (!due.length) due = [...pending] // 防御:有环时(校验已拦)不死循环
+      if (layeredSettleMs > 0) await sleep(layeredSettleMs)
+      for (const i of due) {
+        pending.delete(i)
+        const w = writtenCfs[i]!
+        const host = cfHost(w.c)
+        try {
+          const { id: _id, version: _v, ...body } = w.body
+          if (w.id) await api(`/api/calculatedField/${(w.id as { id: string }).id}`, null, 'DELETE')
+          const saved = await api('/api/calculatedField', body)
+          w.id = saved?.id
+          rebuilt++
+        } catch (e) {
+          cfHadFailure = true
+          failures.push({
+            step: 'cf',
+            device: host.name,
+            output: w.c.output as string,
+            error: '接力运算重建失败:' + (e instanceof Error ? e.message : String(e)),
+          })
+        }
+      }
+    }
+    if (rebuilt) report('cf', cfHadFailure ? 'err' : 'ok', `${cfDetail} · 接力运算 ${rebuilt} 个已在上游出数后重建`)
   }
 
   // 3b'. 先清掉声明里已不再有的站点规则链(配置即真相;否则旧链会带着自己的 generator 一直跑,

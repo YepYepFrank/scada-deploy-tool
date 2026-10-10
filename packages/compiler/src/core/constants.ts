@@ -1,4 +1,4 @@
-import type { AggName, CompareOp, Window } from '../types'
+import type { AggName, AttrScope, CompareOp, Window } from '../types'
 
 export const WINDOW_SECONDS: Record<Window, number> = { '5m': 300, '15m': 900, '1h': 3600 }
 export const AGG_SUFFIX: Record<AggName, string> = { avg: 'Avg', min: 'Min', max: 'Max', sum: 'Sum' }
@@ -46,6 +46,9 @@ export const chainNames = {
 }
 
 export const isCfTemplate = (t: string | undefined) => !!t && (t.startsWith('expr.') || t.startsWith('formula.'))
+
+/** TB 属性的三种范围(即时计算的属性输入用,2026-10-10) */
+export const ATTR_SCOPES: readonly AttrScope[] = ['SERVER_SCOPE', 'SHARED_SCOPE', 'CLIENT_SCOPE']
 
 /**
  * TB 表示「未分配 Customer」用的占位 UUID。**它是个非空字符串**,直接拿 `customerId.id`

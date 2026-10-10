@@ -1,12 +1,14 @@
 // 接管平台上已有的计算字段(2026-09-11):把别人手配的 SIMPLE CF 翻成向导里的一条「自定义四则」运算。
 //
-// 向导的运算模型比 TB 窄:输入只能是【设备】的【遥测】,表达式只能「从左到右依次计算、每项可取绝对值」。
+// 向导的运算模型比 TB 窄:输入是设备的遥测 / 属性,或资产上的遥测(2026-10-10 起;之前只认设备遥测),
+// 表达式只能「从左到右依次计算、每项可取绝对值」。
 // 能翻的才给「接管」按钮,翻不了的说清原因、只读展示。翻完用随机数把原表达式和翻后的算法各算几遍,
 // 对不上就不接管——宁可不接,也不能接过来之后悄悄换了算法。
 //
 // 接管后的运算带 adopted: true:保持原实体、原计算字段名(cfName)、原输出测点名(不加 calc_ 前缀),
 // 历史曲线接得上;此后由工具写入并打归属标记,「交还」时去掉标记、不删字段。
-import type { Computation, ExprTerm } from '../types'
+import type { AttrScope, Computation, ExprTerm, KeyRef } from '../types'
+import { ATTR_SCOPES } from './constants'
 
 export interface PlatformArg {
   refEntityId?: { entityType: string; id: string } | null
@@ -217,30 +219,41 @@ export function adoptCf(cf: PlatformCf, ctx: AdoptContext): AdoptResult {
   const chain = toChain(body)
   if (!chain) return { ok: false, reason: '含运算优先级(如 a + b × c),和向导「从左到右依次计算」不等价' }
 
-  // 参数:只接受「设备的遥测」
+  // 参数:设备的遥测 / 属性、资产的遥测 / 属性(资产自身或别的资产;设备须在第 2 步认领)
   const args = conf.arguments ?? {}
-  const refOf: Record<string, { device: string; key: string }> = {}
+  const refOf: Record<string, KeyRef> = {}
   const needDevices: string[] = []
   for (const name of used) {
     const a = args[name]
     if (!a?.refEntityKey?.key) return { ok: false, reason: `表达式里的 ${name} 没有对应的参数` }
     const kind = a.refEntityKey.type
-    if (kind !== 'TS_LATEST')
-      return { ok: false, reason: `参数 ${name} 取的是${kind === 'ATTRIBUTE' ? '属性' : kind},向导只支持设备遥测` }
-    let device: string | undefined
+    let attr: AttrScope | undefined
+    if (kind === 'ATTRIBUTE') {
+      const scope = (a.refEntityKey.scope || 'SERVER_SCOPE') as AttrScope
+      if (!ATTR_SCOPES.includes(scope)) return { ok: false, reason: `参数 ${name} 的属性范围 ${scope} 不认识` }
+      attr = scope
+    } else if (kind !== 'TS_LATEST')
+      return { ok: false, reason: `参数 ${name} 取的是 ${kind},向导只支持最新遥测或属性` }
+    let entity: string | undefined
+    let onAsset = false
     if (!a.refEntityId) {
-      if (ctx.hostType !== 'DEVICE')
-        return { ok: false, reason: `参数 ${name} 取的是资产自身的测点,向导只支持设备测点` }
-      device = ctx.hostName
-    } else if (a.refEntityId.entityType !== 'DEVICE') {
-      const who = ctx.nameOfId(a.refEntityId.id) ?? a.refEntityId.id
-      return { ok: false, reason: `参数 ${name} 引用的是资产 ${who} 的测点,向导只支持设备测点` }
-    } else {
-      device = ctx.nameOfId(a.refEntityId.id)
-      if (!device) return { ok: false, reason: `参数 ${name} 引用的设备不存在(${a.refEntityId.id})` }
+      entity = ctx.hostName
+      onAsset = ctx.hostType === 'ASSET'
+    } else if (a.refEntityId.entityType === 'ASSET') {
+      entity = ctx.nameOfId(a.refEntityId.id)
+      if (!entity) return { ok: false, reason: `参数 ${name} 引用的资产不存在(${a.refEntityId.id})` }
+      onAsset = true
+    } else if (a.refEntityId.entityType === 'DEVICE') {
+      entity = ctx.nameOfId(a.refEntityId.id)
+      if (!entity) return { ok: false, reason: `参数 ${name} 引用的设备不存在(${a.refEntityId.id})` }
+    } else return { ok: false, reason: `参数 ${name} 引用的是 ${a.refEntityId.entityType},向导只支持设备与资产` }
+    if (!onAsset && !ctx.claimed.has(entity)) needDevices.push(entity)
+    refOf[name] = {
+      device: entity,
+      key: a.refEntityKey.key,
+      ...(attr ? { attr } : {}),
+      ...(onAsset ? { entityType: 'ASSET' as const } : {}),
     }
-    if (!ctx.claimed.has(device)) needDevices.push(device)
-    refOf[name] = { device, key: a.refEntityKey.key }
   }
   if (needDevices.length) {
     const list = [...new Set(needDevices)]

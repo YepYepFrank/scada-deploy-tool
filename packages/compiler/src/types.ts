@@ -12,9 +12,18 @@ export interface DeviceDecl {
   [k: string]: unknown
 }
 
-export type KeyRef = { device: string; key: string }
+/** TB 属性的范围 */
+export type AttrScope = 'SERVER_SCOPE' | 'SHARED_SCOPE' | 'CLIENT_SCOPE'
 
-export type ExprTerm = { kind: 'const'; value: number } | { kind: 'key'; device: string; key: string; abs?: boolean }
+/**
+ * 运算的一个输入。缺省是设备的最新遥测;两个可选标记(2026-10-10,只有即时计算 expr.* 认):
+ * - `attr`:取这台设备的属性(额定容量、阈值这类静态参数),值是属性范围;
+ * - `entityType: 'ASSET'`:取结果资产上的运算结果(跨设备即时计算 / 全站汇聚 / 收益的输出),`device` 放资产名。
+ * 引用别的运算的结果,key 写它在平台上的名字(带输出前缀,如 calc_pqSum);写不带前缀的原名也认,编译时补前缀。
+ */
+export type KeyRef = { device: string; key: string; attr?: AttrScope; entityType?: 'ASSET' }
+
+export type ExprTerm = { kind: 'const'; value: number } | ({ kind: 'key'; abs?: boolean } & KeyRef)
 
 export type AggName = 'avg' | 'min' | 'max' | 'sum'
 export type Window = '5m' | '15m' | '1h'
@@ -102,7 +111,7 @@ export type EntityId = { entityType: EntityType; id: string }
 
 export interface CfArgument {
   refEntityId?: EntityId
-  refEntityKey: { type: 'TS_LATEST'; key: string }
+  refEntityKey: { type: 'TS_LATEST'; key: string } | { type: 'ATTRIBUTE'; key: string; scope: AttrScope }
   defaultValue?: string
 }
 

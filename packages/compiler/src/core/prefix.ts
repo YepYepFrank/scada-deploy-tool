@@ -36,8 +36,9 @@ export function applyOutputPrefix(computations: Computation[], prefix: string): 
     if (c.output && !c.adopted) c.output = withPrefix(prefix, c.output)
     if (c.key) c.key = ren(c.key)
     if (c.keys) c.keys = c.keys.map(k => ren(k) as string)
-    for (const ref of Object.values(c.inputs ?? {})) ref.key = ren(ref.key) as string
-    for (const t of c.terms ?? []) if (t.kind === 'key') t.key = ren(t.key) as string
+    // 属性输入不是运算结果,同名也不改
+    for (const ref of Object.values(c.inputs ?? {})) if (!ref.attr) ref.key = ren(ref.key) as string
+    for (const t of c.terms ?? []) if (t.kind === 'key' && !t.attr) t.key = ren(t.key) as string
     if (c.charge) c.charge.key = ren(c.charge.key) as string
     if (c.discharge) c.discharge.key = ren(c.discharge.key) as string
     return c
@@ -132,8 +133,10 @@ export function cascadeWhitelist(cfg: TbsiteConfig, computations: Computation[],
   for (const c of computations) {
     if (c.key) referenced.add(c.key)
     for (const k of c.keys ?? []) referenced.add(k)
-    for (const ref of Object.values(c.inputs ?? {})) referenced.add(ref.key)
-    for (const t of c.terms ?? []) if (t.kind === 'key') referenced.add(t.key)
+    // 只有设备遥测才走规则链入口;属性、资产上的结果不相干
+    for (const ref of Object.values(c.inputs ?? {}))
+      if (!ref.attr && ref.entityType !== 'ASSET') referenced.add(ref.key)
+    for (const t of c.terms ?? []) if (t.kind === 'key' && !t.attr && t.entityType !== 'ASSET') referenced.add(t.key)
     if (c.charge) referenced.add(c.charge.key)
     if (c.discharge) referenced.add(c.discharge.key)
     // 级联:上一级输出是下一级输入(5m → 1h → 1d)

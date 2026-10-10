@@ -1287,3 +1287,101 @@ describe('publish · 汇聚资产的 Customer 跟着站点走(审查 R5,2026-09-
     expect(tb.calls.filter(c => c.includes('/api/customer/')).length).toBe(before)
   })
 })
+
+describe('publish · 接力的运算(2026-10-10:别的运算的结果当输入)', () => {
+  const dev = (name: string, keys: string[]) => ({ name, profile: 'IED', keys: keys.map(key => ({ key })) })
+  const add = (output: string, a: string, b: string) => ({
+    template: 'expr.add',
+    device: 'D1',
+    inputs: { a: { device: 'D1', key: a }, b: { device: 'D1', key: b } },
+    output,
+  })
+  const cfg: TbsiteConfig = {
+    schema: 'tbsite/v2',
+    site: { name: 'S' },
+    outputPrefix: 'calc_',
+    devices: [dev('D1', ['P', 'Q']), dev('D2', ['P'])],
+    computations: [
+      add('a', 'P', 'Q'),
+      add('b', 'calc_a', 'P'),
+      add('c', 'calc_b', 'Q'),
+      {
+        template: 'aggregate.crossEntity',
+        name: '全站',
+        selector: { profiles: ['IED'] },
+        key: 'P',
+        agg: 'sum',
+        asset: 'S_AGG',
+        output: 'totalP',
+      },
+      {
+        template: 'expr.custom',
+        asset: 'S_CALC',
+        terms: [
+          { kind: 'key', device: 'D1', key: 'P' },
+          { kind: 'key', device: 'S_AGG', key: 'calc_totalP', entityType: 'ASSET' },
+        ],
+        ops: ['/'],
+        output: 'share',
+      },
+      {
+        template: 'expr.custom',
+        device: 'D1',
+        terms: [
+          { kind: 'key', device: 'D1', key: 'P' },
+          { kind: 'key', device: 'D1', key: 'ratedP', attr: 'SERVER_SCOPE' },
+        ],
+        ops: ['/'],
+        output: 'rate',
+      },
+    ],
+  }
+  type CfRow = { id: { id: string }; name: string; configuration: { arguments: Record<string, unknown> } }
+  const cfIdOf = (tb: ReturnType<typeof fakeTb>, name: string) =>
+    (tb.cfs as unknown as CfRow[]).find(c => c.name === name)!.id.id
+
+  it('首次发布:上游新建的,下游等它出数后删了重建,一层一层来;引用的结果资产先建上、不重复建', async () => {
+    const tb = fakeTb(['D1', 'D2'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1', 'D2'])
+    const r = collect()
+    expect(await publish(cfg, devIds, tb.api, r.report, { layeredSettleMs: 0 })).toEqual([])
+    // b(用 a)、c(用 b)、share(用全站汇聚)重建;a 与 rate(只用遥测和属性)不动
+    expect(r.log.filter(l => l.startsWith('cf:')).at(-1)).toContain('接力运算 3 个已在上游出数后重建')
+    const deletes = tb.calls.filter(c => c.startsWith('DELETE /api/calculatedField/'))
+    expect(deletes).toHaveLength(3)
+    // 分层:b、share 第一轮;c 的上游 b 也在重建,等 b 重建完再等一次才轮到它(第二轮)
+    const recreated = (tb.cfs as unknown as CfRow[]).slice(-3).map(c => c.name)
+    expect(recreated.slice(0, 2).sort()).toEqual(['calc_b', 'calc_share'])
+    expect(recreated[2]).toBe('calc_c')
+    // 每个输出只有一个 CF(删了再建,没有重复)
+    const names = (tb.cfs as unknown as CfRow[]).map(c => c.name).sort()
+    expect(names.filter(n => n === 'calc_b')).toHaveLength(1)
+    expect(names).toContain('calc_share')
+    // share 的参数指向汇聚资产;汇聚资产只有一个(CF 那步先建上,汇聚那步认得它)
+    const agg = tb.assets.filter(a => a.name === 'S_AGG')
+    expect(agg).toHaveLength(1)
+    expect(agg[0]!.type).toBe('tbsite-agg')
+    const share = (tb.cfs as unknown as CfRow[]).find(c => c.name === 'calc_share')!
+    expect(share.configuration.arguments.v1).toEqual({
+      refEntityId: { entityType: 'ASSET', id: agg[0]!.id.id },
+      refEntityKey: { type: 'TS_LATEST', key: 'calc_totalP' },
+    })
+    const rate = (tb.cfs as unknown as CfRow[]).find(c => c.name === 'calc_rate')!
+    expect(rate.configuration.arguments.v1).toEqual({
+      refEntityKey: { type: 'ATTRIBUTE', key: 'ratedP', scope: 'SERVER_SCOPE' },
+    })
+  })
+
+  it('再发布(上游早就有了):不再删了重建,原地更新', async () => {
+    const tb = fakeTb(['D1', 'D2'])
+    const { devIds } = await resolveDeviceIds(tb.api, ['D1', 'D2'])
+    await publish(cfg, devIds, tb.api, () => {}, { layeredSettleMs: 0 })
+    const before = cfIdOf(tb, 'calc_c')
+    tb.calls.length = 0
+    const r = collect()
+    expect(await publish(cfg, devIds, tb.api, r.report, { layeredSettleMs: 0 })).toEqual([])
+    expect(tb.calls.filter(c => c.startsWith('DELETE /api/calculatedField/'))).toHaveLength(0)
+    expect(r.log.join('\n')).not.toContain('接力运算')
+    expect(cfIdOf(tb, 'calc_c')).toBe(before)
+  })
+})

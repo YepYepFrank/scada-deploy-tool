@@ -8,7 +8,18 @@ export * from './core/constants'
 export { AGG_JS, AGG_JS_PREFIXED, CASCADE_JS, REVENUE_JS } from './core/scripts'
 export { matchSelector, itemKeys, expandTemplates } from './core/templates'
 export { validateConfig, assetCfLoad } from './core/validate'
-export { tsArg, buildCf, cfHost, cfInputRefs, cfInputDevices, type CfHost } from './core/cf'
+export {
+  tsArg,
+  attrArg,
+  buildCf,
+  cfHost,
+  cfInputRefs,
+  cfInputDevices,
+  cfInputEntities,
+  refEntityType,
+  type CfHost,
+} from './core/cf'
+export { refErrors } from './core/refs'
 export {
   adoptCf,
   parseExpression,

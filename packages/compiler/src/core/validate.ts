@@ -1,6 +1,7 @@
 import type { TbsiteConfig } from '../types'
 import { isCfTemplate, MAX_AGG_MEMBERS, MAX_CF_ARGS, MAX_CF_PER_ENTITY } from './constants'
 import { resolveAggMembers } from './aggregate'
+import { refErrors } from './refs'
 
 /**
  * 每个结果资产上要建几个 CF:跨设备运算每条 1 个;跨设备汇聚 ≤10 台 1 个、多了「分组 N + 汇总 1」。
@@ -89,12 +90,14 @@ export function validateConfig(cfg: TbsiteConfig): string[] {
     if (c.template === 'expr.custom') {
       if (!Array.isArray(c.terms) || c.terms.length < 2) errs.push(`${w}: 至少两项`)
       if ((c.ops || []).length !== (c.terms || []).length - 1) errs.push(`${w}: 运算符数量不匹配`)
+      // 资产上的运算结果(entityType: 'ASSET')不是设备,在 refErrors 里查
       for (const t of c.terms || [])
-        if (t.kind === 'key' && !names.has(t.device)) errs.push(`${w}: 引用了未认领设备 ${t.device}`)
+        if (t.kind === 'key' && t.entityType !== 'ASSET' && !names.has(t.device))
+          errs.push(`${w}: 引用了未认领设备 ${t.device}`)
       if (!c.output) errs.push(`${w}: 缺少输出名`)
     } else if (c.template?.startsWith('expr.') || c.template?.startsWith('formula.')) {
       for (const [pid, ref] of Object.entries(c.inputs || {}))
-        if (!names.has(ref.device)) errs.push(`${w}: 输入 ${pid} 引用了未认领设备`)
+        if (ref.entityType !== 'ASSET' && !names.has(ref.device)) errs.push(`${w}: 输入 ${pid} 引用了未认领设备`)
       if (!c.output) errs.push(`${w}: 缺少输出名`)
     } else if (c.template === 'alarm.threshold') {
       if (!c.name) errs.push(`${w}: 缺少告警名称`)
@@ -115,5 +118,7 @@ export function validateConfig(cfg: TbsiteConfig): string[] {
       errs.push(
         `资产 ${asset} 上要建 ${n} 个计算字段,超过 TB 单实体上限 ${MAX_CF_PER_ENTITY}:请给其中几条运算换一个结果资产名`
       )
+  // 运算之间的引用(属性 / 别的运算的结果当输入,2026-10-10):结构都对了再查,免得在残缺配置上展开出错
+  if (!errs.length) errs.push(...refErrors(cfg))
   return errs
 }

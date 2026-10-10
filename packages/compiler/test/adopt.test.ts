@@ -95,32 +95,20 @@ describe('adoptCf', () => {
     expect(reasonOf(adoptCf(cf('sqrt(P1)', two), ctx()))).toContain('不支持的函数 sqrt')
     expect(
       reasonOf(
-        adoptCf(
-          cf('P1+P2', {
-            P1: dev('id-d1'),
-            P2: {
-              refEntityId: { entityType: 'DEVICE', id: 'id-d2' },
-              refEntityKey: { type: 'ATTRIBUTE', key: 'cap', scope: 'SERVER_SCOPE' },
-            },
-          }),
-          ctx()
-        )
+        adoptCf(cf('P1+P2', { P1: dev('id-d1'), P2: { refEntityKey: { type: 'TS_ROLLING', key: 'P' } } }), ctx())
       )
-    ).toContain('取的是属性')
+    ).toContain('只支持最新遥测或属性')
     expect(
       reasonOf(
         adoptCf(
           cf('P1+P2', {
             P1: dev('id-d1'),
-            P2: { refEntityId: { entityType: 'ASSET', id: 'id-a' }, refEntityKey: { type: 'TS_LATEST', key: 'x' } },
+            P2: { refEntityId: { entityType: 'ASSET', id: 'id-gone' }, refEntityKey: { type: 'TS_LATEST', key: 'x' } },
           }),
           ctx()
         )
       )
-    ).toContain('引用的是资产 ASSET_X')
-    expect(reasonOf(adoptCf(cf('x+1', { x: { refEntityKey: { type: 'TS_LATEST', key: 'x' } } }), ctx()))).toContain(
-      '资产自身的测点'
-    )
+    ).toContain('引用的资产不存在')
     const r = adoptCf(cf('P1+P3', { P1: dev('id-d1'), P3: dev('id-d3') }), ctx())
     expect(r.ok).toBe(false)
     if (!r.ok) {
@@ -128,6 +116,47 @@ describe('adoptCf', () => {
       expect(r.needDevices).toEqual(['D3'])
     }
     expect(reasonOf(adoptCf(cf('P1+P2', two, { type: 'SCRIPT' }), ctx()))).toContain('只认 SIMPLE')
+  })
+
+  it('属性与资产上的测点也能接(2026-10-10):设备属性带范围、别的资产 / 资产自身的遥测带 entityType', () => {
+    const r = adoptCf(
+      cf('P1 / cap * 100 + x + base', {
+        P1: dev('id-d1'),
+        cap: {
+          refEntityId: { entityType: 'DEVICE', id: 'id-d2' },
+          refEntityKey: { type: 'ATTRIBUTE', key: 'cap', scope: 'SHARED_SCOPE' },
+        },
+        x: {
+          refEntityId: { entityType: 'ASSET', id: 'id-b' },
+          refEntityKey: { type: 'TS_LATEST', key: 'calc_totalP' },
+        },
+        base: { refEntityKey: { type: 'ATTRIBUTE', key: 'base', scope: 'SERVER_SCOPE' } },
+      }),
+      { ...ctx(), nameOfId: id => ({ ...names, 'id-b': 'AGG_B' })[id] }
+    )
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.computation.terms).toEqual([
+      { kind: 'key', device: 'D1', key: 'P' },
+      { kind: 'key', device: 'D2', key: 'cap', attr: 'SHARED_SCOPE' },
+      { kind: 'const', value: 100 },
+      { kind: 'key', device: 'AGG_B', key: 'calc_totalP', entityType: 'ASSET' },
+      { kind: 'key', device: 'ASSET_X', key: 'base', attr: 'SERVER_SCOPE', entityType: 'ASSET' },
+    ])
+    // 翻回去的计算字段与原来的参数逐个对得上(宿主自身的不写 refEntityId)
+    const body = buildCf(r.computation, 'id-a', { D1: 'id-d1', D2: 'id-d2' }, 'ASSET', {
+      AGG_B: 'id-b',
+      ASSET_X: 'id-a',
+    })
+    expect(body.configuration.arguments).toEqual({
+      v0: { refEntityId: { entityType: 'DEVICE', id: 'id-d1' }, refEntityKey: { type: 'TS_LATEST', key: 'P' } },
+      v1: {
+        refEntityId: { entityType: 'DEVICE', id: 'id-d2' },
+        refEntityKey: { type: 'ATTRIBUTE', key: 'cap', scope: 'SHARED_SCOPE' },
+      },
+      v2: { refEntityId: { entityType: 'ASSET', id: 'id-b' }, refEntityKey: { type: 'TS_LATEST', key: 'calc_totalP' } },
+      v3: { refEntityKey: { type: 'ATTRIBUTE', key: 'base', scope: 'SERVER_SCOPE' } },
+    })
   })
 
   it('定义了没用到的参数 → 提示疑似笔误(镜像上「实时曲线-负荷总功率-SSP1」就是这样),接管照原样保留算法', () => {
