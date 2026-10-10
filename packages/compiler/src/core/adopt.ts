@@ -194,7 +194,7 @@ export function adoptCf(cf: PlatformCf, ctx: AdoptContext): AdoptResult {
   const conf = cf.configuration ?? {}
   if ((cf.type ?? conf.type) !== 'SIMPLE')
     return { ok: false, reason: `类型是 ${cf.type ?? conf.type},向导只认 SIMPLE` }
-  const out = conf.output ?? {}
+  const out = (conf.output ?? {}) as NonNullable<typeof conf.output> & { decimalsByDefault?: unknown }
   const outName = out.name
   if (!outName) return { ok: false, reason: '没有输出测点名' }
   let outputMode: 'ts' | 'attr'
@@ -299,6 +299,10 @@ export function adoptCf(cf: PlatformCf, ctx: AdoptContext): AdoptResult {
     adopted: true,
     ...(absAll ? { absAll: true } : {}),
     ...(cf.name !== outName ? { cfName: cf.name } : {}),
+    // 平台上设的小数位照原样接过来(不是缺省 2 位才写,免得接管后一发布就改了别人的设置)
+    ...(typeof out.decimalsByDefault === 'number' && out.decimalsByDefault !== 2
+      ? { decimals: out.decimalsByDefault }
+      : {}),
   }
   return { ok: true, computation, notes }
 }

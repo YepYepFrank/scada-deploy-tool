@@ -1294,7 +1294,7 @@ function tplItemDesc(item) {
   if (item.template === 'window.cascade')
     return `${item.keys.map(kd).join('/')} · ${item.aggs.join('/')} · 三级归档(5m/1h/1d)`
   if (item.template === 'expr.add' || item.template === 'expr.subtract')
-    return `${refShort(item.inputs.a)} ${item.template === 'expr.add' ? '+' : '−'} ${refShort(item.inputs.b)} → ${item.output}${item.outputMode === 'attr' ? '(存属性)' : ''}`
+    return `${refShort(item.inputs.a)} ${item.template === 'expr.add' ? '+' : '−'} ${refShort(item.inputs.b)} → ${item.output}${item.outputMode === 'attr' ? '(存属性)' : ''}${decimalsText(item)}`
   return `${kd(item.key)} @ ${item.window} → ${item.output}`
 }
 
@@ -1317,6 +1317,7 @@ function blankForm() {
     sevByDevice: {}, // 开关变位告警(设备模板):设备名 → 单独设的级别
     swShowAll: false, // 开关变位告警:也列出非遥信测点
     outputMode: 'ts',
+    decimals: '2', // 即时计算 / 全站汇聚的结果保留几位小数(2026-10-10,缺省 2)
     terms: [
       { src: '', constVal: '', abs: false },
       { src: '', constVal: '', abs: false },
@@ -2311,6 +2312,7 @@ function openTplItemEdit(target, idx) {
     for (const p of tpl.params) f[p.id] = formatKeyValue(item.inputs[p.id])
     f.output = item.output || ''
     f.outputMode = item.outputMode || 'ts'
+    f.decimals = String(item.decimals ?? 2)
   } else if (item.template === 'window.cascade') {
     f.keys = [...item.keys]
     f.aggs = [...item.aggs]
@@ -2352,6 +2354,7 @@ function openEdit(i) {
     f.agg = c.agg
     f.asset = c.asset
     f.output = c.output
+    f.decimals = String(c.decimals ?? 2)
   } else if (tpl.kind === 'alarm') {
     f.alarmName = c.name || ''
     f.key = `${c.device}||${c.key}`
@@ -2377,10 +2380,12 @@ function openEdit(i) {
     f.output = c.output || ''
     f.outputMode = c.outputMode || 'ts'
     f.resultAsset = c.asset || ''
+    f.decimals = String(c.decimals ?? 2)
   } else if (tpl.kind === 'cf') {
     for (const p of tpl.params) f[p.id] = formatPointValue(c.inputs[p.id])
     f.output = c.output || ''
     f.outputMode = c.outputMode || 'ts'
+    f.decimals = String(c.decimals ?? 2)
     f.resultAsset = c.asset || ''
   } else if (c.template === 'window.cascade') {
     f.device = c.device
@@ -2485,6 +2490,7 @@ const modalValid = computed(() => {
   const tpl = modalTpl.value
   if (!tpl) return false
   if (modalAssetProblem.value || modalSlotProblem.value) return false
+  if (hasDecimals(tpl) && !decimalsOk.value) return false
   if (tpl.custom) return customValid.value
   if (tpl.kind === 'revenue') {
     const f = modal.form
@@ -2523,6 +2529,23 @@ const modalValid = computed(() => {
   if (tpl.needsOutput && !modal.form.output.trim()) return false
   return true
 })
+
+/* ── 结果小数位(2026-10-10):即时计算、全站汇聚可设 0–6 位,缺省 2;配置里只在不是 2 时才写 ── */
+const decimalsNum = () => {
+  const t = String(modal.form.decimals ?? '').trim()
+  return t === '' ? 2 : Number(t)
+}
+const decimalsOk = computed(() => {
+  const n = decimalsNum()
+  return Number.isInteger(n) && n >= 0 && n <= 6
+})
+const hasDecimals = tpl => tpl?.kind === 'cf' || tpl?.kind === 'agg'
+function applyDecimals(obj) {
+  const n = decimalsNum()
+  if (n !== 2) obj.decimals = n
+  else delete obj.decimals
+}
+const decimalsText = c => (typeof c.decimals === 'number' && c.decimals !== 2 ? ` · 保留 ${c.decimals} 位小数` : '')
 
 /**
  * 保存前把这条运算放进去试编一遍,查引用与环(2026-10-10:用了属性 / 别的运算的结果当输入之后才可能出问题,
@@ -2573,6 +2596,7 @@ function addComputation() {
       for (const p of tpl.params) item.inputs[p.id] = splitKeyValue(modal.form[p.id])
       item.output = modal.form.output.trim()
       item.outputMode = modal.form.outputMode
+      applyDecimals(item)
     } else if (modal.tplId === 'window.cascade') {
       item.keys = [...modal.form.keys]
       item.aggs = [...modal.form.aggs]
@@ -2624,6 +2648,7 @@ function addComputation() {
     c.agg = modal.form.agg
     c.asset = modal.form.asset.trim()
     c.output = modal.form.output.trim()
+    applyDecimals(c)
     if (modal.editIndex !== null) computations.value.splice(modal.editIndex, 1, c)
     else computations.value.push(c)
     modal.open = false
@@ -2664,6 +2689,7 @@ function addComputation() {
     keepAdopted(c) // 接管来的:保持接管身份和原实体
     c.output = modal.form.output.trim()
     c.outputMode = modal.form.outputMode
+    applyDecimals(c)
   } else if (tpl.kind === 'cf') {
     c.inputs = {}
     for (const p of tpl.params) c.inputs[p.id] = keyRef(modal.form[p.id])
@@ -2671,6 +2697,7 @@ function addComputation() {
     keepAdopted(c)
     c.output = tpl.fixedOutput || modal.form.output.trim()
     c.outputMode = modal.form.outputMode
+    applyDecimals(c)
   } else if (modal.tplId === 'window.cascade') {
     c.device = modal.form.device
     c.keys = [...modal.form.keys]
@@ -2707,7 +2734,7 @@ function compDesc(c) {
   if (c.template === 'aggregate.crossEntity') {
     const sel = [...(c.selector?.profiles || []), ...(c.selector?.prefixes || [])].join('/')
     const n = tplMatched({ selector: c.selector || {} }).length
-    return `「${c.name}」${sel} × ${kd(c.key)} ${c.agg === 'avg' ? '平均' : '求和'}(${n} 台)→ 资产 ${c.asset} · ${kd(c.output)}`
+    return `「${c.name}」${sel} × ${kd(c.key)} ${c.agg === 'avg' ? '平均' : '求和'}(${n} 台)→ 资产 ${c.asset} · ${kd(c.output)}${decimalsText(c)}`
   }
   if (c.template === 'revenue.periodic') {
     return `「${c.name}」放电 ${dn(c.discharge.device)} · ${kd(c.discharge.key)} − 充电 ${dn(c.charge.device)} · ${kd(c.charge.key)} × 分时电价 @ ${c.window || '1h'} → 资产 ${c.asset} · ${kd(c.output)}(含当日累计)`
@@ -2731,12 +2758,12 @@ function compDesc(c) {
       const tk = t.kind === 'const' ? t.value : t.abs ? `|${refShort(t)}|` : refShort(t)
       s = `(${s}) ${OP_SHOW[c.ops[i - 1]]} ${tk}`
     }
-    return `${c.absAll ? `|${s}|` : s} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}`
+    return `${c.absAll ? `|${s}|` : s} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}${decimalsText(c)}`
   }
   if (c.template.startsWith('expr.')) {
     const op = c.template === 'expr.add' ? '+' : '−'
     const side = r => (r.entityType === 'ASSET' ? refShort(r) : `${dn(r.device)} · ${refShort(r)}`)
-    return `${side(c.inputs.a)} ${op} ${side(c.inputs.b)} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}`
+    return `${side(c.inputs.a)} ${op} ${side(c.inputs.b)} → ${cfWhere(c)}${c.outputMode === 'attr' ? '(存属性)' : ''}${decimalsText(c)}`
   }
   if (tpl.kind === 'cf') {
     return `${dn(c.device)} → ${kd(c.output)}`
@@ -4639,6 +4666,21 @@ function openFrontend() {
               <option value="ts">遥测(可画曲线,默认)</option>
               <option value="attr">服务端属性(状态/参数值)</option>
             </select>
+          </div>
+          <div v-if="hasDecimals(modalTpl)" class="field" data-role="decimals-field">
+            <label>小数位</label>
+            <input
+              v-model="modal.form.decimals"
+              type="number"
+              min="0"
+              max="6"
+              step="1"
+              placeholder="2"
+              style="width: 90px"
+              data-role="decimals"
+            />
+            <div class="fhint">结果保留几位小数,缺省 2;换算成大单位(如 kW 换 MW、÷1000)时多留几位</div>
+            <div v-if="!decimalsOk" class="err-msg">小数位填 0–6 的整数</div>
           </div>
         </div>
         <div v-if="modalCfEntities.length" class="frow">

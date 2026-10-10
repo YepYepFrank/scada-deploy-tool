@@ -84,6 +84,7 @@
   color: var(--ink-2);
 }
 input[type='text'],
+input[type='number'],
 input[type='password'],
 select {
   font-family: var(--font-mono);
@@ -1494,7 +1495,8 @@ select {
 
 /* 弹窗内下拉不得超出边界:超长中文选项按容器截断 */
 .modal select,
-.modal input[type='text'] {
+.modal input[type='text'],
+.modal input[type='number'] {
   max-width: 100%;
 }
 .src-select {

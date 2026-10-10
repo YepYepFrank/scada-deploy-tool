@@ -3,6 +3,7 @@
 // 一律写上)→ CF 建在这个独立资产(tbsite-agg)上,结果是该资产的遥测,页面直接绑资产取数。
 // 没写 asset 的跨设备运算是旧配置,仍按 device 字段挂在设备上,保证旧站点重发布时输出位置不变。
 import type { AttrScope, CalculatedField, CfArgument, Computation, ExprTerm, KeyRef } from '../types'
+import { decimalsOf } from './constants'
 
 export function tsArg(key: string, deviceId: string | null): CfArgument {
   const a: CfArgument = { refEntityKey: { type: 'TS_LATEST', key } }
@@ -119,8 +120,8 @@ export function buildCf(
       arguments: args,
       expression,
       output: toAttr
-        ? { type: 'ATTRIBUTES', name: out, scope: 'SERVER_SCOPE', decimalsByDefault: 2 }
-        : { type: 'TIME_SERIES', name: out, scope: null, decimalsByDefault: 2 },
+        ? { type: 'ATTRIBUTES', name: out, scope: 'SERVER_SCOPE', decimalsByDefault: decimalsOf(comp) }
+        : { type: 'TIME_SERIES', name: out, scope: null, decimalsByDefault: decimalsOf(comp) },
     },
   }
 }

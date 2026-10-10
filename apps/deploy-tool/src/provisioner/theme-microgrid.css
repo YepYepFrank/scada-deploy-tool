@@ -162,6 +162,7 @@ body {
 
 /* ── 输入控件(element-theme 输入框同款:深底 + 内发光) ─ */
 input[type='text'],
+input[type='number'],
 input[type='password'],
 select,
 textarea {

@@ -104,6 +104,9 @@ export function expandTemplates(cfg: TbsiteConfig): { computations: Computation[
             template: item.template,
             device: d.name,
             output: item.output,
+            // 「存为属性」与小数位也要带上(2026-10-10 补:原来展开时丢了 outputMode,模板里选了存属性也按遥测发布)
+            ...(item.outputMode ? { outputMode: item.outputMode } : {}),
+            ...(typeof item.decimals === 'number' ? { decimals: item.decimals } : {}),
             _tpl: t.name,
             inputs: Object.fromEntries(
               Object.entries(item.inputs || {}).map(([p, r]) => [

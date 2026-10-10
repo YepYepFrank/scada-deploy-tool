@@ -58,12 +58,13 @@ export const hash = (s: string): string => {
 type CfConf = {
   expression?: string
   arguments?: Record<string, PlatformArg>
-  output?: { type?: string; name?: string; scope?: string | null }
+  output?: { type?: string; name?: string; scope?: string | null; decimalsByDefault?: number | null }
 }
 
 /**
  * 计算字段的「内容」:表达式(去空白)、参数(测点 / 取值类型 / 范围 / 引用实体)、输出(类型 / 名字 / 范围)。
- * TB 自己补的字段(useLatestTs、decimalsByDefault、strategy、defaultValue 等)不算。
+ * TB 自己补的字段(useLatestTs、strategy、defaultValue 等)不算。小数位(decimalsByDefault)只在不是缺省 2 位时算
+ * (2026-10-10 起可按运算设;缺省的不进指纹,之前发布的字段指纹不变)。
  */
 export function cfSignature(cf: { configuration?: unknown }): string {
   const c = (cf.configuration ?? {}) as CfConf
@@ -81,7 +82,12 @@ export function cfSignature(cf: { configuration?: unknown }): string {
         },
       ])
     ),
-    out: { type: o.type ?? null, name: o.name ?? null, scope: o.scope ?? null },
+    out: {
+      type: o.type ?? null,
+      name: o.name ?? null,
+      scope: o.scope ?? null,
+      ...(typeof o.decimalsByDefault === 'number' && o.decimalsByDefault !== 2 ? { dec: o.decimalsByDefault } : {}),
+    },
   })
 }
 export const cfPrint = (cf: { configuration?: unknown }): string => hash(cfSignature(cf))

@@ -47,6 +47,12 @@ export const chainNames = {
 
 export const isCfTemplate = (t: string | undefined) => !!t && (t.startsWith('expr.') || t.startsWith('formula.'))
 
+/** 计算结果保留的小数位:缺省 2(与之前写死的一致),工程人员可按运算设 0–6 */
+export const DEFAULT_DECIMALS = 2
+export const MAX_DECIMALS = 6
+export const decimalsOf = (c: { decimals?: unknown }): number =>
+  typeof c.decimals === 'number' ? c.decimals : DEFAULT_DECIMALS
+
 /** TB 属性的三种范围(即时计算的属性输入用,2026-10-10) */
 export const ATTR_SCOPES: readonly AttrScope[] = ['SERVER_SCOPE', 'SHARED_SCOPE', 'CLIENT_SCOPE']
 

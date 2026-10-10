@@ -1,7 +1,7 @@
 // 跨设备汇聚:aggregate.crossEntity → 独立虚拟资产(tbsite-agg)上的 SIMPLE CF
 // ≤10 台单个 CF;多则「每 10 台一个分组求和 CF + 一个汇总 CF」(租户档案 maxArgumentsPerCF = 10)
 import type { CalculatedField, CfArgument, Computation, DeviceDecl, TbsiteConfig } from '../types'
-import { MAX_CF_ARGS } from './constants'
+import { MAX_CF_ARGS, decimalsOf } from './constants'
 import { matchSelector, plannedOutputs } from './templates'
 
 /**
@@ -41,7 +41,7 @@ export function buildAggCfs(c: Computation, members: DeviceDecl[], devIds: Recor
         type: 'TIME_SERIES',
         name,
         scope: null,
-        decimalsByDefault: 2,
+        decimalsByDefault: decimalsOf(c),
         // processCfs:输出继续触发下游 CF(分层汇总依赖此级联,与生产配置一致)
         strategy: {
           type: 'IMMEDIATE',

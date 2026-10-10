@@ -1,5 +1,5 @@
 import type { TbsiteConfig } from '../types'
-import { isCfTemplate, MAX_AGG_MEMBERS, MAX_CF_ARGS, MAX_CF_PER_ENTITY } from './constants'
+import { isCfTemplate, MAX_AGG_MEMBERS, MAX_CF_ARGS, MAX_CF_PER_ENTITY, MAX_DECIMALS } from './constants'
 import { resolveAggMembers } from './aggregate'
 import { refErrors } from './refs'
 
@@ -50,8 +50,16 @@ export function validateConfig(cfg: TbsiteConfig): string[] {
           )
   }
   const names = new Set((cfg.devices || []).map(d => d.name))
+  const badDecimals = (c: { decimals?: unknown }) =>
+    c.decimals !== undefined &&
+    !(typeof c.decimals === 'number' && Number.isInteger(c.decimals) && c.decimals >= 0 && c.decimals <= MAX_DECIMALS)
+  for (const [i, t] of (cfg.deviceTemplates || []).entries())
+    for (const item of t.items || [])
+      if (badDecimals(item))
+        errs.push(`设备模板「${t.name || i + 1}」·「${item.output || item.name}」: 小数位须是 0–${MAX_DECIMALS} 的整数`)
   for (const [i, c] of (cfg.computations || []).entries()) {
     const w = `运算 #${i + 1} (${c.template})`
+    if (badDecimals(c)) errs.push(`${w}: 小数位须是 0–${MAX_DECIMALS} 的整数`)
     if (c.template === 'revenue.periodic') {
       for (const fld of ['charge', 'discharge'] as const) {
         const ref = c[fld]

@@ -72,6 +72,8 @@ export interface Computation {
   adopted?: boolean
   /** 即时计算:对整个结果再取绝对值,生成 `abs(整条式子)`(2026-09-11) */
   absAll?: boolean
+  /** 即时计算 / 全站汇聚的结果保留几位小数(0–6,缺省 2;2026-10-10,kW 换算 MW 这类缩小量级的运算要多留几位) */
+  decimals?: number
   [k: string]: unknown
 }
 
