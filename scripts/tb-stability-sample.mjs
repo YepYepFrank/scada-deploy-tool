@@ -249,15 +249,24 @@ for (const name of CASCADE_DEVICES) {
   for (const k of keys) {
     if (/1d$/.test(k)) {
       const pts = await points('DEVICE', id, k, start - 2 * 86400e3, now)
-      const have = new Set(pts.map(p => dayOf(p.ts)))
+      // 日点只认戳在那天 0 点(东八区)的;同一天别的时刻的点是别人写进来的,窗口内出现就算异常
+      const onEdge = pts.filter(p => p.ts === dayStart(dayOf(p.ts)))
+      const have = new Set(onEdge.map(p => dayOf(p.ts)))
       const miss = dueDays.filter(d => !have.has(d))
-      const got = pts.filter(p => dueDays.includes(dayOf(p.ts)))
+      const got = onEdge.filter(p => dueDays.includes(dayOf(p.ts)))
+      const stray = pts.filter(p => p.ts !== dayStart(dayOf(p.ts)))
+      const strayIn = stray.filter(p => p.ts >= start && p.ts <= now)
+      const strayNote = stray.length
+        ? `;非 0 点的点 ${stray.length} 个(窗口内 ${strayIn.length},${fmt(stray[0].ts)} → ${fmt(stray[stray.length - 1].ts)})`
+        : ''
       put(
-        `| ${name} · \`${k}\` | ${got.length} / ${dueDays.length} 日 | — | — | — | ${got.map(p => `${dayName(dayOf(p.ts))}=${p.v.toFixed(2)}`).join(',') || '无'}${miss.length ? `;**缺 ${miss.map(dayName).join('、')}**` : ''} |`
+        `| ${name} · \`${k}\` | ${got.length} / ${dueDays.length} 日 | — | — | — | ${got.map(p => `${dayName(dayOf(p.ts))}=${p.v.toFixed(2)}`).join(',') || '无'}${miss.length ? `;**缺 ${miss.map(dayName).join('、')}**` : ''}${strayNote} |`
       )
-      if (miss.length) {
+      if (miss.length || strayIn.length) {
         cascadeOk = false
-        cascadeNotes.push(`${name} ${k} 缺 ${miss.map(dayName).join('、')}`)
+        cascadeNotes.push(
+          `${name} ${k}${miss.length ? ` 缺 ${miss.map(dayName).join('、')}` : ''}${strayIn.length ? ` 窗口内有 ${strayIn.length} 个非 0 点的日点` : ''}`
+        )
       }
       continue
     }

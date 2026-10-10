@@ -1607,7 +1607,7 @@
       "output": "totalP"
     }
   ],
-  "rollup": {},
+  "rollup": { "chainName": "Periodic Rollups" },
   "alarm": {
     "propagate": true
   }
